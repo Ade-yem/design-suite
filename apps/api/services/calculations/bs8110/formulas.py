@@ -376,6 +376,148 @@ def calculate_effective_flange_width(
 
 
 # ===========================================================================
+# 14.  Deep beam side reinforcement (BS 8110-1:1997 Cl 3.12.5.2)
+# ===========================================================================
+
+def calculate_deep_beam_side_reinforcement(
+    b: float,
+    h: float,
+) -> Dict[str, Any]:
+    """
+    Calculate side reinforcement for deep beams (h > 750 mm).
+
+    BS 8110-1:1997 Cl 3.12.5.2:
+        As_side = 0.125% * b * h
+    """
+    As_side_total = 0.00125 * b * h
+    return {
+        "required": True,
+        "As_req": round(As_side_total, 1),
+        "note": (
+            f"Deep beam (h > 750 mm): Side reinforcement required. "
+            f"As_side = 0.125% bh = {As_side_total:.1f} mm² (total). "
+            f"(BS 8110 Cl 3.12.5.2)"
+        ),
+    }
+
+
+# ===========================================================================
+# 15.  Anchorage and Laps  (BS 8110-1:1997 Cl 3.12.8)
+# ===========================================================================
+
+def calculate_anchorage_length(
+    phi: float,
+    fcu: float,
+    fy: float,
+    bar_type: str = "deformed",
+    condition: str = "tension",
+) -> Dict[str, Any]:
+    """
+    Calculate required anchorage length.
+
+    BS 8110-1:1997 Cl 3.12.8.4 / Table 3.27:
+        fbu = beta · sqrt(fcu)
+        L = (0.95·fy) / (4·fbu) · phi
+
+    beta factors:
+        Tension (deformed Type 2): 0.50
+        Compression (deformed Type 2): 0.63
+    """
+    fcu_eff = min(fcu, 40.0)  # Use 40 if > 40 for bond
+    if condition.lower() == "tension":
+        beta = 0.50 if bar_type == "deformed" else 0.28
+    else:
+        beta = 0.63 if bar_type == "deformed" else 0.35
+
+    fbu = beta * math.sqrt(fcu_eff)
+    L = (ALPHA_S * fy * phi) / (4.0 * fbu)
+
+    return {
+        "length": round(L, 0),
+        "factor": round(L / phi, 1),
+        "note": (
+            f"{condition.capitalize()} anchorage: L = {L:.0f} mm ({L/phi:.1f}Φ) "
+            f"for H{phi:.0f} bars in C{fcu} (BS 8110 Table 3.27)."
+        ),
+    }
+
+
+# ===========================================================================
+# 16.  Torsion  (BS 8110-1:1997 Cl 3.4.5.13)
+# ===========================================================================
+
+def check_torsion_stress(
+    T: float,
+    h: float,
+    b: float,
+    fcu: float,
+) -> Dict[str, Any]:
+    """
+    Check torsional shear stress.
+
+    vt = 2T / [h_min² (h_max - h_min/3)]
+    """
+    h_min = min(h, b)
+    h_max = max(h, b)
+
+    vt = (2.0 * abs(T)) / (h_min ** 2 * (h_max - h_min / 3.0))
+
+    fcu_val = min(fcu, 40.0)
+    # vt_min from Table 3.15
+    if fcu_val < 30:
+        vt_min = 0.33
+    elif fcu_val < 40:
+        vt_min = 0.37
+    else:
+        vt_min = 0.42
+
+    requires_reinforcement = vt > vt_min
+    status = "OK" if vt <= vt_min else "REINFORCE"
+
+    return {
+        "vt": round(vt, 3),
+        "vt_min": vt_min,
+        "status": status,
+        "note": (
+            f"Torsional stress vt = {vt:.3f} N/mm² (limit vt_min = {vt_min} for "
+            f"C{fcu_val}). Status: {status} (BS 8110 Cl 3.4.5.13)"
+        ),
+    }
+
+
+# ===========================================================================
+# 17.  Shear Enhancement (Cl 3.4.5.8)
+# ===========================================================================
+
+def apply_shear_enhancement(
+    vc: float,
+    av: float,
+    d: float,
+) -> Dict[str, Any]:
+    """
+    Enhanced concrete shear resistance for point loads near support.
+
+    BS 8110-1:1997 Cl 3.4.5.8:
+        vc_enhanced = (2d / av) · vc
+        (Only if av < 2d)
+    """
+    if av <= 0 or av >= 2.0 * d:
+        return {"value": vc, "factor": 1.0, "note": "av >= 2d: no vc enhancement."}
+
+    factor = (2.0 * d) / av
+    vc_enhanced = factor * vc
+
+    return {
+        "value": round(vc_enhanced, 4),
+        "factor": round(factor, 3),
+        "note": (
+            f"Enhanced vc = (2d/av)·vc = ({2.0*d:.1f}/{av:.1f})·{vc:.3f} = "
+            f"{vc_enhanced:.3f} N/mm² (BS 8110 Cl 3.4.5.8)"
+        ),
+    }
+
+
+# ===========================================================================
 # 7.  Design concrete shear stress  vc  (BS 8110-1:1997 Table 3.8)
 # ===========================================================================
 
