@@ -9,7 +9,7 @@ Sign convention: moments and forces are always positive (magnitudes).
 """
 
 import math
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # ---------------------------------------------------------------------------
 # Material partial safety factors  (BS 8110-1:1997 Table 2.2)
@@ -552,17 +552,15 @@ def calculate_vc(
     b: float,
     d: float,
     fcu: float,
+    h: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Design concrete shear stress vc.
-
-    BS 8110-1:1997 Table 3.8 formula:
+    
+    BS 8110-1:1997 Table 3.8 (Beams) and Table 3.16 (Slabs).
+    Formula:
         v_c = (0.79/γ_m) · (100·As/(b·d))^(1/3) · (400/d)^(1/4) · (fcu/25)^(1/3)
-
-    Limits:
-        100·As/(b·d) ≤ 3.0
-        fcu          ≤ 40 N/mm²  for this formula (BS 8110 Table 3.8 note)
-        d            ≥ 400 mm for depth-factor = 1.0 (otherwise factor > 1)
+        Multiplied by slab factor (Table 3.16) if applicable.
 
     Parameters
     ----------
@@ -570,24 +568,46 @@ def calculate_vc(
     b       : Section width (mm)
     d       : Effective depth (mm)
     fcu     : Concrete cube strength (N/mm²)
+    h       : Total depth (mm). If provided, applies Table 3.16 slab multiplier.
     """
     pt = min(100.0 * As_prov / (b * d), 3.0)
     fcu_eff = min(fcu, 40.0)                         # Table 3.8 note
     depth_factor = max((400.0 / d) ** 0.25, 1.0)    # ≥ 1.0 for d < 400 mm
     fcu_factor = (fcu_eff / 25.0) ** (1.0 / 3.0)
 
-    vc = (0.79 / GAMMA_C) * (pt ** (1.0 / 3.0)) * depth_factor * fcu_factor
+    vc_base = (0.79 / GAMMA_C) * (pt ** (1.0 / 3.0)) * depth_factor * fcu_factor
+    
+    slab_factor = 1.0
+    note_extra = ""
+    if h is not None:
+        # Table 3.16 slab modification factor
+        if h <= 150:
+            slab_factor = 1.25
+        elif h <= 175:
+            slab_factor = 1.20
+        elif h <= 200:
+            slab_factor = 1.15
+        elif h <= 225:
+            slab_factor = 1.10
+        elif h <= 250:
+            slab_factor = 1.05
+        else:
+            slab_factor = 1.0
+        
+        note_extra = f" (Slab factor = {slab_factor} per Table 3.16)"
+    
+    vc = vc_base * slab_factor
 
     return {
         "value": round(vc, 4),
         "pt": round(pt, 3),
         "depth_factor": round(depth_factor, 3),
         "fcu_factor": round(fcu_factor, 3),
+        "slab_factor": slab_factor,
         "note": (
-            f"vc = (0.79/1.5)·(100As/bd)^(1/3)·(400/d)^(1/4)·(fcu/25)^(1/3) "
-            f"= {vc:.3f} N/mm² "
+            f"vc = {vc_base:.3f}{note_extra} = {vc:.3f} N/mm² "
             f"[100As/bd = {pt:.2f}%, (400/d)^0.25 = {depth_factor:.3f}, "
-            f"(fcu/25)^(1/3) = {fcu_factor:.3f}] (BS 8110 Table 3.8)"
+            f"(fcu/25)^(1/3) = {fcu_factor:.3f}] (BS 8110 Table 3.8/3.16)"
         ),
     }
 
@@ -940,3 +960,49 @@ def check_bar_spacing(
         "status": status,
         "note": note,
     }
+
+
+def _compute_strain_stress(y: float, x: float, fy: float) -> float:
+    # Strain limit = 0.0035
+    eps_y = 0.0035 * (x - y) / x
+    eps_yield = fy / (GAMMA_S * 200000.0) # approx fy / 230000
+    
+    if eps_y > eps_yield:
+        return 0.87 * fy # Actually, it's fy / 1.15 = 0.87fy
+    elif eps_y < -eps_yield:
+        return -0.87 * fy
+    else:
+        return 200000.0 * eps_y
+
+def calculate_axial_bending_capacity(
+    x: float, Asc: float, b: float, h: float, d: float, d_prime: float, fcu: float, fy: float
+) -> tuple[float, float]:
+    """
+    Given a neutral axis depth x, return the axial capacity N and moment capacity M
+    for a symmetrically reinforced column.
+    """
+    s = 0.9 * x
+    s = max(0, min(s, h))
+    
+    # Concrete contribution
+    Fc = 0.45 * fcu * b * s
+    Mc = Fc * (h/2.0 - s/2.0)
+    
+    # Steel contribution (distributed 50/50 to tension/compression faces)
+    As_each = Asc / 2.0
+    
+    # Top steel (compression usually)
+    fsc_prime = _compute_strain_stress(d_prime, x, fy)
+    Fsc = As_each * fsc_prime
+    Msc = Fsc * (h/2.0 - d_prime)
+    
+    # Bottom steel (tension usually)
+    fst = _compute_strain_stress(d, x, fy)
+    Fst = As_each * fst
+    Mst = -Fst * (d - h/2.0) # moment about geometric centroid
+    
+    # Actually wait: Moment is taken about mid-depth
+    N_cap = Fc + Fsc + Fst
+    M_cap = Mc + Msc + Mst
+    
+    return N_cap, M_cap

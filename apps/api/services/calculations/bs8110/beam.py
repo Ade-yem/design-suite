@@ -26,7 +26,7 @@ only stress thresholding is performed.
 
 from typing import Optional
 from models.beam import BeamSection
-from services.calculations.common.select_beam_reinforcement import select_reinforcement
+from services.calculations.common.select_reinforcement import select_beam_reinforcement
 from services.calculations.bs8110.formulas import (
     calculate_k,
     calculate_k_prime,
@@ -172,7 +172,7 @@ def calculate_beam_reinforcement(
                 notes.append(z_res["note"])
 
         # 1b. Bar Selection
-        tens_bars = select_reinforcement(
+        tens_bars = select_beam_reinforcement(
             As_req=As_req, b_available=b, cover=section.cover, link_dia=section.link_dia,
         )
         final_tens_bars = tens_bars
@@ -199,7 +199,7 @@ def calculate_beam_reinforcement(
     # 2. Compression & Side Reinforcement
     # ------------------------------------------------------------------
     if As_prime_req > 0:
-        comp_bars = select_reinforcement(As_prime_req, b, section.cover, section.link_dia)
+        comp_bars = select_beam_reinforcement(As_prime_req, b, section.cover, section.link_dia)
         results["As_prime_prov"] = comp_bars["As_prov"]
         results["compression_reinforcement_description"] = comp_bars["description"]
         notes.append(f"Compression steel: {comp_bars['description']}")

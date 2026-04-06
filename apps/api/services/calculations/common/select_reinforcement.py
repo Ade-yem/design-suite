@@ -1,5 +1,5 @@
 """
-select_beam_reinforcement  –  Calculates the reinforcement section of a beam
+select_beam_reinforcement  –  Calculates the reinforcement section
 """
 
 import math
@@ -8,10 +8,11 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 # Standard bar diameters (mm) — UK practice
 # ---------------------------------------------------------------------------
-STANDARD_DIAMETERS = [10, 12, 16, 20, 25, 32, 40]
+STANDARD_DIAMETERS = [8, 10, 12, 16, 20, 25, 32, 40]
+VALID_SPACINGS = [75, 100, 125, 150, 175, 200, 225, 250, 275, 300]
 
 
-def select_reinforcement(
+def select_beam_reinforcement(
     As_req: float,
     b_available: Optional[float] = None,
     cover: float = 25.0,
@@ -124,3 +125,124 @@ def select_reinforcement(
                 )
 
     return best
+
+
+def select_slab_reinforcement(As_req: float, d: float, h: float, fy: float, beta_b: float = 1.0) -> dict:
+    """
+    Select standard deformed bars spacing per meter for solid slabs.
+    BS 8110 Cl 3.12.11.2.7 maximum spacing = 3d or 750mm.
+    For h > 200mm, stricter limits from Table 3.28 apply to control cracking.
+    """
+    if As_req <= 0:
+         return {"description": "None", "As_prov": 0.0, "spacing": 0, "dia": 0, "warning": ""}
+         
+    best = None
+    min_excess = float("inf")
+    
+    # 1. Basic limit (Cl 3.12.11.2.7)
+    limit_3d = min(3 * d, 750.0)
+    
+    # 2. Crack control limit (Table 3.28 / Cl 3.12.11.2)
+    # Applied only if h > 200mm (Cl 3.12.11.2.6)
+    limit_table_328 = 9999.0
+    if h > 200.0:
+        if fy >= 460:
+            # Linear interpolation for redistribution: 160 at 0%, 130 at 30% (beta_b = 0.7)
+            limit_table_328 = 130.0 + 100.0 * (beta_b - 0.7)
+        else:
+            limit_table_328 = 300.0
+            
+    for dia in STANDARD_DIAMETERS:
+        Abar = math.pi * (dia / 2.0)**2
+        # required spacing to achieve As_req over 1000mm width
+        s_req = (1000.0 * Abar) / As_req
+        
+        # for each spacing, we check if it satisfies BOTH limits
+        # Note: Table 3.28 is CLEAR spacing. clear = s - dia.
+        # But Cl 3.12.11.2.6 says if 100As/bd < 0.3%, Table 3.28 limits are replaced by 3d.
+        
+        valid_s = []
+        for s in VALID_SPACINGS:
+            if s > s_req:
+                continue
+            
+            # Check 3d limit
+            if s > limit_3d:
+                continue
+                
+            # Check Table 3.28 limit
+            if h > 200.0:
+                pt_prov = 100.0 * (1000.0 * Abar / s) / (1000.0 * d)
+                if pt_prov > 0.3:
+                    if (s - dia) > limit_table_328:
+                        continue
+            
+            valid_s.append(s)
+
+        if valid_s:
+            s_chosen = max(valid_s)
+            As_prov = (1000.0 * Abar) / s_chosen
+            excess = As_prov - As_req
+            if excess < min_excess:
+                min_excess = excess
+                best = {
+                    "description": f"H{dia} @ {s_chosen} c/c",
+                    "As_prov": round(As_prov, 2),
+                    "spacing": s_chosen,
+                    "dia": dia,
+                    "warning": ""
+                }
+    
+    if best is None:
+        return {
+             "description": "Provide > max spacing limits",
+             "As_prov": As_req, "spacing": 0, "dia": 0,
+             "warning": f"Could not find standard spacing satisfying As_req={As_req:.1f} mm² considering crack control limits."
+        }
+    return best
+
+def select_column_reinforcement(
+    As_req: float,
+    b: float,
+    h: float,
+) -> dict:
+    """
+    Select an even number of standard deformed bars for a rectangular column.
+    Minimum 4 bars (one in each corner).
+    """
+    if As_req <= 0:
+        return {"description": "None", "As_prov": 0.0, "dia": 0, "num": 0, "warning": ""}
+
+    best = None
+    min_excess = float("inf")
+    
+    # Typical column bar arrangements: 4, 6, 8, 10, 12 bars
+    for num_bars in [4, 6, 8, 10, 12]:
+        for dia in STANDARD_DIAMETERS:
+            # Columns typically don't use 8mm or 10mm for main bars
+            if dia < 12:
+                continue
+                
+            area = num_bars * math.pi * (dia / 2.0) ** 2
+            if area >= As_req:
+                excess = area - As_req
+                if excess < min_excess:
+                    min_excess = excess
+                    best = {
+                        "description": f"{num_bars}H{dia}",
+                        "As_prov": round(area, 2),
+                        "dia": dia,
+                        "num": num_bars,
+                        "warning": ""
+                    }
+                break
+                
+    if best is None:
+        return {
+            "description": f"Provide > {int(As_req)} mm²",
+            "As_prov": As_req, "dia": 0, "num": 0,
+            "warning": f"Cannot satisfy As_req = {As_req:.0f} mm² with up to 12 standard bars."
+        }
+        
+    return best
+
