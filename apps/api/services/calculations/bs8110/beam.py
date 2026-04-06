@@ -2,7 +2,7 @@
 BS 8110-1:1997  –  Beam Design Orchestration
 =============================================
 ``calculate_beam_reinforcement`` is the single entry point for beam design.
-It accepts a ``BeamSection`` object (from ``models/calculations/beam_section``)
+It accepts a ``BeamSection`` object (from ``models/beam``)
 and design actions (M, V, span), applies the full design sequence, and returns
 a structured result dictionary with every calculation note.
 
@@ -18,13 +18,15 @@ Design sequence
 7.  Deflection check (with long-span correction).
 8.  Shear capacity check.
 9.  Shear link design.
+10. Torsion threshold check (if torsion T is provided).
+
+Note: Full torsional reinforcement design is outside the current scope; 
+only stress thresholding is performed.
 """
 
-import math
 from typing import Optional
-
-from models.calculations.beam_section import BeamSection
-from services.calculations.common import select_reinforcement
+from models.beam import BeamSection
+from services.calculations.common.select_beam_reinforcement import select_reinforcement
 from services.calculations.bs8110.formulas import (
     calculate_k,
     calculate_k_prime,
@@ -37,10 +39,11 @@ from services.calculations.bs8110.formulas import (
     calculate_shear_links,
     check_deflection,
     check_reinforcement_limits,
-    check_bar_spacing,
     determine_basic_ratio,
     check_side_reinforcement_requirement,
     apply_shear_enhancement,
+    check_torsion_stress,
+    calculate_effective_flange_width,
 )
 
 
@@ -54,6 +57,7 @@ def calculate_beam_reinforcement(
     V: float,
     span: float,
     av: Optional[float] = None,  # Distance to point load for shear enhancement
+    T: Optional[float] = None,   # Design torsion (N·mm)
 ) -> dict:
     """
     Full beam design per BS 8110-1:1997 with iterative depth calculation.
@@ -85,6 +89,8 @@ def calculate_beam_reinforcement(
     if av:
         action_note += f", av = {av:.0f} mm (for shear enhancement)"
     notes.append(action_note)
+    if T:
+        notes.append(f"Design Torsion: T = {T:.0f} N·mm")
 
     b = section.b
     h = section.h
@@ -97,7 +103,26 @@ def calculate_beam_reinforcement(
     # If hogging, flange is in tension; treat as rectangular with width b
     eff_b = b
     if not is_hogging and section.section_type == "flanged":
-        eff_b = section.bf
+        # Check if provided bf exceeds code limit
+        lz = span # Default to span for simple beams
+        if section.support_condition == "continuous":
+            lz = 0.7 * span
+        
+        limit_bf_res = calculate_effective_flange_width(
+            b_w=b, l_z=lz, 
+            b_s_left=(section.bf - b)/2.0, 
+            b_s_right=(section.bf - b)/2.0,
+            flange_type="T" # Conservative assumption if not specified
+        )
+        if section.bf > limit_bf_res["value"]:
+            warnings.append(
+                f"Provided bf ({section.bf} mm) exceeds BS 8110 limit ({limit_bf_res['value']:.1f} mm). "
+                "Using limit value for design."
+            )
+            eff_b = limit_bf_res["value"]
+        else:
+            eff_b = section.bf
+            
         notes.append(f"Sagging moment: using effective flange width bf = {eff_b} mm.")
     elif is_hogging and section.section_type == "flanged":
         notes.append("Hogging moment: flange is in tension. Treating as rectangular section (b = web width).")
@@ -117,13 +142,14 @@ def calculate_beam_reinforcement(
         # 1a. K' and Flexural Design
         k_prime_res = calculate_k_prime(beta_b)
         K_prime = k_prime_res["value"]
-
+        notes.append(k_prime_res["note"])
         As_req = 0.0
         As_prime_req = 0.0
 
         if not is_hogging and section.section_type == "flanged":
             fl_res = calculate_flanged_beam_reinforcement(
                 M=M_abs, fcu=fcu, fy=fy, b=b, bf=eff_b, d=current_d, hf=section.hf,
+                d_prime=d_prime, beta_b=beta_b
             )
             As_req = fl_res["As_req"]
             As_prime_req = fl_res["As_prime_req"]
@@ -131,9 +157,11 @@ def calculate_beam_reinforcement(
         else:
             k_res = calculate_k(M_abs, fcu, eff_b, current_d)
             K = k_res["value"]
+            notes.append(k_res["note"])
+            # print(f"K = {K}")
             if K > K_prime:
                 dr_res = calculate_doubly_reinforced_section(
-                    M_abs, fcu, fy, eff_b, current_d, d_prime, K_prime, beta_b
+                    M_abs, fcu, fy, eff_b, current_d, d_prime, K_prime
                 )
                 As_req = dr_res["As_req"]
                 As_prime_req = dr_res["As_prime_req"]
@@ -188,20 +216,24 @@ def calculate_beam_reinforcement(
     notes.append("--- Reinforcement Limits (BS 8110 Cl 3.12) ---")
     lim_res = check_reinforcement_limits(final_tens_bars["As_prov"], section.As_min, section.As_max, "tension")
     notes.append(lim_res["note"])
+    if lim_res["status"] == "FAIL":
+        results["status"] = "Reinforcement Limit Failure"
 
     notes.append("--- Deflection Check (BS 8110 Cl 3.4.6) ---")
     basic_ratio = determine_basic_ratio(section.section_type, section.support_condition)
+    # Use web width b for deflection stress parameter as per audit recommendation
     def_res = check_deflection(
-        span, current_d, basic_ratio, final_tens_bars["As_prov"], As_req, eff_b, M_abs, fy,
+        span, current_d, basic_ratio, final_tens_bars["As_prov"], As_req, b, M_abs, fy,
         results.get("As_prime_prov", 0.0), beta_b
     )
     results["deflection_check"] = def_res["status"]
     notes.append(def_res["note"])
+    if def_res["status"] == "FAIL":
+        results["status"] = "Deflection Failure"
 
     notes.append("--- Shear Design (BS 8110 Cl 3.4.5) ---")
     shear_res = check_shear_stress(V, b, current_d, fcu)
     notes.append(shear_res["note"])
-
     if shear_res["status"] == "OK":
         vc_res = calculate_vc(final_tens_bars["As_prov"], b, current_d, fcu)
         vc = vc_res["value"]
@@ -218,5 +250,16 @@ def calculate_beam_reinforcement(
         notes.append(link_res["note"])
     else:
         results["status"] = "Shear Failure"
+
+    # --- Torsion Check ---
+    if T:
+        notes.append("--- Torsion Check (BS 8110 Cl 3.4.5.13) ---")
+        torsion_res = check_torsion_stress(T, h, b, fcu)
+        notes.append(torsion_res["note"])
+        if torsion_res["status"] == "REINFORCE":
+            warnings.append(
+                f"Torsional stress ({torsion_res['vt']} N/mm²) exceeds threshold. "
+                "Additional torsional reinforcement required (not yet in scope)."
+            )
 
     return results

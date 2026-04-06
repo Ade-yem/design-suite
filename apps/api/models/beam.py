@@ -97,13 +97,27 @@ class BeamSection:
         self.d_prime = self.cover + self.link_dia + self.comp_bar_dia / 2.0
 
         # Minimum steel — BS 8110 Table 3.25
-        #   0.13 % b·h for fy = 460 N/mm²
-        #   0.15 % b·h for fy = 250 N/mm²
-        min_pct = 0.13 if self.fy >= 460 else 0.15
-        self.As_min = (min_pct / 100.0) * self.b * self.h
+        # For rectangular sections: 0.13 % b·h (high yield) or 0.15 % b·h (mild steel)
+        # For flanged sections: differs based on b_w / b ratio.
+        if self.section_type == "rectangular":
+            min_pct = 0.13 if self.fy >= 460 else 0.15
+            self.As_min = (min_pct / 100.0) * self.b * self.h
+        else:
+            # Flanged: bf is the total width, b is web width
+            bw_b_ratio = self.b / self.bf
+            if self.fy >= 460:
+                min_pct = 0.18 if bw_b_ratio < 0.4 else 0.13
+            else:
+                min_pct = 0.23 if bw_b_ratio < 0.4 else 0.15
+            self.As_min = (min_pct / 100.0) * self.b * self.h
 
-        # Maximum steel — BS 8110 Cl 3.12.6.1  (4 % gross area)
-        self.As_max = 0.04 * self.b * self.h
+        # Maximum steel — BS 8110 Cl 3.12.6.1 (4 % gross area)
+        # For flanged, gross area is flange + web area? No, usually 4% of b*h of the section.
+        # Most practical interpretation is 4% of actual cross section area.
+        gross_area = self.b * self.h
+        if self.section_type == "flanged":
+             gross_area = (self.bf - self.b) * self.hf + (self.b * self.h)
+        self.As_max = 0.04 * gross_area
 
         self._validate()
 

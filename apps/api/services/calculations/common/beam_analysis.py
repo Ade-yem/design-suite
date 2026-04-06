@@ -87,11 +87,16 @@ class BeamAnalysis:
             # M_max (support hogging) ≈ wL²/8
             for udl in self.udls:
                 V_left += (udl.w * self.L) / 2.0
-                M_sag = (udl.w * self.L**2) / 12.0
-                M_hog = -(udl.w * self.L**2) / 8.0
-                M_max = max(abs(M_sag), abs(M_hog))
-                if abs(M_hog) > abs(M_sag):
+                # Fixed-fixed beam with UDL:
+                # Support hogging = wL^2/12, Midspan sagging = wL^2/24
+                M_sag = (udl.w * self.L**2) / 24.0
+                M_hog = -(udl.w * self.L**2) / 12.0
+                
+                # Report the maximum absolute moment
+                if abs(M_hog) >= abs(M_sag):
                     M_max = M_hog
+                else:
+                    M_max = M_sag
 
             for pl in self.point_loads:
                 # Fixed-fixed point load approximations

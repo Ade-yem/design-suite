@@ -9,7 +9,7 @@ Sign convention: moments and forces are always positive (magnitudes).
 """
 
 import math
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 # ---------------------------------------------------------------------------
 # Material partial safety factors  (BS 8110-1:1997 Table 2.2)
@@ -54,7 +54,7 @@ def calculate_k_prime(beta_b: float = 1.0) -> Dict[str, Any]:
     """
     Calculate the limiting K' (K-prime) accounting for moment redistribution.
 
-    BS 8110-1:1997 Cl 3.2.2.1:
+    BS 8110-1:1997 Cl 3.4.4.4:
         K' = 0.402 · (β_b − 0.4) − 0.18 · (β_b − 0.4)²
 
     For zero redistribution (β_b = 1.0), K' = 0.156.
@@ -65,13 +65,16 @@ def calculate_k_prime(beta_b: float = 1.0) -> Dict[str, Any]:
              Use 1.0 for no redistribution.
     """
     beta_b = max(0.7, min(1.0, beta_b))
-    K_prime = 0.402 * (beta_b - 0.4) - 0.18 * (beta_b - 0.4) ** 2
+    if beta_b >= 0.9:
+        K_prime = 0.156
+    else:
+        K_prime = 0.402 * (beta_b - 0.4) - 0.18 * (beta_b - 0.4) ** 2
     return {
         "value": round(K_prime, 4),
         "beta_b": beta_b,
         "note": (
             f"K' = 0.402·(β_b−0.4) − 0.18·(β_b−0.4)² = {K_prime:.4f} "
-            f"(β_b = {beta_b}, BS 8110 Cl 3.2.2.1)"
+            f"(β_b = {beta_b}, BS 8110 Cl 3.4.4.4)"
         ),
     }
 
@@ -155,12 +158,11 @@ def calculate_doubly_reinforced_section(
 
     BS 8110-1:1997 Cl 3.4.4.4:
         M_u   = K'·fcu·b·d²
-        As'   = (M − M_u) / [0.95·fy·(d − d')]
-        As    = M_u / (0.95·fy·z) + As'
-        z     = 0.775d  (lever arm at K = K')
+        As'   = (M − M_u) / [f_sc'·(d − d')]
+        As    = M_u / (0.95·fy·z) + As' · (f_sc' / 0.95fy)
+        z     = d·[0.5 + √(0.25 − K'/0.9)]  (lever arm at K = K')
 
-    The compression bar stress is assumed to be 0.95·fy, which requires that
-    d'/d ≤ 0.2 (BS 8110 Cl 3.4.4.4 note).  A warning is added if violated.
+    If d'/d > 0.2, f_sc' is reduced per Cl 3.4.4.4 Note.
 
     Parameters
     ----------
@@ -174,27 +176,47 @@ def calculate_doubly_reinforced_section(
     """
     notes = []
     M_u = K_prime * fcu * b * d ** 2
-    z = 0.775 * d  # lever arm when K = K'
+    if M <= M_u:
+        # Singly reinforced section (should normally not be in this function)
+        z_res = calculate_lever_arm(d, M / (fcu * b * d ** 2))
+        z = z_res["value"]
+        As = M / (ALPHA_S * fy * z)
+        return {
+            "As_req": As,
+            "As_prime_req": 0.0,
+            "z": z,
+            "M_u": M_u,
+            "note": f"Moment M ({M:.0f}) ≤ M_u ({M_u:.0f}): treating as singly-reinforced. | {z_res['note']}",
+        }
 
-    # Check d'/d ratio for compression bar yielding
-    d_prime_ratio = d_prime / d
-    if d_prime_ratio > 0.2:
-        notes.append(
-            f"WARNING: d'/d = {d_prime_ratio:.3f} > 0.2 — compression bars may "
-            f"not reach 0.95fy. Consider using f'sc = 700·(1 − d'/x) / γs "
-            f"(BS 8110 Cl 3.4.4.4)."
-        )
+    # Lever arm at K' (consistent with moment redistribution)
+    z_res = calculate_lever_arm(d, K_prime)
+    z = z_res["value"]
 
-    As_prime = (M - M_u) / (ALPHA_S * fy * (d - d_prime))
-    As = (M_u / (ALPHA_S * fy * z)) + As_prime
+    # Neutral axis depth x derived from z: z = d(1 - 0.45x/d) => x = (d - z) / 0.45
+    x = (d - z) / 0.45
+
+    # Check d'/d ratio for compression bar yielding (Cl 3.4.4.4 note)
+    f_sc_prime = ALPHA_S * fy
+    if d_prime / x > 0.5:  # This corresponds roughly to d'/d > 0.2 when zero redistribution
+        # f_sc' = 700 * (1 - d'/x) / gamma_s
+        f_sc_prime_calc = 700.0 * (1.0 - d_prime / x)
+        if f_sc_prime_calc < f_sc_prime:
+            f_sc_prime = f_sc_prime_calc
+            notes.append(
+                f"Compression bar stress reduced to {f_sc_prime:.1f} N/mm² "
+                f"(d'/x = {d_prime/x:.3f} > 0.5 per Cl 3.4.4.4)."
+            )
+
+    As_prime = (M - M_u) / (f_sc_prime * (d - d_prime))
+    As = (M_u / (ALPHA_S * fy * z)) + As_prime * (f_sc_prime / (ALPHA_S * fy))
 
     notes.insert(
         0,
         (
             f"Doubly reinforced: M_u = K'·fcu·b·d² = {M_u:.0f} N·mm; "
-            f"z = 0.775d = {z:.1f} mm; "
-            f"As' = (M−M_u)/(0.95·fy·(d−d')) = {As_prime:.1f} mm²; "
-            f"As = M_u/(0.95·fy·z) + As' = {As:.1f} mm² (BS 8110 Cl 3.4.4.4)"
+            f"z = {z:.1f} mm; "
+            f"As' = {As_prime:.1f} mm²; As = {As:.1f} mm² (BS 8110 Cl 3.4.4.4)"
         ),
     )
 
@@ -219,6 +241,8 @@ def calculate_flanged_beam_reinforcement(
     bf: float,
     d: float,
     hf: float,
+    d_prime: float = 0.0,
+    beta_b: float = 1.0,
 ) -> Dict[str, Any]:
     """
     Calculate tension steel for a T- or L-beam (flanged section).
@@ -288,7 +312,7 @@ def calculate_flanged_beam_reinforcement(
         K_w = M_w / (fcu * b * d ** 2)
         notes.append(f"Web moment M_w = M − M_f = {M_w:.0f} N·mm; K_w = {K_w:.4f}")
 
-        K_prime_res = calculate_k_prime(beta_b=1.0)
+        K_prime_res = calculate_k_prime(beta_b)
         K_prime = K_prime_res["value"]
 
         if K_w > K_prime:
@@ -298,15 +322,14 @@ def calculate_flanged_beam_reinforcement(
                 f"compression reinforcement."
             )
             dr_res = calculate_doubly_reinforced_section(
-                M_w, fcu, fy, b, d, d_prime=0.0, K_prime=K_prime
+                M_w, fcu, fy, b, d, d_prime, K_prime
             )
-            # d_prime=0 is a placeholder; caller must supply actual d' for doubly
             As_w = dr_res["As_req"]
             As_prime = dr_res["As_prime_req"]
             notes.append(dr_res["note"])
         else:
-            z_w_res = calculate_lever_arm(d, K_w)
-            z_w = z_w_res["value"]
+            z_res = calculate_lever_arm(d, K_w)
+            z_w = z_res["value"]
             As_w = M_w / (ALPHA_S * fy * z_w)
             As_prime = 0.0
             notes.append(f"z_w = {z_w:.1f} mm; As_w = {As_w:.1f} mm²")
@@ -341,9 +364,8 @@ def calculate_effective_flange_width(
     Effective flange width per BS 8110-1:1997 Cl 3.4.1.5.
 
     For simple and continuous beams the code limits the slab contribution on
-    each side to lz/10 (T-beam) or lz/20 (L-beam), where lz is the distance
-    between points of zero moment (approximately 0.7 × span for continuous
-    beams, or the actual span for simply supported).
+    each side to lz/10.  For L-beams (single projecting flange), the projective 
+    side is also limited to lz/10.
 
     Parameters
     ----------
@@ -353,11 +375,7 @@ def calculate_effective_flange_width(
     b_s_right  : Actual slab width projecting to the right of web (mm)
     flange_type: ``"T"`` (flanges both sides) or ``"L"`` (flange one side)
     """
-    flange_type = flange_type.upper()
-    if flange_type == "T":
-        beff_each_side = l_z / 10.0
-    else:
-        beff_each_side = l_z / 20.0
+    beff_each_side = l_z / 10.0
 
     beff_left = min(beff_each_side, b_s_left)
     beff_right = min(beff_each_side, b_s_right)
@@ -379,24 +397,32 @@ def calculate_effective_flange_width(
 # 14.  Deep beam side reinforcement (BS 8110-1:1997 Cl 3.12.5.2)
 # ===========================================================================
 
-def calculate_deep_beam_side_reinforcement(
-    b: float,
+def check_side_reinforcement_requirement(
     h: float,
+    b: float,
+    fy: float,
 ) -> Dict[str, Any]:
     """
-    Calculate side reinforcement for deep beams (h > 750 mm).
+    Check if side reinforcement (cracking control) is required for deep beams.
 
-    BS 8110-1:1997 Cl 3.12.5.2:
-        As_side = 0.125% * b * h
+    BS 8110-1:1997 Cl 3.12.5.4:
+        For beams with depth exceeding 750 mm, side reinforcement should be provided.
+        Area required = 0.125 % of section area (b * h).
     """
-    As_side_total = 0.00125 * b * h
+    if h <= 750.0:
+        return {
+            "required": False,
+            "As_req": 0.0,
+            "note": f"Depth h = {h:.0f} mm ≤ 750 mm: No side reinforcement required (BS 8110 Cl 3.12.5.4).",
+        }
+
+    As_side = 0.00125 * b * h
     return {
         "required": True,
-        "As_req": round(As_side_total, 1),
+        "As_req": round(As_side, 1),
         "note": (
-            f"Deep beam (h > 750 mm): Side reinforcement required. "
-            f"As_side = 0.125% bh = {As_side_total:.1f} mm² (total). "
-            f"(BS 8110 Cl 3.12.5.2)"
+            f"Depth h = {h:.0f} mm > 750 mm: Side reinforcement required. "
+            f"As_req = 0.125% bh = {As_side:.1f} mm² total (BS 8110 Cl 3.12.5.4)."
         ),
     }
 

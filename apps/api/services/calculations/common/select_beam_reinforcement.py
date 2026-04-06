@@ -1,8 +1,5 @@
 """
-common.py  –  Shared calculation utilities
-==========================================
-Utility functions used across all design standards.
-Section / model objects live in ``models/calculations/``.
+select_beam_reinforcement  –  Calculates the reinforcement section of a beam
 """
 
 import math
