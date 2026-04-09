@@ -1,5 +1,5 @@
 import pytest
-from services.calculations.common.beam_analysis import BeamAnalysis
+from services.load_analysis.beam_analysis import BeamAnalysis
 
 def test_simply_supported_udl():
     span = 6000 # mm

@@ -1,6 +1,6 @@
 import pytest
-from models.slab import SlabSection
-from services.calculations.bs8110.slab import calculate_slab_reinforcement
+from models.bs8110.slab import SlabSection
+from services.design.bs8110.slab import calculate_slab_reinforcement
 
 def test_slab_design_basic():
     # 150mm thick slab, 1m strip

@@ -2,8 +2,8 @@
 Tests for BS 8110-1:1997 One-way and Two-way Slab Design.
 """
 import pytest
-from models.slab import SlabSection
-from services.calculations.bs8110.slab import (
+from models.bs8110.slab import SlabSection
+from services.design.bs8110.slab import (
     calculate_slab_reinforcement,
     get_two_way_moment_coefficients,
     get_two_way_shear_coefficients,

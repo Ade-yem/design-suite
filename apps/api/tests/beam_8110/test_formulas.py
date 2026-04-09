@@ -1,6 +1,6 @@
 import math
 import pytest
-from services.calculations.bs8110.formulas import (
+from services.design.bs8110.formulas import (
     calculate_k,
     calculate_k_prime,
     calculate_lever_arm,

@@ -7,52 +7,17 @@ import json
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
 
 SYSTEM_PROMPT = """You are an expert structural engineer. 
-Your task is to analyze the provided General Arrangement (GA) image and extract structural parameters.
+Your task is to analyze the design data and draft the structural details of the structural members.
 Identify:
-1. Structural Members (Beams, Columns, Slabs, Walls)
+1. Structural Members (Beams, Columns, Slabs, Walls, Footings)
 2. Dimensions (Span, Height, Thickness)
 3. Connectivity (Which members support which)
 
 Return the output as a valid JSON object with the following structure:
-{
-    "members":{ 
-        beams: [
-            {
-                "id": "B1",
-                "type": "Beam",
-                "dimensions": {"span": 5000, "depth": 500, "width": 300},
-                "supports": ["C1", "C2"]
-            }
-        ],
-        columns: [
-            {
-                "id": "C1",
-                "type": "Column",
-                "dimensions": {"height": 5000, "length": 500, "width": 300},
-            }
-        ],
-        slabs: [
-            {
-                "id": "S1",
-                "type": "Slab",
-                "dimensions": {"span": 5000, "depth": 500, "width": 300},
-                "supports": ["C1", "C2"]
-            }
-        ],
-        footings: [
-            {
-                "id": "F1",
-                "type": "Beam",
-                "dimensions": {"span": 5000, "depth": 500, "width": 300},
-                "supports": ["C1", "C2"]
-            }
-        ],
-    },
-    "summary": "Brief description of the structure"
-}
+You are to draw the sections as html objects that will be outputted on html canvas
 """
 
-def parser_node(state: AgentState):
+def drafter_node(state: AgentState):
     messages = state["messages"]
     image_data = state.get("image_data")
     
