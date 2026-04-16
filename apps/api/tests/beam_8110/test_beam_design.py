@@ -1,5 +1,5 @@
 from models.bs8110.beam import BeamSection
-from services.design.bs8110.beam import calculate_beam_reinforcement
+from services.design.rc.bs8110.beam import calculate_beam_reinforcement
 
 def test_rectangular_beam_singly_reinforced():
     section = BeamSection(

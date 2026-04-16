@@ -1,6 +1,6 @@
 from services.agents.state import AgentState
-from services.load_analysis.solver import ContinuousBeamSolver, Span, UDL, PointLoad
-from services.load_analysis.distribution import LoadDistribution
+from services.loading.solver import ContinuousBeamSolver, Span, UDL, PointLoad
+from services.loading.distribution import LoadDistribution
 from typing import Dict, Any
 
 def analyst_node(state: AgentState) -> Dict[str, Any]:

@@ -114,3 +114,92 @@ class FlatSlabSolver:
                 "flag": "punching_shear_check_required"
             }
         }
+
+class RibbedSlabSolver:
+    """
+    Phase 11: Ribbed Slab Solver
+    Analyzed as a series of T-beams at rib spacing spanning one-way.
+    """
+    def __init__(self, panel_id: str, L: float, rib_spacing: float, rib_width: float, topping_h: float, total_h: float):
+        self.panel_id = panel_id
+        self.L = L
+        self.s = rib_spacing
+        self.bw = rib_width
+        self.hf = topping_h
+        self.h = total_h
+        self.trace: List[CalculationTraceStep] = []
+
+    def solve(self, n_design_kpa: float) -> MemberAnalysisResult:
+        # Load per rib
+        w_rib = n_design_kpa * (self.s / 1000.0) # kN/m
+        
+        # Simple span analysis for the rib
+        M = w_rib * (self.L ** 2) / 8.0
+        V = w_rib * self.L / 2.0
+        
+        self.trace.append(CalculationTraceStep(
+            step=len(self.trace) + 1,
+            description="Rib load and moment calculation",
+            formula="w_rib = n * spacing, M = wL²/8",
+            inputs={"n": n_design_kpa, "spacing": self.s, "L": self.L},
+            result={"w_rib": w_rib, "M_kNm": M}
+        ))
+        
+        return MemberAnalysisResult(
+            member_id=self.panel_id,
+            member_type="slab",
+            analysis_method="closed_form",
+            stress_resultants=StressResultants(
+                M_max_sagging_kNm=M,
+                V_max_kN=V
+            ),
+            critical_sections={
+                "effective_flange_width": self.s,
+                "rib_width": self.bw,
+                "h_total": self.h
+            },
+            calculation_trace=self.trace,
+            flags=["ribbed_slab"]
+        )
+
+class WaffleSlabSolver:
+    """
+    Phase 11: Waffle Slab Solver
+    Analyzed as two-way ribbed system using orthogonal rib strips.
+    """
+    def __init__(self, panel_id: str, Lx: float, Ly: float, rib_spacing: float):
+        self.panel_id = panel_id
+        self.Lx = Lx
+        self.Ly = Ly
+        self.s = rib_spacing
+        self.trace: List[CalculationTraceStep] = []
+
+    def solve(self, n_design_kpa: float) -> MemberAnalysisResult:
+        # Load sharing based on two-way coefficients (simplified)
+        # In reality, stiffness ratio would be used.
+        ratio = self.Ly / self.Lx
+        # Use two-way coefficients as a proxy for load distribution
+        alpha_sx = 0.042 # Mock
+        alpha_sy = 0.028 # Mock
+        
+        msx = alpha_sx * n_design_kpa * (self.Lx ** 2)
+        msy = alpha_sy * n_design_kpa * (self.Lx ** 2)
+        
+        self.trace.append(CalculationTraceStep(
+            step=len(self.trace) + 1,
+            description="Waffle slab load distribution",
+            formula="Two-way redistribution proxy",
+            inputs={"Lx": self.Lx, "Ly": self.Ly, "n": n_design_kpa},
+            result={"Msx_kNm_per_m": msx, "Msy_kNm_per_m": msy}
+        ))
+        
+        return MemberAnalysisResult(
+            member_id=self.panel_id,
+            member_type="slab",
+            analysis_method="coefficients",
+            stress_resultants=StressResultants(
+                M_max_sagging_kNm=max(msx, msy)
+            ),
+            flags=["waffle_slab", "torsion_check_at_corners_required"],
+            calculation_trace=self.trace
+        )

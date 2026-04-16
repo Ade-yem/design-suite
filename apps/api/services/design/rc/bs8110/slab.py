@@ -314,7 +314,10 @@ def _design_strip(M: float, section: SlabSection) -> dict:
 
 def design_one_way_slab(
     section: SlabSection,
-    F: float,   # Total design UDL on span (N/m)  = (1.4Gk + 1.6Qk) × lx
+    F: float,   # Total design UDL on span (N/m)
+    M_override: Optional[float] = None,
+    V_override: Optional[float] = None,
+    lx_override: Optional[float] = None,
     gk: Optional[float] = None,
     qk: Optional[float] = None,
     num_spans: int = 3,
@@ -331,7 +334,7 @@ def design_one_way_slab(
     results: dict = {"status": "OK", "notes": notes, "warnings": warnings}
 
     notes.append(section.summary())
-    lx = section.lx
+    lx = lx_override if lx_override is not None else section.lx
     sc = section.support_condition
     n = F / lx   # design UDL in N/mm (per metre width)
     results["n_design"] = round(n * 1e3, 2)  # kN/m²
@@ -380,12 +383,16 @@ def design_one_way_slab(
     results["design_moments_kNm"] = {k: round(v / 1e6, 2) for k, v in spans.items()}
     results["design_shears_kN"]   = {k: round(v / 1e3, 2) for k, v in shears.items()}
 
-    # Flexural design for the critical (maximum) sagging moment ---------------
-    M_max_sag = max((v for v in spans.values() if v >= 0), default=0)
-    M_max_hog = max((v for k, v in spans.items() if "hogging" in k), default=0)
-    M_crit = max(M_max_sag, M_max_hog)
-
-    notes.append(f"Critical moment = {M_crit/1e6:.2f} kN·m/m (governs bar selection)")
+    # Critical moment override -----------------------------------------------
+    if M_override is not None:
+        M_crit = M_override
+        M_max_sag = M_override
+        notes.append(f"Using direct moment override: M_crit = {M_crit/1e6:.2f} kN·m/m")
+    else:
+        M_max_sag = max((v for v in spans.values() if v >= 0), default=0)
+        M_max_hog = max((v for k, v in spans.items() if "hogging" in k), default=0)
+        M_crit = max(M_max_sag, M_max_hog)
+        notes.append(f"Critical moment = {M_crit/1e6:.2f} kN·m/m (governs bar selection)")
 
     strip = _design_strip(M_crit, section)
     notes.extend(strip["notes"])
@@ -431,7 +438,9 @@ def design_one_way_slab(
         results["status"] = "Deflection Failure"
 
     # Critical shear check ----------------------------------------------------
-    V_crit = max(shears.values())
+    V_crit = V_override if V_override is not None else max(shears.values())
+    if V_override is not None:
+        notes.append(f"Using direct shear override: V_crit = {V_crit/1e3:.1f} kN/m")
     shear_res = check_shear_stress(V_crit, section.b, section.d, section.fcu)
     notes.append(shear_res["note"])
     if shear_res["status"] == "OK":
@@ -540,9 +549,7 @@ def design_two_way_slab(
     d_inner = section.h - section.cover - section.bar_dia - (section.bar_dia / 2.0)
     M_sy_crit = max(Msy_neg, Msy_pos)
 
-    # Temporarily build a proxy section with inner d
-    from models.slab import SlabSection as _S
-    inner_sec = _S(
+    inner_sec = SlabSection(
         h=section.h, cover=section.cover, fcu=section.fcu,
         lx=section.lx, ly=section.ly, fy=section.fy,
         slab_type="two-way", panel_type=section.panel_type,
@@ -643,9 +650,9 @@ def design_two_way_slab(
 
 def calculate_slab_reinforcement(
     section: SlabSection,
-    n: float,  # Design UDL (N/mm²) for two-way, or pass F directly for one-way
-    F: Optional[float] = None,  # Total design load (N/m) for one-way — if None, F = n × lx
-    gk: Optional[float] = None,
+    n_or_M: float = 0.0,
+    F_or_V: Optional[float] = None,
+    span_or_gk: Optional[float] = None,
     qk: Optional[float] = None,
     num_spans: int = 3,
     max_span_ratio: float = 1.0,
@@ -653,13 +660,28 @@ def calculate_slab_reinforcement(
     """
     Unified slab design dispatcher.
 
-    For one-way slabs: F = n × lx (or pass n alone and let the function derive F).
-    For two-way slabs: n is the design UDL in N/mm².
+    For one-way slabs: 
+        - Default: calculate moments from F = n_or_M * lx
+        - Direct: If n_or_M > 1000 (typical small N/mm2 vs large N.mm), interpret as M/V mode.
     """
     if section.slab_type == "one-way":
-        _F = F if F is not None else n * section.lx
-        return design_one_way_slab(
-            section, _F, gk=gk, qk=qk, num_spans=num_spans, max_span_ratio=max_span_ratio
-        )
+        # Heuristic to distinguish between (n, F) mode and (M, V, span) mode
+        # Designing a strip usually has n < 100 N/mm2. But M is in millions.
+        if n_or_M > 1000:
+             # (M, V, span) mode
+             M_val = n_or_M
+             V_val = F_or_V
+             lx_val = span_or_gk if span_or_gk is not None else section.lx
+             return design_one_way_slab(
+                 section, F=0.0, M_override=M_val, V_override=V_val, lx_override=lx_val,
+                 gk=None, qk=qk, num_spans=num_spans, max_span_ratio=max_span_ratio
+             )
+        else:
+             # (n, F, gk) mode
+             _F = F_or_V if F_or_V is not None else n_or_M * section.lx
+             return design_one_way_slab(
+                 section, _F, gk=span_or_gk, qk=qk, num_spans=num_spans, max_span_ratio=max_span_ratio
+             )
     else:
-        return design_two_way_slab(section, n)
+        # Two-way design only supports n mode for now
+        return design_two_way_slab(section, n_or_M)

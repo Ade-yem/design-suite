@@ -82,3 +82,92 @@ class PadFootingSolver:
                 "pressures": {"q_uls_max": q_uls_design}
             }
         )
+
+class CombinedFootingSolver:
+    """
+    Phase 13: Combined Footing Solver
+    Sizes footing so that centroid coincides with resultant of column loads.
+    """
+    def __init__(self, member_id: str, N1: float, N2: float, dist_between_cols: float, qa_allowable_kpa: float):
+        self.member_id = member_id
+        self.N1 = N1
+        self.N2 = N2
+        self.s = dist_between_cols
+        self.qa = qa_allowable_kpa
+        self.trace: List[CalculationTraceStep] = []
+
+    def solve(self, edge_distance_c1: float) -> MemberAnalysisResult:
+        # Resultant position from Col 1
+        x_res = (self.N2 * self.s) / (self.N1 + self.N2)
+        
+        # Footing length for uniform pressure
+        L = 2 * (x_res + edge_distance_c1)
+        
+        # Required area
+        A_req = (self.N1 + self.N2) * 1.1 / self.qa # 10% sw
+        B = A_req / L
+        
+        self.trace.append(CalculationTraceStep(
+            step=len(self.trace) + 1,
+            description="Combined footing sizing for uniform pressure",
+            formula="x_res = N2*s/(N1+N2), L = 2*(x_res+e1), B = A/L",
+            inputs={"N1": self.N1, "N2": self.N2, "s": self.s, "e1": edge_distance_c1},
+            result={"L_m": L, "B_m": B}
+        ))
+        
+        # Max moment (simplified as beam between columns)
+        # Load from soil q = (N1+N2)/L
+        # Max moment between columns ~ -q * s^2 / 8 + nodal loads
+        q_uls = (self.N1 + self.N2) / L
+        # This is a crude estimate, in real implementation we'd do full BMD
+        M_max = q_uls * (self.s ** 2) / 10.0
+        
+        return MemberAnalysisResult(
+            member_id=self.member_id,
+            member_type="footing",
+            analysis_method="closed_form",
+            stress_resultants=StressResultants(
+                M_max_sagging_kNm=M_max
+            ),
+            critical_sections={"L_m": L, "B_m": B},
+            calculation_trace=self.trace,
+            flags=["combined_footing"]
+        )
+
+class StripFootingSolver:
+    """
+    Phase 13: Strip Footing Solver
+    Analyzed as a continuous beam of unit width.
+    """
+    def __init__(self, member_id: str, width_m: float, slab_depth_mm: float, qa_allowable_kpa: float):
+        self.member_id = member_id
+        self.B = width_m
+        self.h = slab_depth_mm
+        self.qa = qa_allowable_kpa
+        self.trace: List[CalculationTraceStep] = []
+
+    def solve(self, n_design_kpa: float, span: float) -> MemberAnalysisResult:
+        # Load per m run
+        w = n_design_kpa * self.B
+        
+        # Simple analysis as one-way
+        M = w * (span ** 2) / 8.0
+        
+        self.trace.append(CalculationTraceStep(
+            step=len(self.trace) + 1,
+            description="Strip footing analysis as one-way beam",
+            formula="M = wL²/8",
+            inputs={"n": n_design_kpa, "B": self.B, "L": span},
+            result={"M_kNm": M}
+        ))
+        
+        return MemberAnalysisResult(
+            member_id=self.member_id,
+            member_type="footing",
+            analysis_method="closed_form",
+            stress_resultants=StressResultants(
+                M_max_sagging_kNm=M
+            ),
+            flags=["strip_footing"],
+            calculation_trace=self.trace
+        )

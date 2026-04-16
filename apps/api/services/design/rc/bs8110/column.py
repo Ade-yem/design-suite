@@ -85,7 +85,7 @@ def calculate_column_reinforcement(
         M_major = M_h_t
         M_minor = M_b_t
         
-        notes.append(f"Slender column adjusted moments: Major={M_major/1e6:.1f} kNm, Minor={M_minor/1e6:.1f} kNm")
+        notes.append(f"Slender column additional moments included: Major={M_major/1e6:.1f} kNm, Minor={M_minor/1e6:.1f} kNm")
 
     # Biaxial Bending adjustment (Cl 3.8.4.5 / Table 3.22)
     # Check if biaxial check is mandated or if we have dual moments
