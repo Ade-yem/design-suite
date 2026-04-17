@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Structural Calculation Sheet{% endblock %} | {{ project.reference }}</title>
+  <style>
+    /* ====================================================================
+       ENGINEERING REPORT — BASE CSS
+       A4 layout with print-safe typography and WeasyPrint-compatible rules
+       ==================================================================== */
+
+    /* ---------- Variables ---------- */
+    :root {
+      --col-text:       #1E293B;
+      --col-label:      #475569;
+      --col-border:     #CBD5E1;
+      --col-header-bg:  #1E3A5F;
+      --col-header-fg:  #FFFFFF;
+      --col-alt-row:    #F8FAFC;
+      --col-pass:       #166534;
+      --col-pass-bg:    #DCFCE7;
+      --col-fail:       #991B1B;
+      --col-fail-bg:    #FEE2E2;
+      --col-warn-bg:    #FEF9C3;
+      --col-warn:       #854D0E;
+      --col-accent:     #1D4ED8;
+      --col-section:    #EFF6FF;
+      --font-main:      'Courier New', 'Lucida Console', monospace;
+      --font-body:      Arial, Helvetica, sans-serif;
+      --page-w:         210mm;
+      --page-h:         297mm;
+    }
+
+    /* ---------- Reset ---------- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ---------- Page Layout (Screen) ---------- */
+    body {
+      font-family: var(--font-body);
+      font-size: 9pt;
+      color: var(--col-text);
+      background: #E2E8F0;
+      padding: 20px;
+    }
+
+    .page {
+      background: #FFFFFF;
+      width: var(--page-w);
+      min-height: var(--page-h);
+      margin: 0 auto 24px;
+      padding: 20mm 15mm 25mm 20mm;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    }
+
+    /* ---------- Print / WeasyPrint ---------- */
+    @page {
+      size: A4 portrait;
+      margin: 20mm 15mm 25mm 20mm;
+
+      @top-right {
+        content: attr(data-project-ref);
+        font-size: 7pt;
+        color: #475569;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      @bottom-center {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 7pt;
+        color: #475569;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      @bottom-right {
+        content: attr(data-revision);
+        font-size: 7pt;
+        color: #475569;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+    }
+
+    @media print {
+      body { background: transparent; padding: 0; }
+      .page { box-shadow: none; margin: 0; width: 100%; padding: 0; }
+
+      .member-calc-sheet  { page-break-before: always; }
+      .calc-step-row      { page-break-inside: avoid; }
+      .diagram-block      { page-break-inside: avoid; }
+      .report-section     { page-break-inside: avoid; }
+      .schedule-table     { page-break-inside: auto; }
+      .schedule-table tr  { page-break-inside: avoid; }
+    }
+
+    /* ---------- Project Header Block ---------- */
+    .project-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      border: 1.5px solid var(--col-header-bg);
+      margin-bottom: 8px;
+    }
+
+    .project-header__title-block {
+      background: var(--col-header-bg);
+      color: var(--col-header-fg);
+      padding: 8px 12px;
+    }
+
+    .project-header__title-block h1 {
+      font-size: 12pt;
+      font-weight: bold;
+      letter-spacing: 0.02em;
+    }
+
+    .project-header__title-block .subtitle {
+      font-size: 8pt;
+      opacity: 0.8;
+      margin-top: 2px;
+    }
+
+    .project-header__meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border-left: 1.5px solid var(--col-header-bg);
+    }
+
+    .project-header__meta-cell {
+      padding: 3px 8px;
+      border-bottom: 0.5px solid var(--col-border);
+      border-right: 0.5px solid var(--col-border);
+    }
+
+    .project-header__meta-cell:nth-child(even) { border-right: none; }
+    .project-header__meta-cell:nth-last-child(-n+2) { border-bottom: none; }
+
+    .meta-label {
+      font-size: 7pt;
+      color: var(--col-label);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .meta-value {
+      font-size: 8.5pt;
+      font-weight: 600;
+      margin-top: 1px;
+    }
+
+    .member-tag {
+      background: var(--col-accent);
+      color: #fff;
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 7.5pt;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+      margin-top: 4px;
+    }
+
+    /* ---------- Report Sections ---------- */
+    .report-section {
+      margin-bottom: 12px;
+      border: 0.75px solid var(--col-border);
+    }
+
+    .section-header {
+      background: var(--col-section);
+      border-bottom: 1.5px solid var(--col-accent);
+      padding: 4px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-number {
+      background: var(--col-accent);
+      color: #fff;
+      font-size: 7.5pt;
+      font-weight: bold;
+      padding: 1px 6px;
+      border-radius: 2px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    .section-title {
+      font-size: 9pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--col-header-bg);
+    }
+
+    .section-body {
+      padding: 8px 10px;
+    }
+
+    /* ---------- Design Basis Table ---------- */
+    .basis-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .basis-item {
+      border: 0.5px solid var(--col-border);
+      border-radius: 3px;
+      padding: 5px 8px;
+    }
+
+    .basis-item__label { font-size: 7pt; color: var(--col-label); }
+    .basis-item__value { font-size: 9pt; font-weight: 600; font-family: var(--font-main); }
+
+    /* ---------- Calculation Trace Table ---------- */
+    .calc-trace { width: 100%; border-collapse: collapse; }
+
+    .calc-step-row {
+      border-bottom: 0.5px solid var(--col-border);
+    }
+
+    .calc-step-row:nth-child(even) td { background: var(--col-alt-row); }
+
+    .calc-step-row td {
+      padding: 4px 6px;
+      vertical-align: top;
+      font-size: 8pt;
+    }
+
+    .step-num {
+      font-weight: bold;
+      color: var(--col-accent);
+      white-space: nowrap;
+      width: 28px;
+    }
+
+    .step-desc { color: var(--col-text); font-weight: 600; }
+    .step-clause { color: var(--col-label); font-size: 7.5pt; white-space: nowrap; }
+    .step-formula { font-family: var(--font-main); color: #374151; font-size: 8pt; }
+    .step-inputs { font-family: var(--font-main); color: #374151; font-size: 7.5pt; }
+    .step-result { font-family: var(--font-main); font-weight: bold; color: var(--col-header-bg); white-space: nowrap; }
+
+    /* Plain note rows (from string-only trace) */
+    .calc-step-row.note-row td {
+      color: #64748B;
+      font-style: italic;
+      font-size: 7.5pt;
+      padding: 2px 6px;
+    }
+
+    /* Section divider within trace */
+    .calc-step-row.section-divider td {
+      background: var(--col-section);
+      font-weight: bold;
+      font-size: 8pt;
+      color: var(--col-header-bg);
+      border-top: 1px solid var(--col-border);
+      padding: 3px 6px;
+    }
+
+    /* ---------- Diagram Block ---------- */
+    .diagram-block {
+      border: 0.75px solid var(--col-border);
+      border-radius: 3px;
+      padding: 6px;
+      margin: 6px 0;
+      background: #FAFBFC;
+    }
+
+    .diagram-block svg { display: block; max-width: 100%; }
+
+    /* ---------- Results Summary ---------- */
+    .results-summary {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .result-card {
+      border: 0.75px solid var(--col-border);
+      border-radius: 3px;
+      padding: 6px 10px;
+    }
+
+    .result-card__label { font-size: 7.5pt; color: var(--col-label); }
+    .result-card__value { font-size: 10pt; font-weight: bold; font-family: var(--font-main); }
+
+    /* Status badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 3px;
+      font-size: 8pt;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+    }
+    .badge--pass { background: var(--col-pass-bg); color: var(--col-pass); }
+    .badge--fail { background: var(--col-fail-bg); color: var(--col-fail); }
+    .badge--warn { background: var(--col-warn-bg); color: var(--col-warn); }
+
+    /* ---------- Generic Tables ---------- */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8pt;
+    }
+
+    .data-table th {
+      background: var(--col-header-bg);
+      color: var(--col-header-fg);
+      padding: 4px 6px;
+      text-align: left;
+      font-size: 7.5pt;
+      letter-spacing: 0.03em;
+    }
+
+    .data-table td {
+      padding: 3px 6px;
+      border-bottom: 0.5px solid var(--col-border);
+      vertical-align: top;
+    }
+
+    .data-table tr:nth-child(even) td { background: var(--col-alt-row); }
+
+    .data-table .num { text-align: right; font-family: var(--font-main); }
+
+    .data-table tfoot td {
+      font-weight: bold;
+      background: var(--col-section);
+      border-top: 1.5px solid var(--col-border);
+    }
+
+    /* ---------- Warning Banner ---------- */
+    .warning-banner {
+      background: var(--col-warn-bg);
+      border-left: 3px solid var(--col-warn);
+      padding: 6px 10px;
+      margin: 6px 0;
+      font-size: 8pt;
+      color: var(--col-warn);
+    }
+
+    .failure-banner {
+      background: var(--col-fail-bg);
+      border-left: 3px solid var(--col-fail);
+      padding: 6px 10px;
+      margin: 6px 0;
+      font-size: 8pt;
+      color: var(--col-fail);
+      font-weight: bold;
+    }
+
+    .info-banner {
+      background: var(--col-section);
+      border-left: 3px solid var(--col-accent);
+      padding: 6px 10px;
+      margin: 6px 0;
+      font-size: 8pt;
+      color: var(--col-accent);
+    }
+
+    /* ---------- Footer ---------- */
+    .page-footer {
+      border-top: 1px solid var(--col-border);
+      margin-top: 16px;
+      padding-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 7pt;
+      color: var(--col-label);
+    }
+
+    .signature-block {
+      border: 0.5px solid var(--col-border);
+      width: 120px;
+      height: 40px;
+      display: flex;
+      align-items: flex-end;
+      padding: 2px 4px;
+      font-size: 7pt;
+      color: var(--col-label);
+    }
+
+    /* ---------- Utilities ---------- */
+    .text-right  { text-align: right; }
+    .text-center { text-align: center; }
+    .mono        { font-family: var(--font-main); }
+    .small       { font-size: 7.5pt; }
+    .bold        { font-weight: bold; }
+    .mt4         { margin-top: 4px; }
+    .mt8         { margin-top: 8px; }
+    .text-fail   { color: var(--col-fail); }
+    .text-pass   { color: var(--col-pass); }
+    .text-warn   { color: var(--col-warn); }
+    .section-body--flush { padding: 0 !important; }
+    hr.thin      { border: none; border-top: 0.5px solid var(--col-border); margin: 8px 0; }
+  </style>
+</head>
+<body data-project-ref="{{ project.reference }}" data-revision="{{ project.revision }}">
+{% block body %}{% endblock %}
+</body>
+</html>

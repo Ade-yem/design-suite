@@ -1,0 +1,39 @@
+{% macro project_header(project, member) %}
+<div class="project-header">
+  <div class="project-header__title-block">
+    <h1>{{ project.name }}</h1>
+    <div class="subtitle">Structural Calculation Sheet — {{ member.member_type | replace('_', ' ') | title }}</div>
+    <div class="member-tag">{{ member.member_id }}</div>
+  </div>
+  <div class="project-header__meta" style="min-width:280px;">
+    <div class="project-header__meta-cell">
+      <div class="meta-label">Project Ref</div>
+      <div class="meta-value">{{ project.reference }}</div>
+    </div>
+    <div class="project-header__meta-cell">
+      <div class="meta-label">Date</div>
+      <div class="meta-value">{{ project.date }}</div>
+    </div>
+    <div class="project-header__meta-cell">
+      <div class="meta-label">Engineer</div>
+      <div class="meta-value">{{ project.engineer or '—' }}</div>
+    </div>
+    <div class="project-header__meta-cell">
+      <div class="meta-label">Checker</div>
+      <div class="meta-value">{{ project.checker or '—' }}</div>
+    </div>
+    <div class="project-header__meta-cell">
+      <div class="meta-label">Floor Level</div>
+      <div class="meta-value">{{ member.floor_level }}</div>
+    </div>
+    <div class="project-header__meta-cell">
+      <div class="meta-label">Revision</div>
+      <div class="meta-value">{{ project.revision }}</div>
+    </div>
+    <div class="project-header__meta-cell" style="grid-column: span 2;">
+      <div class="meta-label">Design Code</div>
+      <div class="meta-value">{{ project.design_code_edition }}</div>
+    </div>
+  </div>
+</div>
+{% endmacro %}

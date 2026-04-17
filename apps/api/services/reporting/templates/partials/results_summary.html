@@ -1,0 +1,73 @@
+{% macro results_summary(results, member) %}
+<div class="results-summary">
+  <div class="result-card">
+    <div class="result-card__label">Overall Status</div>
+    <div class="result-card__value">
+      {% if results.status == 'PASS' %}
+        <span class="badge badge--pass">✓ PASS</span>
+      {% else %}
+        <span class="badge badge--fail">✗ FAIL — {{ results.status }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="result-card">
+    <div class="result-card__label">As,req / As,prov</div>
+    <div class="result-card__value">{{ results.As_req }} / {{ results.As_prov }} mm²</div>
+  </div>
+
+  <div class="result-card" style="grid-column: span 2;">
+    <div class="result-card__label">Reinforcement Provided</div>
+    <div class="result-card__value">{{ results.reinforcement_description }}</div>
+  </div>
+
+  {% if results.shear_links and results.shear_links != '—' %}
+  <div class="result-card" style="grid-column: span 2;">
+    <div class="result-card__label">Shear Links</div>
+    <div class="result-card__value">{{ results.shear_links }}</div>
+  </div>
+  {% endif %}
+
+  <div class="result-card">
+    <div class="result-card__label">Deflection Check</div>
+    <div class="result-card__value">
+      {% if results.deflection_check == 'PASS' or results.deflection_check == 'OK' %}
+        <span class="badge badge--pass">PASS</span>
+      {% elif results.deflection_check == 'FAIL' %}
+        <span class="badge badge--fail">FAIL</span>
+      {% else %}
+        {{ results.deflection_check }}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if results.slenderness and results.slenderness != '—' %}
+  <div class="result-card">
+    <div class="result-card__label">Slenderness</div>
+    <div class="result-card__value">{{ results.slenderness }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if results.failed_checks %}
+<div class="failure-banner mt8">
+  ⚠ {{ results.failed_checks | length }} check(s) FAILED — redesign required before proceeding to detailing.
+  <ul style="margin: 4px 0 0 16px;">
+    {% for fc in results.failed_checks %}
+    <li>{{ fc.check }}: actual {{ fc.actual }} ≥ limit {{ fc.limit }} {{ fc.units }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if member.warnings %}
+<div class="warning-banner mt8">
+  <strong>Warnings:</strong>
+  <ul style="margin: 4px 0 0 16px;">
+    {% for w in member.warnings %}
+    <li>{{ w }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endmacro %}

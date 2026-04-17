@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Project Summary — {{ project.reference }}{% endblock %}
+{% block body %}
+<div class="page">
+
+  <div class="project-header">
+    <div class="project-header__title-block">
+      <h1>{{ project.name }}</h1>
+      <div class="subtitle">Structural Design — Executive Summary</div>
+    </div>
+    <div class="project-header__meta" style="min-width:280px;">
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Project Ref</div>
+        <div class="meta-value">{{ project.reference }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Date</div>
+        <div class="meta-value">{{ project.date }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Client</div>
+        <div class="meta-value">{{ project.client or '—' }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Engineer</div>
+        <div class="meta-value">{{ project.engineer or '—' }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Checker</div>
+        <div class="meta-value">{{ project.checker or '—' }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Revision</div>
+        <div class="meta-value">{{ project.revision }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Structural System -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">S1</span>
+      <span class="section-title">Structural System Description</span>
+    </div>
+    <div class="section-body">
+      <p>{{ structural_system }}</p>
+      <div class="basis-grid mt4">
+        {% for label, count in member_type_counts.items() %}
+        <div class="basis-item">
+          <div class="basis-item__label">{{ label }}</div>
+          <div class="basis-item__value">{{ count }} member{{ 's' if count != 1 else '' }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Floor-by-Floor Schedule -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">S2</span>
+      <span class="section-title">Floor-by-Floor Member Schedule</span>
+    </div>
+    <div class="section-body" style="padding:0;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Floor Level</th>
+            <th>Member Breakdown</th>
+            <th class="num">Total Members</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in floor_schedule %}
+          <tr>
+            <td class="bold">{{ f.floor_level }}</td>
+            <td class="small">
+              {% for t, c in f.member_counts.items() %}
+              {{ t }}: {{ c }}{% if not loop.last %} | {% endif %}
+              {% endfor %}
+            </td>
+            <td class="num bold">{{ f.total_members }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Global Material Quantities -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">S3</span>
+      <span class="section-title">Global Material Quantities</span>
+    </div>
+    <div class="section-body" style="padding:0;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Member Type</th>
+            <th class="num">Concrete (m³)</th>
+            <th class="num">Steel (kg)</th>
+            <th class="num">Formwork (m²)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for mt, vals in material_summary_by_type.items() %}
+          <tr>
+            <td>{{ mt | replace('_',' ') | title }}</td>
+            <td class="num">{{ vals.concrete_m3 }}</td>
+            <td class="num">{{ vals.steel_kg }}</td>
+            <td class="num">{{ vals.formwork_m2 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><b>TOTAL</b></td>
+            <td class="num"><b>{{ material_summary.concrete_m3 }}</b></td>
+            <td class="num"><b>{{ material_summary.steel_kg }}</b></td>
+            <td class="num"><b>{{ material_summary.formwork_m2 }}</b></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Design Code Summary -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">S4</span>
+      <span class="section-title">Design Code Summary</span>
+    </div>
+    <div class="section-body">
+      <div class="basis-grid">
+        <div class="basis-item">
+          <div class="basis-item__label">Code Applied</div>
+          <div class="basis-item__value">{{ design_code_summary.code }}</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Members Checked</div>
+          <div class="basis-item__value">{{ design_code_summary.members_checked }}</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Overall Result</div>
+          <div class="basis-item__value">
+            {% if design_code_summary.members_failed == 0 %}
+              <span class="badge badge--pass">✓ COMPLIANT</span>
+            {% else %}
+              <span class="badge badge--fail">{{ design_code_summary.members_failed }} FAILURES</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Outstanding Actions -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">S5</span>
+      <span class="section-title">Outstanding Actions Before Sign-Off</span>
+    </div>
+    <div class="section-body">
+      {% if outstanding_actions %}
+      <ol style="margin-left:16px; line-height:1.8;">
+        {% for action in outstanding_actions %}
+        <li>{{ action }}</li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <div class="info-banner">No outstanding actions. Design is ready for sign-off.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div>{{ project.reference }} — Rev {{ project.revision }} — Executive Summary</div>
+    <div>{{ project.engineer }}</div>
+    <div><div class="signature-block">Approved by:</div></div>
+  </div>
+</div>
+{% endblock %}

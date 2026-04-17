@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% from "partials/project_header.html" import project_header %}
+{% from "partials/results_summary.html" import results_summary %}
+
+{% block title %}{{ member.member_type | replace('_',' ') | title }} Calculation — {{ member.member_id }}{% endblock %}
+
+{% block body %}
+<div class="page member-calc-sheet">
+
+  {{ project_header(project, member) }}
+
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">1</span>
+      <span class="section-title">Design Basis</span>
+    </div>
+    <div class="section-body">
+      <div class="basis-grid">
+        <div class="basis-item">
+          <div class="basis-item__label">Concrete (fcu)</div>
+          <div class="basis-item__value">{{ design_basis.fcu_Nmm2 }} N/mm²</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Steel (fy)</div>
+          <div class="basis-item__value">{{ design_basis.fy_Nmm2 }} N/mm²</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Section</div>
+          <div class="basis-item__value">{{ design_basis.dimensions }}</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Cover</div>
+          <div class="basis-item__value">{{ design_basis.cover_mm }} mm</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Design Code</div>
+          <div class="basis-item__value">{{ design_basis.design_code }}</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">γ_c / γ_s</div>
+          <div class="basis-item__value">{{ design_basis.gamma_c }} / {{ design_basis.gamma_s }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">2</span>
+      <span class="section-title">Loading</span>
+    </div>
+    <div class="section-body">
+      <p class="small">Load combination: {{ loading.load_combination }}</p>
+      <div class="basis-grid mt4">
+        <div class="basis-item">
+          <div class="basis-item__label">Dead (G<sub>k</sub>)</div>
+          <div class="basis-item__value">{{ loading.dead_load_kNm2 }} kN/m²</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Live (Q<sub>k</sub>)</div>
+          <div class="basis-item__value">{{ loading.live_load_kNm2 }} kN/m²</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Design Load</div>
+          <div class="basis-item__value">{{ loading.design_load_kNm2 }} kN/m²</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">3</span>
+      <span class="section-title">Analysis Results</span>
+    </div>
+    <div class="section-body">
+      <div class="basis-grid">
+        <div class="basis-item">
+          <div class="basis-item__label">M<sub>max</sub></div>
+          <div class="basis-item__value">{{ analysis.M_max_kNm }} kNm</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">V<sub>max</sub></div>
+          <div class="basis-item__value">{{ analysis.V_max_kN }} kN</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">N</div>
+          <div class="basis-item__value">{{ analysis.N_kN }} kN</div>
+        </div>
+      </div>
+      {% if bmd_svg %}
+      <div class="diagram-block mt4">{{ bmd_svg | safe }}</div>
+      {% endif %}
+      {% if sfd_svg %}
+      <div class="diagram-block">{{ sfd_svg | safe }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">4</span>
+      <span class="section-title">Design Calculations</span>
+    </div>
+    <div class="section-body" style="padding:0;">
+      <table class="calc-trace">
+        <thead>
+          <tr style="background:#F1F5F9;">
+            <th style="width:28px; padding:3px 6px; font-size:7pt;">Step</th>
+            <th style="padding:3px 6px; font-size:7pt;">Description / Clause</th>
+            <th style="padding:3px 6px; font-size:7pt;">Formula</th>
+            <th style="padding:3px 6px; font-size:7pt;">Substitution</th>
+            <th style="padding:3px 6px; font-size:7pt;">Result</th>
+          </tr>
+        </thead>
+        <tbody>{% include "partials/calc_step_row.html" %}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">5</span>
+      <span class="section-title">Results Summary</span>
+    </div>
+    <div class="section-body">
+      {{ results_summary(results, member) }}
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div>{{ project.reference }} — {{ member.member_id }}</div>
+    <div>{{ project.engineer }}</div>
+    <div><div class="signature-block">Checked by:</div></div>
+  </div>
+</div>
+{% endblock %}

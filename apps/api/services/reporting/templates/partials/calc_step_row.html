@@ -1,0 +1,23 @@
+{% for step in calc_steps %}
+{% if step.formula or step.clause %}
+<tr class="calc-step-row">
+  <td class="step-num">{{ step.step }}</td>
+  <td>
+    <div class="step-desc">{{ step.description }}</div>
+    {% if step.clause %}<div class="step-clause">Ref: {{ step.clause }}</div>{% endif %}
+  </td>
+  <td class="step-formula">{{ step.formula }}</td>
+  <td class="step-inputs">{{ step.inputs }}</td>
+  <td class="step-result">{{ step.result }}</td>
+</tr>
+{% elif step.description.startswith('---') %}
+<tr class="calc-step-row section-divider">
+  <td colspan="5">{{ step.description | replace('---','') | trim }}</td>
+</tr>
+{% else %}
+<tr class="calc-step-row note-row">
+  <td></td>
+  <td colspan="4">{{ step.description }}</td>
+</tr>
+{% endif %}
+{% endfor %}

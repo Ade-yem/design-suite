@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% from "partials/project_header.html" import project_header %}
+{% from "partials/results_summary.html" import results_summary %}
+
+{% block title %}Beam Calculation — {{ member.member_id }}{% endblock %}
+
+{% block body %}
+<div class="page member-calc-sheet">
+
+  <!-- ===== PROJECT HEADER ===== -->
+  {{ project_header(project, member) }}
+
+  <!-- ===== SECTION 1: DESIGN BASIS ===== -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">1</span>
+      <span class="section-title">Design Basis &amp; Material Properties</span>
+    </div>
+    <div class="section-body">
+      <div class="basis-grid">
+        <div class="basis-item">
+          <div class="basis-item__label">Concrete Grade</div>
+          <div class="basis-item__value">fcu = {{ design_basis.fcu_Nmm2 }} N/mm²</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Main Steel (fy)</div>
+          <div class="basis-item__value">{{ design_basis.fy_Nmm2 }} N/mm²</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Link Steel (fyv)</div>
+          <div class="basis-item__value">{{ design_basis.fyv_Nmm2 }} N/mm²</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Nominal Cover</div>
+          <div class="basis-item__value">c = {{ design_basis.cover_mm }} mm</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">γ_c / γ_s</div>
+          <div class="basis-item__value">{{ design_basis.gamma_c }} / {{ design_basis.gamma_s }}</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Section</div>
+          <div class="basis-item__value">{{ design_basis.dimensions }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 2: LOADING ===== -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">2</span>
+      <span class="section-title">Loading</span>
+    </div>
+    <div class="section-body">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Load Component</th>
+            <th class="num">Characteristic Value</th>
+            <th class="num">Partial Factor</th>
+            <th class="num">Design Load</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Permanent / Dead (G<sub>k</sub>)</td>
+            <td class="num">{{ loading.dead_load_kNm2 }} kN/m²</td>
+            <td class="num">{{ loading.partial_factors.gamma_G }}</td>
+            <td class="num">—</td>
+          </tr>
+          <tr>
+            <td>Variable / Live (Q<sub>k</sub>)</td>
+            <td class="num">{{ loading.live_load_kNm2 }} kN/m²</td>
+            <td class="num">{{ loading.partial_factors.gamma_Q }}</td>
+            <td class="num">—</td>
+          </tr>
+          <tr>
+            <td>Self-weight</td>
+            <td class="num">{{ loading.self_weight_kNm2 }} kN/m²</td>
+            <td class="num">1.4</td>
+            <td class="num">—</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3">Design Load  ({{ loading.load_combination }})</td>
+            <td class="num">{{ loading.design_load_kNm2 }} kN/m²</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 3: ANALYSIS RESULTS ===== -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">3</span>
+      <span class="section-title">Analysis Results</span>
+    </div>
+    <div class="section-body">
+
+      <!-- Critical values summary -->
+      <div class="basis-grid" style="margin-bottom: 8px;">
+        <div class="basis-item">
+          <div class="basis-item__label">Max Moment M<sub>max</sub></div>
+          <div class="basis-item__value">{{ analysis.M_max_kNm }} kNm</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Max Shear V<sub>max</sub></div>
+          <div class="basis-item__value">{{ analysis.V_max_kN }} kN</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Axial N</div>
+          <div class="basis-item__value">{{ analysis.N_kN }} kN</div>
+        </div>
+      </div>
+
+      <!-- BMD -->
+      <div class="diagram-block">
+        {{ bmd_svg | safe }}
+      </div>
+
+      <!-- SFD -->
+      <div class="diagram-block">
+        {{ sfd_svg | safe }}
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION 4: DESIGN CALCULATIONS ===== -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">4</span>
+      <span class="section-title">Design Calculations</span>
+    </div>
+    <div class="section-body" style="padding: 0;">
+      <table class="calc-trace">
+        <thead>
+          <tr style="background: #F1F5F9;">
+            <th style="width:28px; padding:3px 6px; font-size:7pt;">Step</th>
+            <th style="padding:3px 6px; font-size:7pt;">Description / Clause</th>
+            <th style="padding:3px 6px; font-size:7pt;">Formula</th>
+            <th style="padding:3px 6px; font-size:7pt;">Substitution</th>
+            <th style="padding:3px 6px; font-size:7pt;">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% include "partials/calc_step_row.html" %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 5: RESULTS SUMMARY ===== -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">5</span>
+      <span class="section-title">Results Summary</span>
+    </div>
+    <div class="section-body">
+      {{ results_summary(results, member) }}
+    </div>
+  </div>
+
+  <!-- ===== MEMBER-SPECIFIC: LINK SPACING TABLE ===== -->
+  {% if results.shear_links and results.shear_links != '—' %}
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">5a</span>
+      <span class="section-title">Shear Link Schedule</span>
+    </div>
+    <div class="section-body">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Zone</th>
+            <th>Link Provision</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for link in member.reinforcement.links %}
+          <tr>
+            <td>{{ link.zone | replace('_', ' ') | title }}</td>
+            <td class="mono">{{ link.description }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="2" class="text-center">{{ results.shear_links }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ===== FOOTER ===== -->
+  <div class="page-footer">
+    <div>{{ project.reference }} — {{ member.member_id }} — {{ project.design_code_edition }}</div>
+    <div>Prepared: {{ project.engineer }}</div>
+    <div>
+      <div class="signature-block">Checked by:</div>
+    </div>
+  </div>
+
+</div><!-- .page -->
+{% endblock %}

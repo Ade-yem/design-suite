@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Material Quantities — {{ project.reference }}{% endblock %}
+{% block body %}
+<div class="page">
+
+  <div class="project-header">
+    <div class="project-header__title-block">
+      <h1>{{ project.name }}</h1>
+      <div class="subtitle">Material Quantities Take-Off</div>
+    </div>
+    <div class="project-header__meta" style="min-width:280px;">
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Project Ref</div>
+        <div class="meta-value">{{ project.reference }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Date</div>
+        <div class="meta-value">{{ project.date }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Engineer</div>
+        <div class="meta-value">{{ project.engineer or '—' }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Revision</div>
+        <div class="meta-value">{{ project.revision }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary by Member Type -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">Q1</span>
+      <span class="section-title">Material Quantities Summary — By Member Type</span>
+    </div>
+    <div class="section-body" style="padding:0;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Member Type</th>
+            <th class="num">Concrete (m³)</th>
+            <th class="num">Steel (kg)</th>
+            <th class="num">Formwork (m²)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for mt, vals in summary_by_type.items() %}
+          <tr>
+            <td>{{ mt | replace('_', ' ') | title }}</td>
+            <td class="num">{{ vals.concrete_m3 }}</td>
+            <td class="num">{{ vals.steel_kg }}</td>
+            <td class="num">{{ vals.formwork_m2 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><b>TOTAL</b></td>
+            <td class="num"><b>{{ grand_total.concrete_m3 }}</b></td>
+            <td class="num"><b>{{ grand_total.steel_kg }}</b></td>
+            <td class="num"><b>{{ grand_total.formwork_m2 }}</b></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Summary by Floor Level -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">Q2</span>
+      <span class="section-title">Material Quantities Summary — By Floor Level</span>
+    </div>
+    <div class="section-body" style="padding:0;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Floor Level</th>
+            <th class="num">Concrete (m³)</th>
+            <th class="num">Steel (kg)</th>
+            <th class="num">Formwork (m²)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for floor, vals in summary_by_floor.items() %}
+          <tr>
+            <td>{{ floor }}</td>
+            <td class="num">{{ vals.concrete_m3 }}</td>
+            <td class="num">{{ vals.steel_kg }}</td>
+            <td class="num">{{ vals.formwork_m2 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Per-member detail -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">Q3</span>
+      <span class="section-title">Per-Member Quantities</span>
+    </div>
+    <div class="section-body" style="padding:0;">
+      <table class="data-table" style="font-size:7.5pt;">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Type</th>
+            <th>Floor</th>
+            <th class="num">Concrete (m³)</th>
+            <th class="num">Steel (kg)</th>
+            <th class="num">Formwork (m²)</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in members %}
+          <tr>
+            <td class="bold mono">{{ m.member_id }}</td>
+            <td>{{ m.member_type | replace('_', ' ') | title }}</td>
+            <td>{{ m.floor_level }}</td>
+            <td class="num">{{ m.concrete_m3 }}</td>
+            <td class="num">{{ m.steel_kg }}</td>
+            <td class="num">{{ m.formwork_m2 }}</td>
+            <td class="small">{{ m.notes | join('; ') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div>{{ project.reference }} — Rev {{ project.revision }} — Material Quantities</div>
+    <div>{{ project.engineer }}</div>
+    <div><div class="signature-block">Checked by:</div></div>
+  </div>
+</div>
+{% endblock %}

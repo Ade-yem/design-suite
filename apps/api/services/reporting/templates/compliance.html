@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Compliance Report — {{ project.reference }}{% endblock %}
+{% block body %}
+<div class="page">
+
+  <div class="project-header">
+    <div class="project-header__title-block">
+      <h1>{{ project.name }}</h1>
+      <div class="subtitle">Design Compliance Report</div>
+    </div>
+    <div class="project-header__meta" style="min-width:280px;">
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Project Ref</div>
+        <div class="meta-value">{{ project.reference }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Date</div>
+        <div class="meta-value">{{ project.date }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Engineer</div>
+        <div class="meta-value">{{ project.engineer or '—' }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Revision</div>
+        <div class="meta-value">{{ project.revision }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global warnings -->
+  {% for w in global_warnings %}
+  <div class="warning-banner">⚠ {{ w }}</div>
+  {% endfor %}
+
+  <!-- Section 4.4: Code Compliance Summary -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">4.4</span>
+      <span class="section-title">Design Code Compliance Summary</span>
+    </div>
+    <div class="section-body">
+      <div class="basis-grid">
+        <div class="basis-item">
+          <div class="basis-item__label">Code Applied</div>
+          <div class="basis-item__value">{{ code_compliance.code }}</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Edition</div>
+          <div class="basis-item__value">{{ code_compliance.code_edition }}</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Members Checked</div>
+          <div class="basis-item__value">{{ code_compliance.members_checked }}</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Passed (all checks)</div>
+          <div class="basis-item__value text-pass bold">{{ code_compliance.members_passed }}</div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Failed (any check)</div>
+          <div class="basis-item__value bold {% if code_compliance.members_failed > 0 %}text-fail{% else %}text-pass{% endif %}">
+            {{ code_compliance.members_failed }}
+            {% if code_compliance.members_failed > 0 %} ← See Section 4.1{% endif %}
+          </div>
+        </div>
+        <div class="basis-item">
+          <div class="basis-item__label">Overall Status</div>
+          <div class="basis-item__value">
+            {% if code_compliance.members_failed == 0 %}
+              <span class="badge badge--pass">✓ COMPLIANT</span>
+            {% else %}
+              <span class="badge badge--fail">{{ code_compliance.members_failed }} FAILURES</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 4.1: Failed Checks -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">4.1</span>
+      <span class="section-title">Failed Checks Register</span>
+    </div>
+    <div class="section-body {% if failed_checks %}section-body--flush{% endif %}">
+      {% if failed_checks %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Floor</th>
+            <th>Check</th>
+            <th>Actual</th>
+            <th>Limit</th>
+            <th>Units</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fc in failed_checks %}
+          <tr>
+            <td class="bold mono">{{ fc.member_id }}</td>
+            <td>{{ fc.floor_level }}</td>
+            <td>{{ fc.check }}</td>
+            <td class="text-fail bold">{{ fc.actual }}</td>
+            <td>{{ fc.limit }}</td>
+            <td>{{ fc.units }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="failure-banner" style="margin:8px;">
+        Action required: redesign all failed members before proceeding to detailing.
+      </div>
+      {% else %}
+      <div class="info-banner">✓ No failed checks. All members passed all limit state checks.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Section 4.2: Near-Limit Warnings -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">4.2</span>
+      <span class="section-title">Utilisation Warnings — Within 5% of Capacity</span>
+    </div>
+    <div class="section-body {% if near_limit_warnings %}section-body--flush{% endif %}">
+      {% if near_limit_warnings %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Floor</th>
+            <th>Check</th>
+            <th class="num">Utilisation</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for nl in near_limit_warnings %}
+          <tr>
+            <td class="bold mono">{{ nl.member_id }}</td>
+            <td>{{ nl.floor_level }}</td>
+            <td>{{ nl.check }}</td>
+            <td class="num text-warn bold">{{ nl.utilisation_pct }}%</td>
+            <td>{{ nl.note }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="info-banner">No near-limit utilisation warnings.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Section 4.3: Defaulted Inputs -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">4.3</span>
+      <span class="section-title">Assumed / Defaulted Inputs Register</span>
+    </div>
+    <div class="section-body {% if defaulted_inputs %}section-body--flush{% endif %}">
+      {% if defaulted_inputs %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Default Used</th>
+            <th>Source</th>
+            <th>Affected Members</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for di in defaulted_inputs %}
+          <tr>
+            <td class="bold">{{ di.parameter }}</td>
+            <td class="mono">{{ di.default_used }}</td>
+            <td>{{ di.source }}</td>
+            <td class="small">{{ di.affected_member_ids | join(', ') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="warning-banner" style="margin:8px;">
+        Engineer must confirm all assumed values above before project sign-off.
+      </div>
+      {% else %}
+      <div class="info-banner">No defaulted inputs — all parameters were explicitly provided.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div>{{ project.reference }} — Rev {{ project.revision }} — Compliance Report</div>
+    <div>{{ project.engineer }}</div>
+    <div><div class="signature-block">Checked by:</div></div>
+  </div>
+</div>
+{% endblock %}

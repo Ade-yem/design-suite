@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Reinforcement Schedule — {{ project.reference }}{% endblock %}
+{% block body %}
+<div class="page">
+
+  <!-- Header -->
+  <div class="project-header">
+    <div class="project-header__title-block">
+      <h1>{{ project.name }}</h1>
+      <div class="subtitle">Reinforcement Bar Schedule — BS 8666:2020</div>
+    </div>
+    <div class="project-header__meta" style="min-width:280px;">
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Project Ref</div>
+        <div class="meta-value">{{ project.reference }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Date</div>
+        <div class="meta-value">{{ project.date }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Engineer</div>
+        <div class="meta-value">{{ project.engineer or '—' }}</div>
+      </div>
+      <div class="project-header__meta-cell">
+        <div class="meta-label">Revision</div>
+        <div class="meta-value">{{ project.revision }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bar Schedule Table -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">BS</span>
+      <span class="section-title">Bar Schedule — All Members</span>
+    </div>
+    <div class="section-body" style="padding:0;">
+      <table class="data-table schedule-table" style="font-size:7.5pt;">
+        <thead>
+          <tr>
+            <th>Bar Mark</th>
+            <th>Member</th>
+            <th>Type</th>
+            <th class="num">Dia (mm)</th>
+            <th class="num">No. Mbrs</th>
+            <th class="num">No./Mbr</th>
+            <th class="num">Total No.</th>
+            <th>Shape</th>
+            <th class="num">A (mm)</th>
+            <th class="num">B (mm)</th>
+            <th class="num">C (mm)</th>
+            <th class="num">Length (mm)</th>
+            <th class="num">Total (m)</th>
+            <th class="num">Mass (kg)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td class="bold mono">{{ row.bar_mark }}</td>
+            <td>{{ row.member_id }}</td>
+            <td>{{ row.bar_type }}</td>
+            <td class="num">H{{ row.diameter_mm }}</td>
+            <td class="num">{{ row.num_members }}</td>
+            <td class="num">{{ row.num_per_member }}</td>
+            <td class="num bold">{{ row.total_number }}</td>
+            <td class="text-center">{{ row.shape_code }}</td>
+            <td class="num">{{ row.A_mm }}</td>
+            <td class="num">{{ row.B_mm }}</td>
+            <td class="num">{{ row.C_mm }}</td>
+            <td class="num">{{ row.cut_length_mm }}</td>
+            <td class="num">{{ row.total_length_m }}</td>
+            <td class="num">{{ row.mass_kg }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="14" class="text-center">No reinforcement data available.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="12" class="text-right">PROJECT TOTAL STEEL MASS</td>
+            <td class="num">{{ project_total.total_length_m }} m</td>
+            <td class="num">{{ project_total.total_mass_kg }} kg</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Summary by Diameter -->
+  <div class="report-section">
+    <div class="section-header">
+      <span class="section-number">S1</span>
+      <span class="section-title">Steel Take-Off by Diameter</span>
+    </div>
+    <div class="section-body">
+      <table class="data-table" style="max-width:400px;">
+        <thead>
+          <tr>
+            <th>Diameter</th>
+            <th class="num">Total Length (m)</th>
+            <th class="num">Mass (kg)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for dia, vals in project_total.by_diameter.items() %}
+          <tr>
+            <td>H{{ dia }}</td>
+            <td class="num">{{ vals.length_m }}</td>
+            <td class="num">{{ vals.mass_kg }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><b>Total</b></td>
+            <td class="num"><b>{{ project_total.total_length_m }} m</b></td>
+            <td class="num"><b>{{ project_total.total_mass_kg }} kg</b></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div>{{ project.reference }} — Rev {{ project.revision }} — Reinforcement Schedule</div>
+    <div>{{ project.engineer }}</div>
+    <div><div class="signature-block">Checked by:</div></div>
+  </div>
+</div>
+{% endblock %}

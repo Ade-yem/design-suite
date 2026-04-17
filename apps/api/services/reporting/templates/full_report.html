@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Full Report — {{ project.reference }}</title>
+</head>
+<body>
+  {{ summary_html | safe }}
+  {{ compliance_html | safe }}
+  {% for html in member_html_list %}
+  {{ html | safe }}
+  {% endfor %}
+  {{ schedule_html | safe }}
+  {{ quantities_html | safe }}
+</body>
+</html>
