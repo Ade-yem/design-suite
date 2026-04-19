@@ -88,7 +88,7 @@ async def _run_analysis_background(
         total = max(len(all_ids), 1)
 
         # Stub: replace with actual AnalysisEngine invocations, e.g.:
-        # from services.analysis import AnalysisEngine
+        # from core.analysis import AnalysisEngine
         # from storage.loading_store import get_loading_output
         # engine = AnalysisEngine(design_code=project.design_code)
         # ...

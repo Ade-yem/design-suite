@@ -39,6 +39,7 @@ from routers import (
     analysis,
     chat,
     design,
+    drawings,
     files,
     jobs,
     loading,
@@ -46,6 +47,7 @@ from routers import (
     projects,
     reports,
 )
+import websocket
 
 # ── Environment ────────────────────────────────────────────────────────────────
 load_dotenv()
@@ -93,12 +95,13 @@ app.include_router(files.router,     prefix="/api/v1/files",     tags=["Files"])
 app.include_router(loading.router,   prefix="/api/v1/loading",   tags=["Loading"])
 app.include_router(analysis.router,  prefix="/api/v1/analysis",  tags=["Analysis"])
 app.include_router(design.router,    prefix="/api/v1/design",    tags=["Design"])
+app.include_router(drawings.router,  prefix="/api/v1/drawings",  tags=["Drawings"])
 app.include_router(reports.router,   prefix="/api/v1/reports",   tags=["Reports"])
 app.include_router(pipeline.router,  prefix="/api/v1/pipeline",  tags=["Pipeline"])
 app.include_router(jobs.router,      prefix="/api/v1/jobs",      tags=["Jobs"])
 
-# Legacy routers (kept for backward compatibility with existing frontend)
-app.include_router(chat.router, prefix="/api", tags=["Chat (Legacy)"])
+# WebSockets
+app.include_router(websocket.router, tags=["WebSockets"])
 
 
 # ── Health check ───────────────────────────────────────────────────────────────

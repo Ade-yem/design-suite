@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from services.analysis.global_solver import GlobalMatrixSolver
+from core.analysis.global_solver import GlobalMatrixSolver
 
 def test_single_span_beam_reactions(empty_solver):
     """

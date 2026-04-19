@@ -1,5 +1,5 @@
 import pytest
-from services.analysis.slab_solver import TwoWaySlabSolver, FlatSlabSolver, RibbedSlabSolver
+from core.analysis.slab_solver import TwoWaySlabSolver, FlatSlabSolver, RibbedSlabSolver
 
 def test_two_way_slab_moments():
     """Verify coefficient-based moment calculation for 2-way solid slabs."""

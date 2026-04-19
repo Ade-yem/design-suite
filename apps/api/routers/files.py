@@ -133,7 +133,7 @@ async def _parse_file_background(
     job_store.mark_running(job_id, "Parsing file…")
     try:
         # ── Stub: replace with actual Vision Agent / ezdxf parsing call ────
-        # from services.agents.parser import parse_dxf
+        # from agents.parser import parse_dxf
         # parsed = await parse_dxf(file_path)
         parsed: dict[str, Any] = {
             "members": [],

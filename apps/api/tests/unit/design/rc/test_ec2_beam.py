@@ -1,6 +1,6 @@
 import pytest
 from models.ec2.beam import EC2BeamSection
-from services.design.rc.eurocode2.beam import calculate_beam_reinforcement
+from core.design.rc.eurocode2.beam import calculate_beam_reinforcement
 
 def test_ec2_beam_singly_reinforced():
     """Verify EC2 beam design for a standard singly-reinforced section."""

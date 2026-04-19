@@ -1,5 +1,5 @@
 import pytest
-from services.analysis.beam_solver import SimplySupportedBeamSolver, MomentCoefficientSolver
+from core.analysis.beam_solver import SimplySupportedBeamSolver, MomentCoefficientSolver
 
 def test_simply_supported_udl(simply_supported_beam):
     """Verify wL^2/8 for a 5m beam with 10kN/m load."""

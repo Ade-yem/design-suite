@@ -1,5 +1,5 @@
 from models.ec2.beam import EC2BeamSection
-from services.design.rc.eurocode2.beam import calculate_beam_reinforcement
+from core.design.rc.eurocode2.beam import calculate_beam_reinforcement
 import json
 
 section = EC2BeamSection(b=300, h=600, cover=30, fck=30, fyk=500)

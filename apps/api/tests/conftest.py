@@ -1,44 +1,27 @@
 import pytest
-import numpy as np
-from services.analysis.global_solver import GlobalMatrixSolver
-from services.analysis.beam_solver import SimplySupportedBeamSolver
+from httpx import AsyncClient
+from main import app
 
 @pytest.fixture
-def empty_solver():
-    """Returns a fresh GlobalMatrixSolver instance."""
-    return GlobalMatrixSolver()
+async def async_client():
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        yield client
 
 @pytest.fixture
-def portal_frame_setup(empty_solver):
-    """
-    Sets up a standard portal frame:
-    - 2 fixed bases at (0,0) and (5,0)
-    - 2 beam-column nodes at (0,4) and (5,4)
-    - Column properties: E=200e9, A=0.01, I=0.0001
-    """
-    E = 200e9
-    A = 0.01
-    I = 0.0001
-    
-    empty_solver.add_node("n0", 0.0, 0.0, [True, True, True])
-    empty_solver.add_node("n1", 0.0, 4.0, [False, False, False])
-    empty_solver.add_node("n2", 5.0, 4.0, [False, False, False])
-    empty_solver.add_node("n3", 5.0, 0.0, [True, True, True])
-    
-    empty_solver.add_element("col_left", "n0", "n1", E, A, I)
-    empty_solver.add_element("beam", "n1", "n2", E, A, I)
-    empty_solver.add_element("col_right", "n2", "n3", E, A, I)
-    
-    return empty_solver
+def test_project():
+    return {"project_id": "test_proj_123", "design_code": "BS8110"}
 
 @pytest.fixture
-def simply_supported_beam():
-    """Returns a 5m simply supported beam fixture."""
-    # E = 30 GPa (RC), I = 0.001 m4
-    return SimplySupportedBeamSolver(
-        member_id="B1",
-        span_L=5.0,
-        E=30e6, # kPa
-        I=0.001, # m4
-        design_code="EC2"
-    )
+async def project_with_loads_defined(async_client, test_project):
+    # Stub fixture for integration testing
+    return test_project
+
+@pytest.fixture
+async def project_with_analysis_complete(async_client, test_project):
+    # Stub fixture
+    return test_project
+
+@pytest.fixture
+async def project_with_design_failures(async_client, test_project):
+    # Stub fixture
+    return {"project_id": test_project["project_id"], "failed_member_id": "B-01"}

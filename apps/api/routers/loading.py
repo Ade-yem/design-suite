@@ -74,7 +74,7 @@ def _run_loading_service(project_id: str, definition: dict[str, Any]) -> dict[st
         Full loading output matching the MemberLoadOutput schema.
     """
     # Stub: replace with actual service invocation, e.g.:
-    # from services.loading import LoadSerializer, LoadCombinationEngine
+    # from core.loading import LoadSerializer, LoadCombinationEngine
     # ...
     return {
         "design_code": definition.get("design_code", "BS8110"),

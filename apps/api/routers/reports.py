@@ -46,14 +46,14 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
-from services.reporting.normalizer import InputNormalizer, ValidationError
-from services.reporting.calc_sheet import CalcSheetEngine
-from services.reporting.rebar_schedule import RebarScheduleEngine
-from services.reporting.quantities import MaterialQuantityEngine
-from services.reporting.compliance import ComplianceReportEngine
-from services.reporting.summary import ProjectSummaryEngine
-from services.reporting.renderer import TemplateRenderer
-from services.reporting.pdf_export import PDFExportEngine
+from core.reporting.normalizer import InputNormalizer, ValidationError
+from core.reporting.calc_sheet import CalcSheetEngine
+from core.reporting.rebar_schedule import RebarScheduleEngine
+from core.reporting.quantities import MaterialQuantityEngine
+from core.reporting.compliance import ComplianceReportEngine
+from core.reporting.summary import ProjectSummaryEngine
+from core.reporting.renderer import TemplateRenderer
+from core.reporting.pdf_export import PDFExportEngine
 
 logger = logging.getLogger(__name__)
 

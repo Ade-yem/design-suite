@@ -1,7 +1,7 @@
 import pytest
 from models.loading.schema import DesignCode, OccupancyCategory
-from services.loading.assemblers import SlabLoadAssembler, BeamLoadAssembler
-from services.analysis.beam_solver import SimplySupportedBeamSolver
+from core.loading.assemblers import SlabLoadAssembler, BeamLoadAssembler
+from core.analysis.beam_solver import SimplySupportedBeamSolver
 
 def test_pipeline_slab_to_beam_analysis():
     """

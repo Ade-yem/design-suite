@@ -1,7 +1,7 @@
 import pytest
 from models.loading.schema import DesignCode, OccupancyCategory
-from services.loading.assemblers import SlabLoadAssembler, BeamLoadAssembler
-from services.loading.special_slabs import RibbedSlabAssembler
+from core.loading.assemblers import SlabLoadAssembler, BeamLoadAssembler
+from core.loading.special_slabs import RibbedSlabAssembler
 
 def test_slab_classification():
     """Verify one-way vs two-way classification."""

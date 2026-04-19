@@ -1,5 +1,5 @@
 import pytest
-from services.analysis.footing_solver import PadFootingSolver
+from core.analysis.footing_solver import PadFootingSolver
 
 def test_pad_footing_sizing():
     """Verify footing area sizing based on qa."""

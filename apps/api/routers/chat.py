@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
-from services.agents.orchestrator import app as agent_app
+from agents.orchestrator import app as agent_app
 import base64
 import json
 
@@ -50,7 +50,7 @@ async def chat_endpoint(
         # Invoke Designer
         # We need to manually trigger the designer node since our graph is simple
         # In a full LangGraph, we'd update state and let it flow
-        from services.agents.designer import designer_node
+        from agents.designer import designer_node
         result = designer_node(inputs)
         
         if result.get("error"):

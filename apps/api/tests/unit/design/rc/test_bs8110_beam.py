@@ -1,6 +1,6 @@
 import pytest
 from models.bs8110.beam import BeamSection
-from services.design.rc.bs8110.beam import calculate_beam_reinforcement
+from core.design.rc.bs8110.beam import calculate_beam_reinforcement
 
 def test_bs8110_beam_singly_reinforced():
     """Verify BS 8110 beam design for a standard singly-reinforced section."""

@@ -90,7 +90,7 @@ async def _run_design_background(
         total = max(len(all_ids), 1)
 
         # Stub: replace with actual Design Suite calls, e.g.:
-        # from services.design.rc.bs8110.beam import BeamDesigner
+        # from core.design.rc.bs8110.beam import BeamDesigner
         # ...
 
         results: list[dict[str, Any]] = []

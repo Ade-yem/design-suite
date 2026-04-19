@@ -1,6 +1,6 @@
 import pytest
 from models.bs8110.column import ColumnSection
-from services.design.rc.bs8110.column import calculate_column_reinforcement
+from core.design.rc.bs8110.column import calculate_column_reinforcement
 
 def test_short_column_axial():
     # 300x300 column, 3m tall

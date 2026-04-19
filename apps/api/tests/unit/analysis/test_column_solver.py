@@ -1,5 +1,5 @@
 import pytest
-from services.analysis.column_solver import ColumnSolver
+from core.analysis.column_solver import ColumnSolver
 
 def test_column_short_classification():
     """Verify brace-factor and short column classification."""
