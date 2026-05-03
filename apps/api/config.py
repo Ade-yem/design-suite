@@ -29,23 +29,43 @@ class Settings(BaseSettings):
     Attributes
     ----------
     APP_ENV : str
-        Deployment environment.  One of ``development`` | ``staging`` | ``production``.
+        Deployment environment. One of ``development`` | ``staging`` | ``production``.
     SECRET_KEY : str
-        HMAC secret used for any token signing.
-    ALLOWED_ORIGINS : list[str]
-        CORS allowed origins.  Comma-separated string in env, parsed into a list.
+        HMAC secret for JWT signing (fastapi-users).
+    JWT_LIFETIME_SECONDS : int
+        JWT token validity duration in seconds.
+    ALLOWED_ORIGINS : str
+        CORS allowed origins. Comma-separated string in env, parsed into a list.
     UPLOAD_DIR : Path
-        Filesystem directory where uploaded DXF/PDF files are stored.
+        Filesystem directory where uploaded DXF/PDF files are stored (dev only).
     MAX_UPLOAD_SIZE_MB : int
         Hard limit on uploaded file size in megabytes.
+    FILE_STORAGE_BACKEND : str
+        File storage implementation to use. One of ``local`` | ``cloudinary``.
+        Defaults to ``local``. Set to ``cloudinary`` for production.
     JOB_STORE_TTL_SECONDS : int
-        How long in-memory job entries are retained.
+        How long job entries are retained in Redis (seconds).
+    JOB_STORE_BACKEND : str
+        Job store implementation to use. One of ``memory`` | ``redis``.
+    PROJECT_STORE_BACKEND : str
+        Project store implementation to use. One of ``memory`` | ``postgres``.
+    DATABASE_URL : str | None
+        Async PostgreSQL DSN (e.g. ``postgresql+asyncpg://user:pw@host/db``).
+        Required when PROJECT_STORE_BACKEND is ``postgres``.
     REDIS_URL : str | None
-        Redis connection URL used by Celery in production.  None → use BackgroundTasks.
+        Redis connection URL. Required when JOB_STORE_BACKEND is ``redis``.
+    CLOUDINARY_CLOUD_NAME : str
+        Cloudinary cloud name. Required when FILE_STORAGE_BACKEND is ``cloudinary``.
+    CLOUDINARY_API_KEY : str
+        Cloudinary API key.
+    CLOUDINARY_API_SECRET : str
+        Cloudinary API secret.
     LOG_LEVEL : str
         Root logging level (DEBUG | INFO | WARNING | ERROR).
     API_VERSION : str
         Semantic version string embedded in OpenAPI metadata.
+    GEMINI_API_KEY : str
+        Google Gemini API key for AI agent calls.
     """
 
     model_config = SettingsConfigDict(
@@ -55,16 +75,39 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # ── App ───────────────────────────────────────────────────────────────────
     APP_ENV: str = "development"
     SECRET_KEY: str = "change-me-in-production"
+    JWT_LIFETIME_SECONDS: int = 3600
+
+    # ── CORS ──────────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+
+    # ── File storage ──────────────────────────────────────────────────────────
     UPLOAD_DIR: Path = Path("uploads")
     MAX_UPLOAD_SIZE_MB: int = 50
+    FILE_STORAGE_BACKEND: str = "local"   # "local" | "cloudinary"
+
+    # ── Cloudinary (production file storage) ──────────────────────────────────
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
+    # ── Job store ─────────────────────────────────────────────────────────────
     JOB_STORE_TTL_SECONDS: int = 3600
+    JOB_STORE_BACKEND: str = "memory"    # "memory" | "redis"
     REDIS_URL: str | None = None
+
+    # ── Project / Data store ──────────────────────────────────────────────────
+    PROJECT_STORE_BACKEND: str = "memory" # "memory" | "postgres"
+    DATABASE_URL: str | None = None
+
+    # ── Logging & meta ────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
     API_VERSION: str = "1.0.0"
+    GEMINI_API_KEY: str = ""
 
+    # ── Derived properties ────────────────────────────────────────────────────
     @property
     def origins_list(self) -> list[str]:
         """Return ALLOWED_ORIGINS parsed into a Python list."""
@@ -74,6 +117,11 @@ class Settings(BaseSettings):
     def max_upload_bytes(self) -> int:
         """Return maximum allowed upload size in bytes."""
         return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+    @property
+    def is_production(self) -> bool:
+        """Return True when running in production mode."""
+        return self.APP_ENV == "production"
 
 
 settings = Settings()

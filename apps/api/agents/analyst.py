@@ -32,11 +32,18 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from agents.api_client import api_client, poll_job_until_complete
 from agents.state import StructuralDesignState
+from config import settings
+
 
 logger = logging.getLogger(__name__)
 
+
 # LLM used for load input extraction only — never for engineering calculations
-_llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
+_llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-pro",
+    temperature=0,
+    google_api_key=settings.GEMINI_API_KEY or "dummy-key-for-tests",
+)
 
 # Required fields for load definition — used to detect missing inputs
 _REQUIRED_LOAD_FIELDS: list[str] = [

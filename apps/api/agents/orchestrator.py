@@ -1,12 +1,12 @@
 from langgraph.graph import StateGraph, END
-from agents.state import AgentState
+from agents.state import StructuralDesignState
 from agents.parser import parser_node
 from agents.analyst import analyst_node
 from agents.designer import designer_node
 from agents.drafter import drafter_node
 
 # Define the graph
-workflow = StateGraph(AgentState)
+workflow = StateGraph(StructuralDesignState)
 
 # Add nodes
 workflow.add_node("parser", parser_node)

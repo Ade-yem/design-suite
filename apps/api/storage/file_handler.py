@@ -1,153 +1,66 @@
 """
 storage/file_handler.py
 =======================
-Filesystem persistence for uploaded DXF / PDF files.
-
-Each project gets its own sub-directory under ``settings.UPLOAD_DIR``.
-Files are saved with a timestamp prefix to avoid name collisions on re-upload.
+File storage factory — returns the correct backend based on ``settings.FILE_STORAGE_BACKEND``.
 
 Public interface
 ----------------
-FileHandler.save(project_id, file)           → Path
-FileHandler.get_path(project_id, filename)   → Path | None
-FileHandler.list_files(project_id)           → list[str]
-FileHandler.delete(project_id)               → None
+``file_handler``  : FileStorageBackend singleton
+
+    Use ``file_handler`` across all routers instead of instantiating a backend directly.
+
+Backend selection (set in .env)
+--------------------------------
+    FILE_STORAGE_BACKEND=local        → LocalFileBackend  (default, development)
+    FILE_STORAGE_BACKEND=cloudinary   → CloudinaryFileBackend  (production)
+
+Adding a new backend
+--------------------
+1. Create ``storage/file_backends/my_backend.py`` implementing ``FileStorageBackend``.
+2. Add a branch in ``_build_file_backend()`` below.
+3. Set ``FILE_STORAGE_BACKEND=my_backend`` in ``.env``.
 """
 
 from __future__ import annotations
 
-import time
-from pathlib import Path
-from typing import Optional
-
-from fastapi import UploadFile
-
-from config import settings, ACCEPTED_EXTENSIONS
-from middleware.error_handler import StructuralError
+from config import settings
+from storage.file_backends.base import FileStorageBackend
 
 
-class FileHandler:
+def _build_file_backend() -> FileStorageBackend:
     """
-    Handles upload directory management and file persistence.
+    Instantiate and return the configured file storage backend.
 
-    Attributes
-    ----------
-    base_dir : Path
-        Root upload directory (from ``settings.UPLOAD_DIR``).
+    Backend is selected from ``settings.FILE_STORAGE_BACKEND``:
+
+    - ``"local"``      → ``LocalFileBackend``      (writes to disk, no external deps)
+    - ``"cloudinary"`` → ``CloudinaryFileBackend``  (streams to Cloudinary)
+
+    Returns
+    -------
+    FileStorageBackend
+        Concrete backend instance.
+
+    Raises
+    ------
+    ValueError
+        If ``FILE_STORAGE_BACKEND`` is set to an unknown value.
     """
+    backend = settings.FILE_STORAGE_BACKEND.lower()
 
-    def __init__(self, base_dir: Optional[Path] = None) -> None:
-        self.base_dir = base_dir or settings.UPLOAD_DIR
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+    if backend == "local":
+        from storage.file_backends.local import LocalFileBackend
+        return LocalFileBackend()
 
-    def _project_dir(self, project_id: str) -> Path:
-        """Return (and create) the project-specific upload directory."""
-        d = self.base_dir / project_id
-        d.mkdir(parents=True, exist_ok=True)
-        return d
+    if backend == "cloudinary":
+        from storage.file_backends.cloudinary import CloudinaryFileBackend
+        return CloudinaryFileBackend()
 
-    async def save(self, project_id: str, file: UploadFile) -> Path:
-        """
-        Persist an uploaded file to the project directory.
-
-        The file is read in 1 MB chunks to avoid exhausting memory on large uploads.
-        A millisecond timestamp is prepended to the filename to prevent collisions.
-
-        Parameters
-        ----------
-        project_id : str
-            Owning project identifier.
-        file : UploadFile
-            FastAPI upload file object.
-
-        Returns
-        -------
-        Path
-            Absolute path to the saved file.
-
-        Raises
-        ------
-        StructuralError
-            ``UNSUPPORTED_FILE`` — if the file extension is not .dxf or .pdf.
-            ``FILE_TOO_LARGE``  — if the content exceeds ``settings.max_upload_bytes``.
-        """
-        original_name = file.filename or "upload"
-        suffix = Path(original_name).suffix.lower()
-        if suffix not in ACCEPTED_EXTENSIONS:
-            raise StructuralError(
-                "UNSUPPORTED_FILE",
-                details={"received": suffix, "accepted": list(ACCEPTED_EXTENSIONS)},
-                status_code=400,
-            )
-
-        timestamp = int(time.time() * 1000)
-        safe_name = f"{timestamp}_{Path(original_name).name}"
-        dest = self._project_dir(project_id) / safe_name
-
-        total_bytes = 0
-        chunk_size = 1024 * 1024  # 1 MB
-        with dest.open("wb") as f:
-            while chunk := await file.read(chunk_size):
-                total_bytes += len(chunk)
-                if total_bytes > settings.max_upload_bytes:
-                    dest.unlink(missing_ok=True)
-                    raise StructuralError("FILE_TOO_LARGE", status_code=413)
-                f.write(chunk)
-
-        return dest
-
-    def get_path(self, project_id: str, filename: str) -> Optional[Path]:
-        """
-        Retrieve the absolute path for a named file within a project's upload directory.
-
-        Parameters
-        ----------
-        project_id : str
-            Project identifier.
-        filename : str
-            File name (basename only).
-
-        Returns
-        -------
-        Path | None
-            Resolved path, or None if the file does not exist.
-        """
-        candidate = self._project_dir(project_id) / filename
-        return candidate if candidate.exists() else None
-
-    def list_files(self, project_id: str) -> list[str]:
-        """
-        List all file names uploaded to a project.
-
-        Parameters
-        ----------
-        project_id : str
-            Project identifier.
-
-        Returns
-        -------
-        list[str]
-            File basenames sorted alphabetically.
-        """
-        d = self.base_dir / project_id
-        if not d.exists():
-            return []
-        return sorted(f.name for f in d.iterdir() if f.is_file())
-
-    def delete(self, project_id: str) -> None:
-        """
-        Delete the entire upload directory for a project.
-
-        Parameters
-        ----------
-        project_id : str
-            Project identifier whose files should be purged.
-        """
-        import shutil
-        d = self.base_dir / project_id
-        if d.exists():
-            shutil.rmtree(d, ignore_errors=True)
+    raise ValueError(
+        f"Unknown FILE_STORAGE_BACKEND: '{backend}'. "
+        "Expected 'local' or 'cloudinary'."
+    )
 
 
 # ── Singleton ────────────────────────────────────────────────────────────────
-file_handler = FileHandler()
+file_handler: FileStorageBackend = _build_file_backend()

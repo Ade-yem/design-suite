@@ -109,7 +109,7 @@ class BMDGenerator:
         for p in points:
             x = SVG_MARGIN_LEFT + p["position_m"] * x_scale
             # Positive moment → below baseline (↓ in SVG = larger y)
-            y = baseline_y - p["moment_kNm"] * y_scale
+            y = baseline_y + p["moment_kNm"] * y_scale
             curve_pts.append((x, y))
 
         svg_lines = self._build_svg(curve_pts, baseline_y, m_max, span_m, points)
@@ -163,7 +163,7 @@ class BMDGenerator:
             x_scale = DIAGRAM_W / max(span_m, 0.001)
             y_scale = (DIAGRAM_H / 2.0) / m_max
             lx = SVG_MARGIN_LEFT + max_sag["position_m"] * x_scale
-            ly = baseline_y - max_sag["moment_kNm"] * y_scale - 6
+            ly = baseline_y + max_sag["moment_kNm"] * y_scale + 14
             labels.append(
                 f'<text x="{lx:.1f}" y="{ly:.1f}" '
                 f'font-size="10" fill="#1E40AF" text-anchor="middle">'
@@ -173,7 +173,7 @@ class BMDGenerator:
             x_scale = DIAGRAM_W / max(span_m, 0.001)
             y_scale = (DIAGRAM_H / 2.0) / m_max
             lx = SVG_MARGIN_LEFT + max_hog["position_m"] * x_scale
-            ly = baseline_y - max_hog["moment_kNm"] * y_scale + 14
+            ly = baseline_y + max_hog["moment_kNm"] * y_scale - 6
             labels.append(
                 f'<text x="{lx:.1f}" y="{ly:.1f}" '
                 f'font-size="10" fill="#B91C1C" text-anchor="middle">'
@@ -285,7 +285,7 @@ class SFDGenerator:
         step_pts: list[tuple[float, float]] = []
         for i, p in enumerate(points):
             x = SVG_MARGIN_LEFT + p["position_m"] * x_scale
-            y = baseline_y - p["shear_kN"] * y_scale
+            y = baseline_y + p["shear_kN"] * y_scale
             if i > 0:
                 # Horizontal step first (stay at previous x, jump to new y)
                 step_pts.append((x, step_pts[-1][1]))
@@ -331,7 +331,7 @@ class SFDGenerator:
             y_scale = (DIAGRAM_H / 2.0) / v_max
             max_v = max(raw_points, key=lambda p: abs(p["shear_kN"]))
             lx = SVG_MARGIN_LEFT + max_v["position_m"] * x_scale
-            ly = baseline_y - max_v["shear_kN"] * y_scale - 8
+            ly = baseline_y + max_v["shear_kN"] * y_scale + 14
             labels.append(
                 f'<text x="{lx:.1f}" y="{ly:.1f}" font-size="10" '
                 f'fill="#065F46" text-anchor="middle">'

@@ -11,10 +11,10 @@ class MatrixStiffnessSolverResult:
 
 class MatrixStiffnessSolver:
     def __init__(self):
-        self._singular = False
+        self._has_boundary_condition = False
     def add_node(self, node_id, x, bc=None):
-        if bc is None:
-            self._singular = True
+        if bc is not None:
+            self._has_boundary_condition = True
     def add_element(self, n1, n2, EI):
         pass
     def add_udl(self, element, w):
@@ -24,7 +24,7 @@ class MatrixStiffnessSolver:
     def assemble_global_stiffness(self):
         return np.eye(4)
     def solve(self):
-        if self._singular:
+        if not self._has_boundary_condition:
             raise SingularMatrixError
         return MatrixStiffnessSolverResult()
 

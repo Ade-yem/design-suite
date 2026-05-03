@@ -99,7 +99,7 @@ class StructuralError(Exception):
         member_id: Optional[str] = None,
         stage: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
-        status_code: int = status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code: int = status.HTTP_422_UNPROCESSABLE_CONTENT,
     ) -> None:
         self.error_code = error_code
         self.message = ERROR_CODES.get(error_code, error_code)

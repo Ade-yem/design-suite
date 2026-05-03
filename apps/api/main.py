@@ -27,6 +27,10 @@ from __future__ import annotations
 import logging
 
 from dotenv import load_dotenv
+
+# ── Environment ────────────────────────────────────────────────────────────────
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -49,8 +53,15 @@ from routers import (
 )
 import websocket
 
-# ── Environment ────────────────────────────────────────────────────────────────
-load_dotenv()
+# ── Auth routers (fastapi-users) ───────────────────────────────────────────────
+from auth.router import (
+    auth_router,
+    register_router,
+    reset_router,
+    verify_router,
+    users_router,
+)
+
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -99,6 +110,13 @@ app.include_router(drawings.router,  prefix="/api/v1/drawings",  tags=["Drawings
 app.include_router(reports.router,   prefix="/api/v1/reports",   tags=["Reports"])
 app.include_router(pipeline.router,  prefix="/api/v1/pipeline",  tags=["Pipeline"])
 app.include_router(jobs.router,      prefix="/api/v1/jobs",      tags=["Jobs"])
+
+# ── Auth routes (fastapi-users) ────────────────────────────────────────────────
+app.include_router(auth_router,     prefix="/auth/jwt",  tags=["Auth"])
+app.include_router(register_router, prefix="/auth",      tags=["Auth"])
+app.include_router(reset_router,    prefix="/auth",      tags=["Auth"])
+app.include_router(verify_router,   prefix="/auth",      tags=["Auth"])
+app.include_router(users_router,    prefix="/users",     tags=["Users"])
 
 # WebSockets
 app.include_router(websocket.router, tags=["WebSockets"])

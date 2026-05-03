@@ -51,35 +51,155 @@ router = APIRouter()
 _load_def_store: dict[str, dict[str, Any]] = {}
 _load_output_store: dict[str, dict[str, Any]] = {}
 
+# Structural geometry store — populated by the Parser Agent after DXF/PDF parsing.
+# Keyed by project_id; value is the parsed StructuralDesignState geometry dict.
+# Migrate to ProjectGeometry DB table in Track 2 of the infrastructure upgrade.
+_structural_json_store: dict[str, dict[str, Any]] = {}
+
+
+def register_structural_json(project_id: str, geometry: dict[str, Any]) -> None:
+    """
+    Store the parsed structural geometry for a project.
+
+    Called by the Parser Agent (or the file parsing router) after DXF/PDF
+    parsing is complete.  The loading service reads this to discover member
+    IDs, types, and geometry (spans, lengths).
+
+    Parameters
+    ----------
+    project_id : str
+        Owning project identifier.
+    geometry : dict[str, Any]
+        Structural JSON schema output from the Parser Agent.
+    """
+    _structural_json_store[project_id] = geometry
+
 
 # ─── Service calls ────────────────────────────────────────────────────────────
 
+
 def _run_loading_service(project_id: str, definition: dict[str, Any]) -> dict[str, Any]:
     """
-    Invoke the Loading Module service to assemble member loads.
+    Orchestrate the Loading Module for all registered members of a project.
 
-    This is a thin orchestration call — all calculations happen inside the
-    ``services/loading/`` package.
+    Reads the parsed structural geometry from ``_structural_json_store``, routes
+    each member to the appropriate assembler from ``core.loading``, applies
+    the ``LoadCombinationEngine`` factors for the project design code, and
+    serializes the output using ``LoadSerializer``.
 
     Parameters
     ----------
     project_id : str
         Owning project.
     definition : dict[str, Any]
-        Load definition payload as a dict.
+        Load definition payload (already validated via ``_validate_definition``).
 
     Returns
     -------
     dict[str, Any]
-        Full loading output matching the MemberLoadOutput schema.
+        Full loading output conforming to the ``MemberLoadOutput`` schema:
+        ``{design_code, members, combination_used, generated_at}``.
     """
-    # Stub: replace with actual service invocation, e.g.:
-    # from core.loading import LoadSerializer, LoadCombinationEngine
-    # ...
+    from core.loading import LoadCombinationEngine, LoadSerializer
+    from models.loading.schema import DesignCode, LimitState
+
+    # ── Resolve design code ───────────────────────────────────────────────────
+    design_code_str = definition.get("design_code", "BS8110")
+    design_code = DesignCode.BS8110 if design_code_str == "BS8110" else DesignCode.EC2
+
+    # ── Characteristic base loads from definition ─────────────────────────────
+    dead = definition.get("dead_loads", {})
+    imposed = definition.get("imposed_loads", {})
+
+    gk_base = sum([
+        dead.get("finishes_kNm2", 1.5),
+        dead.get("screed_kNm2", 0.8),
+        dead.get("services_kNm2", 0.5),
+        dead.get("partitions_kNm2", 1.0),
+    ])
+    qk_base: float = imposed.get("floor_qk_kNm2", 2.5)
+
+    combo_label = (
+        "1.4Gk + 1.6Qk" if design_code == DesignCode.BS8110 else "1.35Gk + 1.5Qk"
+    )
+
+    # ── Per-member override map ───────────────────────────────────────────────
+    overrides: dict[str, dict] = {
+        o["member_id"]: o for o in definition.get("member_overrides", [])
+    }
+
+    # ── Structural geometry (member catalogue from Parser Agent) ──────────────
+    structural_json = _structural_json_store.get(project_id, {})
+    parsed_members: dict[str, dict] = {
+        m["member_id"]: m for m in structural_json.get("members", [])
+    }
+
+    # ── Iterate over registered members ──────────────────────────────────────
+    member_ids = project_store.get_member_ids(project_id)
+    members_output: list[dict] = []
+
+    # If no members registered yet, generate output from the parsed geometry
+    # so the pipeline is not blocked when the project_store has no members.
+    effective_ids = member_ids or list(parsed_members.keys())
+
+    for member_id in effective_ids:
+        meta = parsed_members.get(member_id, {})
+        member_type: str = meta.get("member_type", "beam")
+        override = overrides.get(member_id, {})
+
+        # Apply member-level overrides on top of global base loads
+        effective_gk = gk_base + float(override.get("dead_extra_kNm2", 0.0))
+        effective_qk = float(override.get("imposed_override_kNm2") or qk_base)
+
+        # Add cladding line load for perimeter beams if specified
+        cladding_gk = float(dead.get("cladding_kNm", 0.0))
+
+        # Factor loads for ULS and SLS
+        uls_udl = LoadCombinationEngine.factor_loads(
+            effective_gk + cladding_gk, effective_qk, 0.0, design_code, LimitState.ULS_DOMINANT
+        )
+        sls_udl = LoadCombinationEngine.factor_loads(
+            effective_gk + cladding_gk, effective_qk, 0.0, design_code, LimitState.SLS_CHARACTERISTIC
+        )
+
+        # Retrieve spans from parsed geometry; default to a single 5 m span
+        raw_spans: list[dict] = meta.get("spans", [{"span_id": "S1", "length_m": 5.0}])
+        spans_data = [
+            {
+                "span_id": s.get("span_id", f"S{i + 1}"),
+                "length_m": float(s.get("length_m", 5.0)),
+                "loads": {
+                    "udl_gk": round(effective_gk, 3),
+                    "udl_qk": round(effective_qk, 3),
+                    "n_uls": round(uls_udl, 3),
+                    "n_sls": round(sls_udl, 3),
+                    "point_loads": s.get("point_loads", []),
+                },
+                # Pattern loading applies when there are 3+ spans
+                "pattern_loading_flag": len(raw_spans) >= 3,
+            }
+            for i, s in enumerate(raw_spans)
+        ]
+
+        serialized = LoadSerializer.serialize_member(
+            member_id=member_id,
+            member_type=member_type,
+            design_code=design_code,
+            spans_data=spans_data,
+            combination_used=combo_label,
+            notes=override.get("notes", ""),
+        )
+        members_output.append(serialized)
+
+    logger.info(
+        "Load combinations computed for project %s: %d member(s), code=%s.",
+        project_id, len(members_output), design_code_str,
+    )
+
     return {
-        "design_code": definition.get("design_code", "BS8110"),
-        "members": [],
-        "combination_used": "1.4Gk + 1.6Qk" if definition.get("design_code") == "BS8110" else "1.35Gk + 1.5Qk",
+        "design_code": design_code_str,
+        "members": members_output,
+        "combination_used": combo_label,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
