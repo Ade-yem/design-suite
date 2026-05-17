@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     API_VERSION: str = "1.0.0"
     GEMINI_API_KEY: str = ""
+    THINKING_MODEL: str = "gemini-3.1-flash-lite"
+    ACTION_MODEL: str = "gemini-3.1-flash-lite"
 
     # ── Derived properties ────────────────────────────────────────────────────
     @property

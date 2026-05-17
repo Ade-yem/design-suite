@@ -1,0 +1,2 @@
+Target file: /home/adehnaija/Documents/projects/design-suite/sample/Floor-beam.dxf
+Successfully dumped result to: /home/adehnaija/Documents/projects/design-suite/apps/api/script/result.json

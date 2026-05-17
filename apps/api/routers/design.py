@@ -1,8 +1,7 @@
 """
 routers/design.py
 =================
-Design Suite router — accepts analysis results and returns designed member
-properties including reinforcement schedules.
+Design Suite router — thin HTTP wrapper around ``services.design``.
 
 Endpoints
 ---------
@@ -32,8 +31,7 @@ It re-checks limit states and flags if re-analysis is needed.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 
@@ -46,18 +44,12 @@ from schemas.design import (
     MemberDesignOverride,
     MemberDesignOverrideResponse,
 )
-from schemas.project import ProjectResponse, ProjectStatus
+from schemas.project import ProjectResponse
+from services.design import design_service
 from storage.job_store import job_store
-from storage.project_store import project_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# In-process design results store (replace with DB in production)
-_design_store: dict[str, dict[str, Any]] = {}
-
-# Self-weight re-analysis threshold
-_SELF_WEIGHT_THRESHOLD_PCT = 5.0
 
 
 # ─── Background task ─────────────────────────────────────────────────────────
@@ -69,7 +61,7 @@ async def _run_design_background(
     design_code: Optional[str],
 ) -> None:
     """
-    Background task: run the Design Suite for all (or a subset of) members.
+    Background task: call ``design_service.run()`` and update the job store.
 
     Parameters
     ----------
@@ -83,44 +75,22 @@ async def _run_design_background(
         Code override for this run (BS8110 or EC2).
     """
     job_store.mark_running(job_id, "Initialising design suite…")
-    errors: list[str] = []
-
     try:
-        all_ids = member_ids or project_store.get_member_ids(project_id)
-        total = max(len(all_ids), 1)
+        def _progress(step: str, pct: float) -> None:
+            job_store.update_progress(job_id, pct, step)
 
-        # Stub: replace with actual Design Suite calls, e.g.:
-        # from core.design.rc.bs8110.beam import BeamDesigner
-        # ...
-
-        results: list[dict[str, Any]] = []
-        for i, mid in enumerate(all_ids, start=1):
-            pct = (i / total) * 100
-            job_store.update_progress(job_id, pct, f"Designing member {mid} ({i}/{total})…")
-
-            # Placeholder
-            results.append({
-                "member_id": mid,
-                "design_code": design_code or "BS8110",
-                "status": "designed_stub",
-                "reinforcement": {},
-            })
-
-        _design_store[project_id] = {
-            "design_id": f"DES-{job_id}",
-            "design_code": design_code or "BS8110",
-            "members": results,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-        project_store.advance_status(project_id, ProjectStatus.DESIGN_COMPLETE)
+        await design_service.run(
+            project_id,
+            member_ids=member_ids,
+            design_code=design_code,
+            progress_cb=_progress,
+        )
         job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
         logger.info("Design complete for project %s.", project_id)
-
     except Exception as exc:
         logger.exception("Design failed for project %s.", project_id)
-        errors.append(str(exc))
-        job_store.mark_failed(job_id, errors)
+        job_store.mark_failed(job_id, errors=[str(exc)])
+
 
 
 # ─── Shared helper ────────────────────────────────────────────────────────────
@@ -379,19 +349,20 @@ def get_design_results(
     StructuralError
         HTTP 404 if design has not been run yet.
     """
-    result = _design_store.get(project_id)
-    if result is None:
+    try:
+        result = design_service.get_results(project_id)
+    except KeyError as exc:
         raise StructuralError(
             "DESIGN_FAILED",
             stage="design",
-            details={"reason": "No design results found. Run POST /run first."},
+            details={"reason": str(exc)},
             status_code=404,
-        )
+        ) from exc
     return DesignResultsResponse(
         project_id=project_id,
         design_id=result["design_id"],
         design_code=result["design_code"],
-        member_count=len(result["members"]),
+        member_count=result["member_count"],
         members=result["members"],
         generated_at=result["generated_at"],
     )
@@ -434,52 +405,22 @@ async def override_member_design(
     StructuralError
         ``MEMBER_NOT_FOUND`` if the member is not in the design store.
     """
-    store = _design_store.get(project_id)
-    if store is None:
-        raise StructuralError("DESIGN_FAILED", stage="design", status_code=404)
-
-    member = next((m for m in store["members"] if m["member_id"] == member_id), None)
-    if member is None:
-        raise StructuralError("MEMBER_NOT_FOUND", member_id=member_id, status_code=404)
-
-    # Apply override fields
-    if override.b_mm is not None:
-        member["b_mm"] = override.b_mm
-    if override.h_mm is not None:
-        member["h_mm"] = override.h_mm
-    if override.cover_mm is not None:
-        member["cover_mm"] = override.cover_mm
-    if override.fck_MPa is not None:
-        member["fck_MPa"] = override.fck_MPa
-    if override.fcu_MPa is not None:
-        member["fcu_MPa"] = override.fcu_MPa
-    if override.fy_MPa is not None:
-        member["fy_MPa"] = override.fy_MPa
-    member.update(override.meta_updates)
-    member["override_reason"] = override.reason
-    member["override_at"] = datetime.now(timezone.utc).isoformat()
-
-    # Stub: replace with actual re-check call
-    # result = await design_service.recheck_member(project_id, member_id)
-    self_weight_change_pct = 0.0  # placeholder
-
-    warning = None
-    reanalysis_url = None
-    if self_weight_change_pct > _SELF_WEIGHT_THRESHOLD_PCT:
-        warning = (
-            f"Self-weight changed by {self_weight_change_pct:.1f}% "
-            f"(threshold: {_SELF_WEIGHT_THRESHOLD_PCT}%). Re-analysis recommended."
+    try:
+        outcome = design_service.apply_override(
+            project_id,
+            member_id,
+            override=override.model_dump(),
         )
-        reanalysis_url = f"/api/v1/analysis/{project_id}/run"
+    except KeyError as exc:
+        raise StructuralError("MEMBER_NOT_FOUND", member_id=member_id, status_code=404) from exc
 
-    logger.info(
-        "Design override applied to %s in project %s. Reason: %s",
-        member_id,
-        project_id,
-        override.reason or "(none)",
+    reanalysis_url = (
+        f"/api/v1/analysis/{project_id}/run" if outcome.get("reanalysis_needed") else None
     )
     return MemberDesignOverrideResponse(
-        result=member, warning=warning, reanalysis_url=reanalysis_url
+        result=outcome["result"],
+        warning=outcome.get("warning"),
+        reanalysis_url=reanalysis_url,
     )
 
 

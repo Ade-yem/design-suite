@@ -1,0 +1,4 @@
+[tool.pyrefly]
+# Point directly to the python executable in your venv
+python-interpreter-path = "venv/bin/python"
+search-path = ["apps/api"]

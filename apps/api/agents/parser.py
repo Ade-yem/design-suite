@@ -24,9 +24,18 @@ from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.messages import AIMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-from agents.api_client import api_client, poll_job_until_complete
 from agents.state import StructuralDesignState
+from config import settings
+from services.files import file_service
+
+_llm = ChatGoogleGenerativeAI(
+    model=settings.THINKING_MODEL,
+    temperature=0,
+    google_api_key=settings.GEMINI_API_KEY,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +139,7 @@ def _build_geometry_summary(parsed_json: dict) -> str:
     return f"**{total} member(s) detected:**\n\n" + "\n".join(lines) + warning_block
 
 
+
 # ─── Node ─────────────────────────────────────────────────────────────────────
 
 
@@ -172,53 +182,17 @@ async def parser_node(state: StructuralDesignState) -> dict:
             "current_error": "FILE_PARSE_ERROR",
         }
 
-    try:
-        upload_resp = await api_client.upload_file(
-            f"/api/v1/files/upload/{project_id}", file_path=file_path
-        )
-        parse_job_id: str = upload_resp["job_id"]
-    except Exception as exc:
-        logger.exception("File upload failed for project %s.", project_id)
-        return {
-            "messages": [AIMessage(content=f"❌ Upload failed: {exc}")],
-            "agent_logs": [{**log_entry, "status": "upload_failed"}],
-            "current_error": "FILE_PARSE_ERROR",
-        }
+    # Here, we are going to parse the file and extract the required schematics from it for the agent to process
+    parsed = await file_service.parse(project_id, file_path)
 
-    # ── Step 2: poll parsing ───────────────────────────────────────────────────
-    logs: list[dict] = [{**log_entry, "status": "parsing_started", "detail": parse_job_id}]
-
-    def _on_progress(status_dict: dict) -> None:
-        logs.append({
-            **log_entry,
-            "status": "parsing",
-            "detail": status_dict.get("current_step", ""),
-            "pct": status_dict.get("progress_pct", 0),
-        })
-
-    try:
-        await poll_job_until_complete(parse_job_id, progress_cb=_on_progress)
-    except Exception as exc:
-        return {
-            "messages": [AIMessage(content=f"❌ Parsing failed: {exc}")],
-            "agent_logs": logs + [{**log_entry, "status": "parse_failed"}],
-            "current_error": "FILE_PARSE_ERROR",
-            "parse_job_id": parse_job_id,
-        }
-
-    # ── Step 3: fetch parsed result ────────────────────────────────────────────
-    try:
-        parsed_json: dict = await api_client.get(f"/api/v1/files/{project_id}/parsed")
-    except Exception as exc:
-        return {
-            "messages": [AIMessage(content=f"❌ Could not retrieve parsed geometry: {exc}")],
-            "agent_logs": logs + [{**log_entry, "status": "fetch_failed"}],
-            "current_error": "FILE_PARSE_ERROR",
-        }
+    # Initialize logs list
+    logs = []
 
     # ── Step 4: unit ambiguity detection ──────────────────────────────────────
-    unit_check = _detect_unit_ambiguity(parsed_json)
+    unit_check = _detect_unit_ambiguity(parsed)
     logs.append({**log_entry, "status": "unit_check", "detail": unit_check})
+
+    parse_job_id = state.get("parse_job_id")
 
     if unit_check["ambiguous"]:
         samples = ", ".join(str(round(d, 3)) for d in unit_check["sample_dimensions"])
@@ -231,7 +205,7 @@ async def parser_node(state: StructuralDesignState) -> dict:
             "Please confirm the drawing units before I proceed."
         ))
         return {
-            "parsed_structural_json": parsed_json,
+            "parsed_structural_json": parsed,
             "unit_confirmation": unit_check,
             "parse_job_id": parse_job_id,
             "messages": [message],
@@ -240,8 +214,8 @@ async def parser_node(state: StructuralDesignState) -> dict:
         }
 
     # ── Step 5: geometry summary ───────────────────────────────────────────────
-    summary = _build_geometry_summary(parsed_json)
-    scale = await api_client.get(f"/api/v1/files/{project_id}/scale")
+    summary = _build_geometry_summary(parsed)
+    scale = file_service.get_scale(project_id)
 
     message = AIMessage(content=(
         "**Parsing complete.**\n\n"
@@ -258,7 +232,7 @@ async def parser_node(state: StructuralDesignState) -> dict:
     ))
 
     return {
-        "parsed_structural_json": parsed_json,
+        "parsed_structural_json": parsed,
         "unit_confirmation": unit_check,
         "parse_job_id": parse_job_id,
         "pipeline_status": "file_uploaded",

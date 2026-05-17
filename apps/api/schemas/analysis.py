@@ -132,7 +132,7 @@ class AnalysisStatusResponse(BaseModel):
     """
 
     job_id: str
-    status: Literal["queued", "running", "complete", "failed"]
+    status: Literal["queued", "running", "complete", "failed", "cancelled"]
     progress: AnalysisProgress
     errors: list[str] = []
     result_url: Optional[str] = None

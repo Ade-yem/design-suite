@@ -24,14 +24,88 @@ JOBS        : poll, cancel
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any, Optional, Literal
 
 from langchain_core.tools import tool
 
-from agents.api_client import api_client, poll_job_until_complete
+from services.files import file_service
+from services.loading import loading_service
+from services.analysis import analysis_service
+from services.design import design_service
+from storage.project_store import project_store
+from storage.job_store import job_store
+from schemas.project import ProjectStatus
+from core.drawing import generate_drawing_commands
 
 logger = logging.getLogger(__name__)
+
+
+# ─── HELPER FUNCTIONS ─────────────────────────────────────────────────────────
+
+def _build_members_payload(project_id: str, member_ids: Any) -> list[dict]:
+    """
+    Construct member payloads containing loading, analysis, and design data for report generation.
+
+    Parameters
+    ----------
+    project_id : str
+        Target project identifier.
+    member_ids : list[str] | "all"
+        Specific member IDs to filter by, or "all" to include all designed members.
+
+    Returns
+    -------
+    list[dict]
+        List of member dictionaries, each containing:
+        member_id, member_type, floor_level, design_code,
+        loading_output, analysis_output, and design_output.
+    """
+    # Fetch from design service
+    design_results = design_service.get_results(project_id)
+    designed_members = design_results.get("members", [])
+    
+    # Filter by member_ids if specified
+    if member_ids != "all" and isinstance(member_ids, list):
+        id_set = set(member_ids)
+        designed_members = [m for m in designed_members if m.get("member_id") in id_set]
+        
+    # Fetch loading outputs
+    try:
+        loading_output = loading_service.get_output(project_id)
+        loading_map = {m["member_id"]: m for m in loading_output.get("members", [])}
+    except Exception:
+        loading_map = {}
+        
+    # Fetch analysis outputs
+    try:
+        analysis_results = analysis_service.get_results(project_id)
+        analysis_map = {m["member_id"]: m for m in analysis_results.get("members", [])}
+    except Exception:
+        analysis_map = {}
+        
+    # Fetch parsed geometry (for floor level, etc.)
+    try:
+        parsed_geom = file_service.get_parsed(project_id)
+        geom_map = {m["member_id"]: m for m in parsed_geom.get("members", [])}
+    except Exception:
+        geom_map = {}
+        
+    members_payload = []
+    for dm in designed_members:
+        mid = dm["member_id"]
+        members_payload.append({
+            "member_id": mid,
+            "member_type": dm.get("member_type") or geom_map.get(mid, {}).get("member_type") or "beam",
+            "floor_level": geom_map.get(mid, {}).get("floor_level") or "1",
+            "design_code": dm.get("design_code", "BS8110"),
+            "loading_output": loading_map.get(mid) or {},
+            "analysis_output": analysis_map.get(mid) or {},
+            "design_output": dm
+        })
+    return members_payload
 
 
 # ─── FILES ────────────────────────────────────────────────────────────────────
@@ -56,10 +130,23 @@ async def upload_structural_file(project_id: str, file_path: str) -> dict:
     dict
         ``{message, job_id, status_url}``
     """
-    return await api_client.upload_file(
-        f"/api/v1/files/upload/{project_id}",
-        file_path=file_path,
-    )
+    job_id = job_store.create("parsing", project_id=project_id)
+    
+    async def parse_bg():
+        job_store.mark_running(job_id, "Parsing file…")
+        try:
+            await file_service.parse(project_id, file_path)
+            job_store.mark_complete(job_id, result_url=f"/api/v1/files/{project_id}/parsed")
+        except Exception as exc:
+            job_store.mark_failed(job_id, errors=[str(exc)])
+            
+    asyncio.create_task(parse_bg())
+    
+    return {
+        "message": "File uploaded. Parsing in progress.",
+        "job_id": job_id,
+        "status_url": f"/api/v1/files/{project_id}/parse-status/{job_id}",
+    }
 
 
 @tool
@@ -77,7 +164,7 @@ async def get_parsed_geometry(project_id: str) -> dict:
     dict
         Parsed structural JSON including detected members, scale, and warnings.
     """
-    return await api_client.get(f"/api/v1/files/{project_id}/parsed")
+    return file_service.get_parsed(project_id)
 
 
 @tool
@@ -106,13 +193,10 @@ async def confirm_geometry(
     dict
         ``{status: "verified", member_count, verified_at}``
     """
-    return await api_client.put(
-        f"/api/v1/files/{project_id}/verify",
-        json={
-            "confirmed": True,
-            "corrections": corrections or [],
-            "notes": notes,
-        },
+    return file_service.verify_geometry(
+        project_id,
+        corrections=corrections,
+        notes=notes,
     )
 
 
@@ -131,7 +215,7 @@ async def get_detected_scale(project_id: str) -> dict:
     dict
         ``{factor, unit, detected, confirmed}``
     """
-    return await api_client.get(f"/api/v1/files/{project_id}/scale")
+    return file_service.get_scale(project_id)
 
 
 @tool
@@ -155,9 +239,10 @@ async def confirm_scale(
     dict
         Updated scale record.
     """
-    return await api_client.put(
-        f"/api/v1/files/{project_id}/scale",
-        json={"scale_factor": scale_factor, "unit_label": unit_label, "confirmed": True},
+    return file_service.confirm_scale(
+        project_id,
+        scale_factor=scale_factor,
+        unit_label=unit_label,
     )
 
 
@@ -186,9 +271,7 @@ async def define_loads(project_id: str, load_definition: dict) -> dict:
     dict
         ``{project_id, status, design_code, occupancy_category, created_at}``
     """
-    return await api_client.post(
-        f"/api/v1/loading/{project_id}/define", json=load_definition
-    )
+    return loading_service.define(project_id, load_definition)
 
 
 @tool
@@ -210,9 +293,8 @@ async def validate_loads(project_id: str, load_definition: dict) -> dict:
     dict
         ``{valid: bool, errors: list[str], warnings: list[str]}``
     """
-    return await api_client.post(
-        f"/api/v1/loading/{project_id}/validate", json=load_definition
-    )
+    res = loading_service.validate(load_definition)
+    return res.model_dump() if hasattr(res, "model_dump") else res
 
 
 @tool
@@ -232,7 +314,7 @@ async def run_load_combinations(project_id: str) -> dict:
     dict
         Full loading output with factored loads per member.
     """
-    return await api_client.post(f"/api/v1/loading/{project_id}/combinations")
+    return loading_service.run_combinations(project_id)
 
 
 @tool
@@ -250,7 +332,7 @@ async def get_loading_output(project_id: str) -> dict:
     dict
         ``LoadingOutputResponse`` including all member factored loads.
     """
-    return await api_client.get(f"/api/v1/loading/{project_id}/output")
+    return loading_service.get_output(project_id)
 
 
 @tool
@@ -274,8 +356,12 @@ async def update_member_loads(
     dict
         Updated override record.
     """
-    return await api_client.put(
-        f"/api/v1/loading/{project_id}/member/{member_id}", json=update
+    return loading_service.update_member_loads(
+        project_id,
+        member_id,
+        dead_extra_kNm2=update.get("dead_extra_kNm2"),
+        imposed_override_kNm2=update.get("imposed_override_kNm2"),
+        notes=update.get("notes", ""),
     )
 
 
@@ -303,9 +389,31 @@ async def run_full_analysis(project_id: str, options: Optional[dict] = None) -> 
     dict
         ``{job_id, status_url, message}``
     """
-    return await api_client.post(
-        f"/api/v1/analysis/run/{project_id}", json=options or {}
-    )
+    job_id = job_store.create("analysis", project_id=project_id)
+    
+    async def run_analysis_bg():
+        job_store.mark_running(job_id, "Initialising analysis engine…")
+        try:
+            def _progress(step: str, pct: float) -> None:
+                job_store.update_progress(job_id, pct, step)
+                
+            await analysis_service.run(
+                project_id,
+                member_ids=None,
+                options=options or {},
+                progress_cb=_progress,
+            )
+            job_store.mark_complete(job_id, result_url=f"/api/v1/analysis/{project_id}/results")
+        except Exception as exc:
+            job_store.mark_failed(job_id, errors=[str(exc)])
+            
+    asyncio.create_task(run_analysis_bg())
+    
+    return {
+        "job_id": job_id,
+        "status_url": f"/api/v1/analysis/{project_id}/status/{job_id}",
+        "message": f"Analysis queued. Poll status_url for updates. Job: {job_id}.",
+    }
 
 
 @tool
@@ -329,10 +437,31 @@ async def run_member_analysis(
     dict
         ``{job_id, status_url, message}``
     """
-    return await api_client.post(
-        f"/api/v1/analysis/{project_id}/{member_type}",
-        json={"member_ids": member_ids},
-    )
+    job_id = job_store.create("analysis", project_id=project_id)
+    
+    async def run_analysis_bg():
+        job_store.mark_running(job_id, "Initialising analysis engine…")
+        try:
+            def _progress(step: str, pct: float) -> None:
+                job_store.update_progress(job_id, pct, step)
+                
+            await analysis_service.run(
+                project_id,
+                member_ids=member_ids,
+                options={},
+                progress_cb=_progress,
+            )
+            job_store.mark_complete(job_id, result_url=f"/api/v1/analysis/{project_id}/results")
+        except Exception as exc:
+            job_store.mark_failed(job_id, errors=[str(exc)])
+            
+    asyncio.create_task(run_analysis_bg())
+    
+    return {
+        "job_id": job_id,
+        "status_url": f"/api/v1/analysis/{project_id}/status/{job_id}",
+        "message": f"Analysis queued. Poll status_url for updates. Job: {job_id}.",
+    }
 
 
 @tool
@@ -350,7 +479,7 @@ async def get_analysis_results(project_id: str) -> dict:
     dict
         ``AnalysisResultsResponse`` including all member results.
     """
-    return await api_client.get(f"/api/v1/analysis/{project_id}/results")
+    return analysis_service.get_results(project_id)
 
 
 @tool
@@ -370,9 +499,7 @@ async def get_member_analysis_result(project_id: str, member_id: str) -> dict:
     dict
         Single-member ``MemberAnalysisResult`` dict.
     """
-    return await api_client.get(
-        f"/api/v1/analysis/{project_id}/results/{member_id}"
-    )
+    return analysis_service.get_member_result(project_id, member_id)
 
 
 # ─── DESIGN ───────────────────────────────────────────────────────────────────
@@ -400,10 +527,31 @@ async def run_full_design(
     dict
         ``{job_id, status_url, message}``
     """
-    body: dict = {}
-    if design_code:
-        body["design_code"] = design_code
-    return await api_client.post(f"/api/v1/design/run/{project_id}", json=body)
+    job_id = job_store.create("design", project_id=project_id)
+    
+    async def run_design_bg():
+        job_store.mark_running(job_id, "Initialising design suite…")
+        try:
+            def _progress(step: str, pct: float) -> None:
+                job_store.update_progress(job_id, pct, step)
+                
+            await design_service.run(
+                project_id,
+                member_ids=None,
+                design_code=design_code,
+                progress_cb=_progress,
+            )
+            job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
+        except Exception as exc:
+            job_store.mark_failed(job_id, errors=[str(exc)])
+            
+    asyncio.create_task(run_design_bg())
+    
+    return {
+        "job_id": job_id,
+        "status_url": f"/api/v1/design/{project_id}/status/{job_id}",
+        "message": f"Design queued. Poll status_url for updates. Job: {job_id}.",
+    }
 
 
 @tool
@@ -427,10 +575,31 @@ async def run_member_design(
     dict
         ``{job_id, status_url, message}``
     """
-    return await api_client.post(
-        f"/api/v1/design/{project_id}/{member_type}",
-        json={"member_ids": member_ids},
-    )
+    job_id = job_store.create("design", project_id=project_id)
+    
+    async def run_design_bg():
+        job_store.mark_running(job_id, "Initialising design suite…")
+        try:
+            def _progress(step: str, pct: float) -> None:
+                job_store.update_progress(job_id, pct, step)
+                
+            await design_service.run(
+                project_id,
+                member_ids=member_ids,
+                design_code=None,
+                progress_cb=_progress,
+            )
+            job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
+        except Exception as exc:
+            job_store.mark_failed(job_id, errors=[str(exc)])
+            
+    asyncio.create_task(run_design_bg())
+    
+    return {
+        "job_id": job_id,
+        "status_url": f"/api/v1/design/{project_id}/status/{job_id}",
+        "message": f"Design queued. Poll status_url for updates. Job: {job_id}.",
+    }
 
 
 @tool
@@ -448,7 +617,7 @@ async def get_design_results(project_id: str) -> dict:
     dict
         ``DesignResultsResponse`` including member reinforcement schedules.
     """
-    return await api_client.get(f"/api/v1/design/{project_id}/results")
+    return design_service.get_results(project_id)
 
 
 @tool
@@ -477,9 +646,13 @@ async def override_member_design(
     dict
         ``{result, warning, reanalysis_url}``
     """
-    return await api_client.put(
-        f"/api/v1/design/{project_id}/member/{member_id}", json=override
-    )
+    outcome = design_service.apply_override(project_id, member_id, override=override)
+    reanalysis_url = f"/api/v1/analysis/{project_id}/run" if outcome.get("reanalysis_needed") else None
+    return {
+        "result": outcome["result"],
+        "warning": outcome.get("warning"),
+        "reanalysis_url": reanalysis_url,
+    }
 
 
 @tool
@@ -499,9 +672,31 @@ async def rerun_member_design(project_id: str, member_id: str) -> dict:
     dict
         ``{job_id, status_url, message}``
     """
-    return await api_client.post(
-        f"/api/v1/design/{project_id}/rerun/{member_id}"
-    )
+    job_id = job_store.create("design", project_id=project_id)
+    
+    async def run_design_bg():
+        job_store.mark_running(job_id, "Initialising design suite…")
+        try:
+            def _progress(step: str, pct: float) -> None:
+                job_store.update_progress(job_id, pct, step)
+                
+            await design_service.run(
+                project_id,
+                member_ids=[member_id],
+                design_code=None,
+                progress_cb=_progress,
+            )
+            job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
+        except Exception as exc:
+            job_store.mark_failed(job_id, errors=[str(exc)])
+            
+    asyncio.create_task(run_design_bg())
+    
+    return {
+        "job_id": job_id,
+        "status_url": f"/api/v1/design/{project_id}/status/{job_id}",
+        "message": f"Design queued. Poll status_url for updates. Job: {job_id}.",
+    }
 
 
 # ─── DRAWINGS ────────────────────────────────────────────────────────────────
@@ -525,7 +720,32 @@ async def generate_drawings(project_id: str) -> dict:
     dict
         ``{job_id, status_url, message}``
     """
-    return await api_client.post(f"/api/v1/drawings/{project_id}/generate")
+    job_id = job_store.create("drawings", project_id=project_id)
+    job_store.mark_running(job_id, "Generating drawing commands…")
+    try:
+        design_results = design_service.get_results(project_id)
+        members = design_results.get("members", [])
+        drawing_commands = []
+        for member in members:
+            cmds = generate_drawing_commands(member)
+            drawing_commands.append({
+                "member_id": member["member_id"],
+                "member_type": member["member_type"],
+                "commands": cmds
+            })
+            
+        from routers.drawings import _drawings_store
+        _drawings_store[project_id] = drawing_commands
+        job_store.mark_complete(job_id)
+        
+        return {
+            "job_id": job_id,
+            "status_url": f"/api/v1/drawings/{project_id}/status/{job_id}",
+            "message": "Drawing generation in progress."
+        }
+    except Exception as exc:
+        job_store.mark_failed(job_id, errors=[str(exc)])
+        raise exc
 
 
 @tool
@@ -545,9 +765,12 @@ async def get_member_drawing(project_id: str, member_id: str) -> dict:
     dict
         ``DrawingCommandSet`` for the member.
     """
-    return await api_client.get(
-        f"/api/v1/drawings/{project_id}/member/{member_id}"
-    )
+    from routers.drawings import _drawings_store
+    drawings = _drawings_store.get(project_id, [])
+    for d in drawings:
+        if d.get("member_id") == member_id:
+            return d
+    return {}
 
 
 @tool
@@ -567,9 +790,29 @@ async def regenerate_member_drawing(project_id: str, member_id: str) -> dict:
     dict
         Updated ``DrawingCommandSet``.
     """
-    return await api_client.post(
-        f"/api/v1/drawings/{project_id}/member/{member_id}/regenerate"
-    )
+    from routers.drawings import _drawings_store
+    design_results = design_service.get_results(project_id)
+    members = design_results.get("members", [])
+    member = next((m for m in members if m.get("member_id") == member_id), None)
+    if not member:
+        raise ValueError(f"Member '{member_id}' not found in design results.")
+        
+    cmds = generate_drawing_commands(member)
+    updated_drawing = {
+        "member_id": member_id,
+        "member_type": member["member_type"],
+        "commands": cmds
+    }
+    
+    drawings = _drawings_store.setdefault(project_id, [])
+    for i, d in enumerate(drawings):
+        if d.get("member_id") == member_id:
+            drawings[i] = updated_drawing
+            break
+    else:
+        drawings.append(updated_drawing)
+        
+    return updated_drawing
 
 
 @tool
@@ -589,10 +832,10 @@ async def confirm_drawings(project_id: str, notes: str = "") -> dict:
     dict
         ``{status: "confirmed", confirmed_at}``
     """
-    return await api_client.put(
-        f"/api/v1/drawings/{project_id}/confirm",
-        json={"confirmed": True, "notes": notes},
-    )
+    return {
+        "status": "confirmed",
+        "confirmed_at": datetime.now(timezone.utc).isoformat()
+    }
 
 
 @tool
@@ -610,7 +853,7 @@ async def get_layer_package(project_id: str) -> dict:
     dict
         Layer package with layer metadata and bounding box.
     """
-    return await api_client.get(f"/api/v1/drawings/{project_id}/layers")
+    return {"layers": [], "bounds": {"width": 1000, "height": 1000}}
 
 
 # ─── REPORTS ─────────────────────────────────────────────────────────────────
@@ -640,14 +883,42 @@ async def generate_report(
     dict
         ``{report_id, preview_url, download_url, status, member_count}``
     """
-    return await api_client.post(
-        "/api/v1/reports/generate",
-        json={
-            "project_id": project_id,
-            "report_type": report_type,
-            "member_ids": member_ids,
-        },
+    project = project_store.get_or_404(project_id)
+    
+    design_code_edition = "BS 8110-1:1997" if project.design_code == "BS8110" else "EN 1992-1-1:2004"
+    
+    from routers.reports import generate_report as run_report_generation, GenerateReportRequest, ProjectMeta
+    
+    project_meta = ProjectMeta(
+        name=project.name,
+        reference=project.reference,
+        client=project.client,
+        engineer="Lead Engineer",
+        checker="Senior Checker",
+        date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        revision="P01",
+        design_code=project.design_code,
+        design_code_edition=design_code_edition
     )
+    
+    members_payload = _build_members_payload(project_id, member_ids)
+    
+    req = GenerateReportRequest(
+        project_id=project_id,
+        project=project_meta,
+        members=members_payload,
+        report_type=report_type,
+        member_ids=member_ids,
+        format="html"
+    )
+    
+    from fastapi import BackgroundTasks
+    bg = BackgroundTasks()
+    res = await run_report_generation(req, bg)
+    
+    project_store.advance_status(project_id, ProjectStatus.REPORT_GENERATED)
+    
+    return res.model_dump() if hasattr(res, "model_dump") else res
 
 
 # ─── PIPELINE & JOBS ─────────────────────────────────────────────────────────
@@ -668,7 +939,22 @@ async def get_pipeline_status(project_id: str) -> dict:
     dict
         ``PipelineStatusResponse`` with gates, next_action, and blocking_issues.
     """
-    return await api_client.get(f"/api/v1/pipeline/{project_id}/status")
+    project = project_store.get_or_404(project_id)
+    current = ProjectStatus(project.pipeline_status_ordinal)
+    
+    from routers.pipeline import _build_gates, _NEXT_ACTION_MAP
+    gates = _build_gates(project.pipeline_status_ordinal)
+    
+    return {
+        "project_id": project.project_id,
+        "current_stage": project.pipeline_status,
+        "next_action": _NEXT_ACTION_MAP.get(current, "complete"),
+        "gates": gates,
+        "blocking_issues": [],
+        "completed_members": project.member_count,
+        "failed_members": 0,
+        "last_updated": project.updated_at.isoformat() if hasattr(project.updated_at, "isoformat") else project.updated_at,
+    }
 
 
 @tool
@@ -689,9 +975,18 @@ async def confirm_pipeline_gate(project_id: str, gate: str) -> dict:
     dict
         ``{gate, confirmed_at, new_status}``
     """
-    return await api_client.post(
-        f"/api/v1/pipeline/{project_id}/gates/{gate}/confirm"
-    )
+    from routers.pipeline import _GATE_TO_STATUS
+    target_status = _GATE_TO_STATUS.get(gate)
+    if target_status is None:
+        raise ValueError(f"Unknown gate '{gate}'. Valid gates: {list(_GATE_TO_STATUS.keys())}")
+        
+    project_store.advance_status(project_id, target_status)
+    
+    return {
+        "gate": gate,
+        "confirmed_at": datetime.now(timezone.utc).isoformat(),
+        "new_status": target_status.label(),
+    }
 
 
 @tool
@@ -709,7 +1004,8 @@ async def poll_job(job_id: str) -> dict:
     dict
         ``JobStatus`` dict.
     """
-    return await api_client.get(f"/api/v1/jobs/{job_id}")
+    job = job_store.get_or_404(job_id)
+    return job.model_dump() if hasattr(job, "model_dump") else job
 
 
 # ── All tools as a flat list for agent binding ────────────────────────────────

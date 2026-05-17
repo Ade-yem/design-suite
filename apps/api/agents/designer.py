@@ -26,7 +26,6 @@ from typing import Any, Optional
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from agents.api_client import api_client, poll_job_until_complete
 from agents.state import StructuralDesignState
 
 logger = logging.getLogger(__name__)
@@ -132,47 +131,38 @@ async def designer_node(state: StructuralDesignState) -> dict:
 
     # ── Trigger full design run ───────────────────────────────────────────────
     try:
-        design_resp = await api_client.post(
-            f"/api/v1/design/run/{project_id}",
-            json={"design_code": state.get("design_code", "BS8110")},
+        from services.design import design_service
+        logs.append({**log_entry, "status": "design_started"})
+
+        # Define progress callback
+        def _progress(step: str, pct: float) -> None:
+            logs.append({
+                **log_entry,
+                "status": "design_running",
+                "detail": step,
+                "pct": pct,
+            })
+
+        await design_service.run(
+            project_id,
+            member_ids=None,
+            design_code=state.get("design_code", "BS8110"),
+            progress_cb=_progress,
         )
-        design_job_id: str = design_resp["job_id"]
-        logs.append({**log_entry, "status": "design_started", "detail": design_job_id})
     except Exception as exc:
         return {
-            "messages": [AIMessage(content=f"❌ Failed to start design run: {exc}")],
+            "messages": [AIMessage(content=f"❌ Failed to run design: {exc}")],
             "agent_logs": logs,
             "current_error": "DESIGN_FAILED",
         }
 
-    # ── Poll with progress updates ────────────────────────────────────────────
-    live_logs: list[dict] = []
-
-    def _on_progress(status_dict: dict) -> None:
-        live_logs.append({
-            **log_entry,
-            "status": "design_running",
-            "detail": status_dict.get("current_step", ""),
-            "pct": status_dict.get("progress_pct", 0),
-        })
-
-    try:
-        await poll_job_until_complete(design_job_id, progress_cb=_on_progress)
-    except Exception as exc:
-        return {
-            "messages": [AIMessage(content=f"❌ Design run failed: {exc}")],
-            "agent_logs": logs + live_logs,
-            "current_error": "DESIGN_FAILED",
-            "design_job_id": design_job_id,
-        }
-
     # ── Fetch results ─────────────────────────────────────────────────────────
     try:
-        results = await api_client.get(f"/api/v1/design/{project_id}/results")
+        results = design_service.get_results(project_id)
     except Exception as exc:
         return {
             "messages": [AIMessage(content=f"❌ Could not retrieve design results: {exc}")],
-            "agent_logs": logs + live_logs,
+            "agent_logs": logs,
             "current_error": "DESIGN_FAILED",
         }
 
@@ -194,11 +184,10 @@ async def designer_node(state: StructuralDesignState) -> dict:
         ))
         return {
             "design_results": results,
-            "design_job_id": design_job_id,
             "design_complete": False,
             "failed_members_design": [m["member_id"] for m in failed],
             "messages": [message],
-            "agent_logs": logs + live_logs + [{**log_entry, "status": "failures_detected"}],
+            "agent_logs": logs + [{**log_entry, "status": "failures_detected"}],
             "pipeline_status": "analysis_complete",
         }
 
@@ -216,7 +205,6 @@ async def designer_node(state: StructuralDesignState) -> dict:
         )
         return {
             "design_results": results,
-            "design_job_id": design_job_id,
             "design_complete": False,
             "failed_members_design": members_needing_reanalysis,
             "reanalysis_triggered": True,
@@ -225,7 +213,7 @@ async def designer_node(state: StructuralDesignState) -> dict:
                 f"for {len(members_needing_reanalysis)} member(s) — "
                 "re-running analysis for convergence…"
             ))],
-            "agent_logs": logs + live_logs + [{
+            "agent_logs": logs + [{
                 **log_entry,
                 "status": "reanalysis_triggered",
                 "detail": members_needing_reanalysis,
@@ -236,13 +224,12 @@ async def designer_node(state: StructuralDesignState) -> dict:
     summary = _build_design_summary(results)
     return {
         "design_results": results,
-        "design_job_id": design_job_id,
         "design_complete": True,
         "failed_members_design": [],
         "reanalysis_triggered": False,
         "pipeline_status": "design_complete",
         "messages": [AIMessage(content=summary)],
-        "agent_logs": logs + live_logs + [{**log_entry, "status": "complete"}],
+        "agent_logs": logs + [{**log_entry, "status": "complete"}],
         "current_error": None,
     }
 
@@ -320,9 +307,11 @@ async def handle_design_override(
         }
 
     try:
-        result = await api_client.put(
-            f"/api/v1/design/{project_id}/member/{member_id}",
-            json=override_data,
+        from services.design import design_service
+        result = design_service.apply_override(
+            project_id,
+            member_id,
+            override=override_data,
         )
     except Exception as exc:
         return {
@@ -331,9 +320,9 @@ async def handle_design_override(
         }
 
     warning = result.get("warning")
-    reanalysis_url = result.get("reanalysis_url")
+    reanalysis_needed = result.get("reanalysis_needed")
 
-    if reanalysis_url:
+    if reanalysis_needed:
         # Self-weight changed — trigger the convergence loop
         return {
             "reanalysis_triggered": True,

@@ -1,7 +1,7 @@
 """
 routers/analysis.py
 ===================
-Analysis Engine router — exposes the structural analysis engine via HTTP.
+Analysis Engine router — thin HTTP wrapper around ``services.analysis``.
 
 Endpoints
 ---------
@@ -23,14 +23,13 @@ All endpoints require ``LOADING_DEFINED`` status.
 
 Rule
 ----
-This router never performs calculations — it delegates to ``services/analysis/``.
+This router never performs calculations — it delegates to ``services.analysis``.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 
@@ -44,15 +43,13 @@ from schemas.analysis import (
     AnalysisProgress,
     SingleMemberAnalysisRequest,
 )
-from schemas.project import ProjectResponse, ProjectStatus
+from schemas.project import ProjectResponse
+from services.analysis import analysis_service
 from storage.job_store import job_store
 from storage.project_store import project_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# In-process results store (replace with DB in production)
-_analysis_store: dict[str, dict[str, Any]] = {}
 
 
 # ─── Background task ─────────────────────────────────────────────────────────
@@ -64,10 +61,7 @@ async def _run_analysis_background(
     options: AnalysisOptions,
 ) -> None:
     """
-    Background task: run the Analysis Engine for all (or a subset of) members.
-
-    Progress updates are pushed to the job store so the frontend can poll the
-    status endpoint and display live output in the IDE chat panel.
+    Background task: call ``analysis_service.run()`` and push updates to the job store.
 
     Parameters
     ----------
@@ -81,42 +75,24 @@ async def _run_analysis_background(
         Solver configuration.
     """
     job_store.mark_running(job_id, "Initialising analysis engine…")
-    errors: list[str] = []
-
     try:
-        all_ids = member_ids or project_store.get_member_ids(project_id)
-        total = max(len(all_ids), 1)
+        def _progress(step: str, pct: float) -> None:
+            job_store.update_progress(job_id, pct, step)
 
-        # Stub: replace with actual AnalysisEngine invocations, e.g.:
-        # from core.analysis import AnalysisEngine
-        # from storage.loading_store import get_loading_output
-        # engine = AnalysisEngine(design_code=project.design_code)
-        # ...
-
-        results: list[dict[str, Any]] = []
-        for i, mid in enumerate(all_ids, start=1):
-            pct = (i / total) * 100
-            job_store.update_progress(job_id, pct, f"Analysing member {mid} ({i}/{total})…")
-
-            # Placeholder — real call would be:
-            # result = engine.analyze_member(load_data, geometry_meta)
-            results.append({"member_id": mid, "status": "analysed_stub"})
-
-        _analysis_store[project_id] = {
-            "analysis_id": f"ANA-{job_id}",
-            "design_code": "BS8110",
-            "members": results,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-        project_store.advance_status(project_id, ProjectStatus.ANALYSIS_COMPLETE)
+        await analysis_service.run(
+            project_id,
+            member_ids=member_ids,
+            options=options.model_dump() if hasattr(options, "model_dump") else {},
+            progress_cb=_progress,
+        )
         job_store.mark_complete(job_id, result_url=f"/api/v1/analysis/{project_id}/results")
         logger.info("Analysis complete for project %s.", project_id)
-
     except Exception as exc:
         logger.exception("Analysis failed for project %s.", project_id)
-        errors.append(str(exc))
-        job_store.mark_failed(job_id, errors)
+        job_store.mark_failed(job_id, errors=[str(exc)])
+
+
+
 
 
 # ─── Shared helper ────────────────────────────────────────────────────────────
@@ -407,19 +383,20 @@ def get_analysis_results(
     StructuralError
         HTTP 404 if analysis has not been run yet.
     """
-    result = _analysis_store.get(project_id)
-    if result is None:
+    try:
+        result = analysis_service.get_results(project_id)
+    except KeyError as exc:
         raise StructuralError(
             "ANALYSIS_FAILED",
             stage="analysis",
-            details={"reason": "No analysis results found. Run POST /run first."},
+            details={"reason": str(exc)},
             status_code=404,
-        )
+        ) from exc
     return AnalysisResultsResponse(
         project_id=project_id,
         analysis_id=result["analysis_id"],
         design_code=result["design_code"],
-        member_count=len(result["members"]),
+        member_count=result["member_count"],
         members=result["members"],
         generated_at=result["generated_at"],
     )
@@ -443,22 +420,20 @@ def get_member_analysis_result(
     Returns
     -------
     dict
-        Single-member analysis result.
 
     Raises
     ------
     StructuralError
         ``MEMBER_NOT_FOUND`` if no result exists for this member.
     """
-    result = _analysis_store.get(project_id)
-    if result is None:
-        raise StructuralError("ANALYSIS_FAILED", stage="analysis", status_code=404)
-    member_result = next(
-        (m for m in result["members"] if m["member_id"] == member_id), None
-    )
-    if member_result is None:
-        raise StructuralError("MEMBER_NOT_FOUND", member_id=member_id, status_code=404)
-    return member_result
+    try:
+        return analysis_service.get_member_result(project_id, member_id)
+    except KeyError as exc:
+        raise StructuralError(
+            "MEMBER_NOT_FOUND",
+            member_id=member_id,
+            status_code=404,
+        ) from exc
 
 
 @router.delete("/{project_id}/results", status_code=status.HTTP_204_NO_CONTENT)
@@ -475,5 +450,5 @@ def clear_analysis_results(
     project : ProjectResponse
         Gate dependency.
     """
-    _analysis_store.pop(project_id, None)
+    analysis_service.clear(project_id)
     logger.info("Analysis results cleared for project %s.", project_id)

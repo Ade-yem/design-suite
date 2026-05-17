@@ -155,6 +155,9 @@ def update_project(
         Updated project.
     """
     updated = project_store.update(project_id, payload)
+    if updated is None:
+        return project_store.get_or_404(project_id)
+
     logger.info("Project updated: %s", project_id)
     return updated
 
@@ -177,7 +180,7 @@ def delete_project(
     from storage.file_handler import file_handler
 
     project_store.delete(project_id)
-    file_handler.delete(project_id)
+    file_handler.delete_project(project_id)
     logger.info("Project deleted: %s", project_id)
 
 

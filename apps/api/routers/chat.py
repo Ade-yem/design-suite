@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
-from agents.orchestrator import app as agent_app
+from agents.graph import app as agent_app
 import base64
 import json
 

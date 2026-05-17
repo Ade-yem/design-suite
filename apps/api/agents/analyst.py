@@ -14,23 +14,18 @@ Responsibilities
 5. Handle the re-analysis loop when the Designer sends back failed members
    due to self-weight changes.
 6. Present analysis results with a clear narrative summary.
-
-Rule: This node never reads from ``services/analysis/`` directly.
-      All computation flows via the FastAPI analysis router.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from agents.api_client import api_client, poll_job_until_complete
 from agents.state import StructuralDesignState
 from config import settings
 
@@ -38,11 +33,11 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
-# LLM used for load input extraction only — never for engineering calculations
+# LLM used for load input extraction only
 _llm = ChatGoogleGenerativeAI(
     model="gemini-1.5-pro",
     temperature=0,
-    google_api_key=settings.GEMINI_API_KEY or "dummy-key-for-tests",
+    google_api_key=settings.GEMINI_API_KEY,
 )
 
 # Required fields for load definition — used to detect missing inputs
@@ -185,7 +180,8 @@ async def analyst_node(state: StructuralDesignState) -> dict:
 
     # ── Run combinations ──────────────────────────────────────────────────────
     try:
-        await api_client.post(f"/api/v1/loading/{project_id}/combinations")
+        from services.loading import loading_service
+        loading_service.run_combinations(project_id)
         logs.append({**log_entry, "status": "combinations_run"})
     except Exception as exc:
         return {
@@ -196,47 +192,38 @@ async def analyst_node(state: StructuralDesignState) -> dict:
 
     # ── Run full analysis ─────────────────────────────────────────────────────
     try:
-        analysis_resp = await api_client.post(
-            f"/api/v1/analysis/run/{project_id}",
-            json={"pattern_loading": True, "self_weight_iteration": True},
+        from services.analysis import analysis_service
+        logs.append({**log_entry, "status": "analysis_started"})
+
+        # Define progress callback
+        def _progress(step: str, pct: float) -> None:
+            logs.append({
+                **log_entry,
+                "status": "analysis_running",
+                "detail": step,
+                "pct": pct,
+            })
+
+        await analysis_service.run(
+            project_id,
+            member_ids=None,
+            options={"pattern_loading": True, "self_weight_iteration": True},
+            progress_cb=_progress,
         )
-        analysis_job_id: str = analysis_resp["job_id"]
-        logs.append({**log_entry, "status": "analysis_started", "detail": analysis_job_id})
     except Exception as exc:
         return {
-            "messages": [AIMessage(content=f"❌ Failed to start analysis: {exc}")],
+            "messages": [AIMessage(content=f"❌ Analysis run failed: {exc}")],
             "agent_logs": logs,
             "current_error": "ANALYSIS_FAILED",
         }
 
-    # ── Poll with progress updates ────────────────────────────────────────────
-    live_logs: list[dict] = []
-
-    def _on_progress(status_dict: dict) -> None:
-        live_logs.append({
-            **log_entry,
-            "status": "analysis_running",
-            "detail": status_dict.get("current_step", ""),
-            "pct": status_dict.get("progress_pct", 0),
-        })
-
-    try:
-        await poll_job_until_complete(analysis_job_id, progress_cb=_on_progress)
-    except Exception as exc:
-        return {
-            "messages": [AIMessage(content=f"❌ Analysis run failed: {exc}")],
-            "agent_logs": logs + live_logs,
-            "current_error": "ANALYSIS_FAILED",
-            "analysis_job_id": analysis_job_id,
-        }
-
     # ── Fetch results ─────────────────────────────────────────────────────────
     try:
-        results = await api_client.get(f"/api/v1/analysis/{project_id}/results")
+        results = analysis_service.get_results(project_id)
     except Exception as exc:
         return {
             "messages": [AIMessage(content=f"❌ Could not retrieve analysis results: {exc}")],
-            "agent_logs": logs + live_logs,
+            "agent_logs": logs,
             "current_error": "ANALYSIS_FAILED",
         }
 
@@ -247,12 +234,11 @@ async def analyst_node(state: StructuralDesignState) -> dict:
 
     return {
         "analysis_results": results,
-        "analysis_job_id": analysis_job_id,
         "analysis_complete": True,
         "failed_members_analysis": failed_members,
         "pipeline_status": "analysis_complete",
         "messages": [AIMessage(content=narrative)],
-        "agent_logs": logs + live_logs + [{**log_entry, "status": "complete"}],
+        "agent_logs": logs + [{**log_entry, "status": "complete"}],
         "current_error": None,
     }
 
@@ -328,12 +314,11 @@ async def _collect_load_inputs(
 
     # Validate before submitting
     project_id = state["project_id"]
+    from services.loading import loading_service
     try:
-        validation = await api_client.post(
-            f"/api/v1/loading/{project_id}/validate", json=load_data
-        )
-        if not validation.get("valid"):
-            errors = validation.get("errors", [])
+        validation = loading_service.validate(load_data)
+        if not validation.valid:
+            errors = validation.errors
             return {
                 "messages": [AIMessage(content=(
                     f"⚠️ Load definition has errors:\n"
@@ -346,7 +331,7 @@ async def _collect_load_inputs(
         pass  # Validation failure is non-blocking if the API is unavailable
 
     # Submit definition
-    await api_client.post(f"/api/v1/loading/{project_id}/define", json=load_data)
+    loading_service.define(project_id, load_data)
 
     return {
         "load_definition": load_data,
@@ -392,13 +377,13 @@ async def _handle_reanalysis(
 
     # Re-run for failed members only
     try:
-        resp = await api_client.post(
-            f"/api/v1/analysis/run/{project_id}",
-            json={"member_ids": failed, "self_weight_iteration": True},
+        from services.analysis import analysis_service
+        await analysis_service.run(
+            project_id,
+            member_ids=failed,
+            options={"self_weight_iteration": True},
         )
-        job_id = resp["job_id"]
-        await poll_job_until_complete(job_id)
-        new_results = await api_client.get(f"/api/v1/analysis/{project_id}/results")
+        new_results = analysis_service.get_results(project_id)
     except Exception as exc:
         return {
             "messages": [AIMessage(content=f"❌ Re-analysis failed: {exc}")],

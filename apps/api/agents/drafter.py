@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage
 
-from agents.api_client import api_client, poll_job_until_complete
 from core.drawing import generate_drawing_commands
 from agents.state import StructuralDesignState
 
@@ -101,32 +100,44 @@ or click any member directly to make adjustments.
 async def handle_canvas_edit(state: StructuralDesignState, member_id: str, edit_type: str, new_value: float) -> dict:
     """
     Handle a direct manipulation edit from the canvas.
+
+    Parameters
+    ----------
+    state : StructuralDesignState
+    member_id : str
+    edit_type : str
+    new_value : float
+
+    Returns
+    -------
+    dict
     """
     project_id = state["project_id"]
     try:
-        result = await api_client.put(
-            f"/api/v1/design/{project_id}/member/{member_id}",
-            json={"parameter": edit_type, "value": new_value, "reason": "canvas edit"}
+        from services.design import design_service
+        override = {edit_type: new_value, "reason": "canvas edit"}
+        result = design_service.apply_override(
+            project_id,
+            member_id,
+            override=override,
         )
         
-        if result.get("status") == "FAIL": # Assume failed override
+        member_result = result.get("result", {})
+        if member_result.get("status") == "FAILED":
              return {
                  "messages": [AIMessage(content=f"⚠️ Edit rejected. Changing {edit_type} to {new_value} causes a limit state failure.")],
                  "revert_drawing": member_id
              }
 
         # Success - regenerate the single drawing
-        updated_member = result.get("result", {})
-        if updated_member:
-             new_cmds = generate_drawing_commands(updated_member)
-             return {
-                 "messages": [AIMessage(content=f"✅ {member_id} updated. {edit_type} changed to {new_value}. All checks pass.")],
-                 "updated_drawing": {
-                     "member_id": member_id,
-                     "commands": new_cmds
-                 }
-             }
+        new_cmds = generate_drawing_commands(member_result)
+        return {
+            "messages": [AIMessage(content=f"✅ {member_id} updated. {edit_type} changed to {new_value}. All checks pass.")],
+            "updated_drawing": {
+                "member_id": member_id,
+                "commands": new_cmds
+            }
+        }
              
     except Exception as e:
         return {"messages": [AIMessage(content=f"❌ Edit failed: {e}")]}
-    return {}

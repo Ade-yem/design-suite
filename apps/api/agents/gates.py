@@ -5,13 +5,14 @@ Human-in-the-loop gate definitions.
 """
 from langchain_core.messages import AIMessage
 from agents.state import StructuralDesignState
-from agents.api_client import api_client
+from services.files import file_service
 
 async def geometry_verification_gate(state: StructuralDesignState) -> dict:
     if state.get("geometry_verified"):
-        await api_client.put(
-            f"/api/v1/files/{state['project_id']}/verify",
-            json={"confirmed": True, "corrections": state.get("geometry_corrections", [])}
+        file_service.verify_geometry(
+            state['project_id'],
+            corrections=state.get("geometry_corrections", []),
+            notes="Gate 1 manual confirmation"
         )
         return {
             "agent_logs": [{"agent": "gate_1", "status": "passed"}],

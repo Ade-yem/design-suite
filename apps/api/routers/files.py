@@ -1,8 +1,8 @@
 """
 routers/files.py
 ================
-File upload router — receives DXF / PDF files, triggers async parsing,
-and manages the geometry verification gate (Safety Gate 1).
+File upload router — receives DXF / PDF files, delegates all parsing and
+geometry management to ``services.files``, and enforces Safety Gate 1.
 
 Endpoints
 ---------
@@ -16,14 +16,13 @@ GET    /api/v1/files/{project_id}/parse-status Poll async parsing job status
 Gate enforcement
 ----------------
 ``PUT /verify`` is the mandatory human-in-the-loop gate (Safety Gate 1).
-Until it returns ``{"status": "verified"}``, the loading, analysis, and design
+Until it returns ``{\"status\": \"verified\"}``, the loading, analysis, and design
 endpoints will reject requests for this project.
 """
 
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -32,17 +31,13 @@ from pydantic import BaseModel, Field
 
 from dependencies import get_project, require_file_uploaded
 from middleware.error_handler import StructuralError
-from schemas.project import ProjectResponse, ProjectStatus
+from schemas.project import ProjectResponse
+from services.files import file_service
 from storage.file_handler import file_handler
 from storage.job_store import job_store
-from storage.project_store import project_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# In-process parsed-geometry cache  (swap with Redis / DB in production)
-_parsed_store: dict[str, dict[str, Any]] = {}
-_scale_store: dict[str, dict[str, Any]] = {}
 
 
 # ─── Request / Response models ────────────────────────────────────────────────
@@ -116,10 +111,7 @@ async def _parse_file_background(
     job_id: str,
 ) -> None:
     """
-    Background task: invoke the Vision Agent parsing pipeline for a DXF/PDF file.
-
-    Results are cached in ``_parsed_store[project_id]`` and the job status
-    updated so that the frontend can display progress.
+    Background task: invoke ``file_service.parse()`` and update the job store.
 
     Parameters
     ----------
@@ -132,25 +124,9 @@ async def _parse_file_background(
     """
     job_store.mark_running(job_id, "Parsing file…")
     try:
-        # ── Stub: replace with actual Vision Agent / ezdxf parsing call ────
-        # from agents.parser import parse_dxf
-        # parsed = await parse_dxf(file_path)
-        parsed: dict[str, Any] = {
-            "members": [],
-            "scale": {"factor": 0.001, "unit": "mm", "detected": True},
-            "raw_entity_count": 0,
-            "parse_warnings": [],
-            "file_path": file_path,
-            "parsed_at": datetime.now(timezone.utc).isoformat(),
-        }
-        _parsed_store[project_id] = parsed
-        _scale_store[project_id] = parsed["scale"]
-
-        # Advance project status
-        project_store.advance_status(project_id, ProjectStatus.FILE_UPLOADED)
+        await file_service.parse(project_id, file_path)
         job_store.mark_complete(job_id, result_url=f"/api/v1/files/{project_id}/parsed")
         logger.info("Parsing complete for project %s.", project_id)
-
     except Exception as exc:
         logger.exception("Parsing failed for project %s.", project_id)
         job_store.mark_failed(job_id, errors=[str(exc)])
@@ -266,15 +242,15 @@ def get_parsed_geometry(
     StructuralError
         HTTP 404 if parsing has not completed yet.
     """
-    parsed = _parsed_store.get(project_id)
-    if parsed is None:
+    try:
+        return file_service.get_parsed(project_id)
+    except KeyError as exc:
         raise StructuralError(
             "FILE_PARSE_ERROR",
             stage="parsing",
-            details={"reason": "Parse result not available — parsing may still be in progress."},
+            details={"reason": str(exc)},
             status_code=404,
-        )
-    return parsed
+        ) from exc
 
 
 @router.put("/{project_id}/verify")
@@ -315,31 +291,19 @@ async def verify_geometry(
             details={"reason": "Field 'confirmed' must be true to pass this gate."},
             status_code=400,
         )
-
-    # Apply any corrections to the cached parsed geometry
-    if payload.corrections:
-        parsed = _parsed_store.get(project_id, {})
-        # Merge corrections (stub — Vision Agent or service layer handles merging)
-        parsed["user_corrections"] = payload.corrections
-        _parsed_store[project_id] = parsed
-
-    # Advance pipeline
-    project_store.advance_status(project_id, ProjectStatus.GEOMETRY_VERIFIED)
-
-    parsed = _parsed_store.get(project_id, {})
-    member_count = len(parsed.get("members", []))
-
-    logger.info(
-        "Geometry verified for project %s. %d member(s) confirmed. Notes: %s",
-        project_id,
-        member_count,
-        payload.notes or "(none)",
-    )
-    return {
-        "status": "verified",
-        "member_count": member_count,
-        "verified_at": datetime.now(timezone.utc).isoformat(),
-    }
+    try:
+        return file_service.verify_geometry(
+            project_id,
+            corrections=payload.corrections,
+            notes=payload.notes,
+        )
+    except ValueError as exc:
+        raise StructuralError(
+            "FILE_PARSE_ERROR",
+            stage="geometry_verification",
+            details={"reason": str(exc)},
+            status_code=404,
+        ) from exc
 
 
 @router.get("/{project_id}/scale")
@@ -362,15 +326,15 @@ def get_scale(
     dict
         ``{factor, unit, detected, confirmed}``
     """
-    scale = _scale_store.get(project_id)
-    if scale is None:
+    try:
+        return file_service.get_scale(project_id)
+    except KeyError as exc:
         raise StructuralError(
             "FILE_PARSE_ERROR",
             stage="scale_detection",
-            details={"reason": "Scale data not yet available."},
+            details={"reason": str(exc)},
             status_code=404,
-        )
-    return scale
+        ) from exc
 
 
 @router.put("/{project_id}/scale")
@@ -396,17 +360,8 @@ def confirm_scale(
     dict
         Updated scale record.
     """
-    _scale_store[project_id] = {
-        "factor": payload.scale_factor,
-        "unit": payload.unit_label,
-        "detected": False,
-        "confirmed": payload.confirmed,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    logger.info(
-        "Scale updated for project %s: factor=%s unit=%s.",
+    return file_service.confirm_scale(
         project_id,
-        payload.scale_factor,
-        payload.unit_label,
+        scale_factor=payload.scale_factor,
+        unit_label=payload.unit_label,
     )
-    return _scale_store[project_id]

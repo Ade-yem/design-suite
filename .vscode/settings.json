@@ -16,5 +16,6 @@
   },
   "[json]": {
     "editor.tabSize": 2
-  }
+  },
+  "python.pyrefly.configPath": "pyproject.toml"
 }
