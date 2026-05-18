@@ -23,7 +23,7 @@ Usage (in a router)
 from __future__ import annotations
 
 from typing import AsyncGenerator
-
+import re
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -59,10 +59,31 @@ def _get_engine():
                 "DATABASE_URL is not set. "
                 "Set it in your .env file or use the in-memory store backend."
             )
+        
+        # Standard asyncpg doesn't support libpq query params like sslmode or channel_binding.
+        # We strip them and pass ssl=True via connect_args instead if SSL is requested.
+        url = re.sub(r'^postgresql:', 'postgresql+asyncpg:', settings.DATABASE_URL)
+        connect_args = {}
+        if "sslmode" in url or "ssl=require" in url:
+            connect_args["ssl"] = True
+
+        if "?" in url:
+            base_url, query_str = url.split("?", 1)
+            unsupported_params = ["sslmode", "channel_binding"]
+            params = []
+            for param in query_str.split("&"):
+                if not any(param.startswith(unsupported + "=") for unsupported in unsupported_params):
+                    params.append(param)
+            if params:
+                url = f"{base_url}?{'&'.join(params)}"
+            else:
+                url = base_url
+
         _engine = create_async_engine(
-            settings.DATABASE_URL,
+            url,
             echo=(settings.APP_ENV == "development"),
             pool_pre_ping=True,
+            connect_args=connect_args,
         )
     return _engine
 

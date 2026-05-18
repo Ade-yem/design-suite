@@ -19,7 +19,7 @@ from db.models.organisation import Organisation
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
@@ -49,7 +49,7 @@ class Project(Base):
         UTC last-update timestamp.
     organisation_id : str
         FK → organisations.id (tenancy owner).
-    created_by : str | None
+    created_by : uuid.UUID | None
         FK → users.id (user who created the project).
     member_ids : list[ProjectMember]
         Registered structural member identifiers.
@@ -82,8 +82,8 @@ class Project(Base):
     organisation_id: Mapped[str] = mapped_column(
         String, ForeignKey("organisations.id"), nullable=False
     )
-    created_by: Mapped[str | None] = mapped_column(
-        String, ForeignKey("users.id"), nullable=True
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
 
     # ── Relationships ─────────────────────────────────────────────────────────

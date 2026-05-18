@@ -270,7 +270,7 @@ users_router = fastapi_users.get_users_router(UserRead, UserUpdate)
 
 google_client = GoogleOAuth2(
     client_id=settings.GOOGLE_CLIENT_ID,
-    client_secret=getattr(settings, "GOOGLE_CLIENT_SCERET", None) or getattr(settings, "GOOGLE_CLIENT_SECRET", ""),
+    client_secret=settings.GOOGLE_CLIENT_SCERET,
 )
 
 google_oauth_router = fastapi_users.get_oauth_router(

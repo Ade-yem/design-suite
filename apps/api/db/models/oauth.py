@@ -43,11 +43,11 @@ class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
     __tablename__ = "oauth_accounts"
 
     # Explicitly override the user_id foreign key to point to "users.id" instead of default "user.id"
-    # user_id: Mapped[uuid.UUID] = mapped_column(
-    #     UUID(as_uuid=True),
-    #     ForeignKey("users.id", ondelete="CASCADE"),
-    #     nullable=False,
-    # )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # ── Relationships ─────────────────────────────────────────────────────────
     user: Mapped["User"] = relationship(
