@@ -294,12 +294,12 @@ async def _collect_load_inputs(
         "  dead_loads.screed_kNm2 (float, optional)\n"
         "  dead_loads.services_kNm2 (float, optional)\n"
         "  dead_loads.partitions_kNm2 (float, optional)\n\n"
-        f"Message: {last_human.content}"
+        f"Message: {last_human.text}"
     )
 
     try:
         raw = await _llm.ainvoke(extraction_prompt)
-        content = raw.content.replace("```json", "").replace("```", "").strip()
+        content = raw.text.replace("```json", "").replace("```", "").strip()
         load_data: dict = json.loads(content)
     except Exception:
         load_data = {}

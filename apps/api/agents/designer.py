@@ -286,7 +286,7 @@ async def handle_design_override(
 
     try:
         raw = await _llm.ainvoke(extraction_prompt)
-        content = raw.content.replace("```json", "").replace("```", "").strip()
+        content = raw.text.replace("```json", "").replace("```", "").strip()
         override_data: dict = json.loads(content)
     except Exception:
         return {

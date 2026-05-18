@@ -6,12 +6,13 @@ This script extracts and prints basic geometric entities from a DXF file.
 import sys
 import os
 import json
+import asyncio
 # Add the apps/api directory to sys.path to allow importing the 'core' module
 # This ensures that 'core' is found regardless of where the script is run from.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.parsing.dxf_parser import extract_geometry
-
+from agents.parser import _run_llm_member_extraction
 def parse_dxf_entities(file_path: str):
     """
     Parses the given DXF file, prints details about its entities,
@@ -31,9 +32,10 @@ def parse_dxf_entities(file_path: str):
 
     try:
         result = extract_geometry(file_path)
+        members = asyncio.run(_run_llm_member_extraction("project_id", result))
         output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "result.json")
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(result, f, indent=2)
+            json.dump(members, f, indent=2)
         print(f"Successfully dumped result to: {output_path}")
     except Exception as e:
         print(f"An error occurred during parsing: {e}")

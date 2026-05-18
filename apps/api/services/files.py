@@ -160,8 +160,29 @@ class FileService:
         # Run synchronous parser off the event loop
         parsed: dict = await asyncio.to_thread(parse_file, file_path)
 
+        # Normalize the scale dictionary between DXF and PDF schemas
+        scale_dict = parsed.get("scale")
+        if not scale_dict and "metadata" in parsed:
+            meta = parsed["metadata"]
+            scale_dict = {
+                "factor": meta.get("conversion_factor", 1.0),
+                "unit": meta.get("units_label", "mm"),
+                "detected": True,
+                "confirmed": False
+            }
+            parsed["scale"] = scale_dict
+            
+        if not scale_dict:
+            scale_dict = {
+                "factor": 1.0,
+                "unit": "mm",
+                "detected": False,
+                "confirmed": False
+            }
+            parsed["scale"] = scale_dict
+
         _store.set_parsed(project_id, parsed)
-        _store.set_scale(project_id, parsed["scale"])
+        _store.set_scale(project_id, scale_dict)
 
         # Register all detected members with the project store
         for member in parsed.get("members", []):

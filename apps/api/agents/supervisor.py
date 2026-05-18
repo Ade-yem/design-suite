@@ -10,7 +10,7 @@ import json
 
 def is_design_override(message: HumanMessage) -> bool:
     # A simplistic heuristic; could be improved with LLM router
-    text = message.content.lower()
+    text = message.text.lower()
     return "change" in text and ("width" in text or "depth" in text or "cover" in text or "to" in text)
 
 async def supervisor_node(state: StructuralDesignState) -> dict:
@@ -20,7 +20,7 @@ async def supervisor_node(state: StructuralDesignState) -> dict:
         
     last_message = next((m for m in reversed(messages) if isinstance(m, HumanMessage)), None)
     if last_message and is_design_override(last_message) and state.get("pipeline_status") in ("design_complete", "analysis_complete"):
-        return await handle_design_override(state, last_message.content)
+        return await handle_design_override(state, last_message.text)
         
     return {}
 

@@ -11,9 +11,10 @@ Usage (Alembic env.py)
     target_metadata = Base.metadata
 """
 
-from db.models.organisation import Organisation  # noqa: F401
-from db.models.user import User                  # noqa: F401
-from db.models.project import (                  # noqa: F401
+from db.models.organisation import Organisation 
+from db.models.user import User                 
+from db.models.oauth import OAuthAccount         
+from db.models.project import (                 
     Project,
     ProjectMember,
     ProjectLoad,
@@ -23,6 +24,7 @@ from db.models.project import (                  # noqa: F401
 __all__ = [
     "Organisation",
     "User",
+    "OAuthAccount",
     "Project",
     "ProjectMember",
     "ProjectLoad",

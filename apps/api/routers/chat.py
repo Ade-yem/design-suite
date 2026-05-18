@@ -57,7 +57,7 @@ async def chat_endpoint(
             raise HTTPException(status_code=500, detail=result["error"])
             
         # Return the last message content (summary) or raw results
-        return json.loads(result["messages"][0].content)
+        return json.loads(result["messages"][0].text)
 
     else:
         raise HTTPException(status_code=400, detail=f"Unknown action: {action}")

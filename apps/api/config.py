@@ -13,7 +13,7 @@ Usage
 """
 
 from __future__ import annotations
-
+from typing import Literal
 import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -76,9 +76,10 @@ class Settings(BaseSettings):
     )
 
     # ── App ───────────────────────────────────────────────────────────────────
-    APP_ENV: str = "development"
-    SECRET_KEY: str = "change-me-in-production"
-    JWT_LIFETIME_SECONDS: int = 3600
+    APP_ENV: str = os.getenv("APP_ENV") or "development"
+    APP_URL: str = "http://localhost:3000"
+    SECRET_KEY: str = os.getenv("SECRET_KEY") or "change-me-in-production"
+    JWT_LIFETIME_SECONDS: int = int(os.getenv("JWT_LIFETIME_SECONDS") or "") if os.getenv("JWT_LIFETIME_SECONDS") else 3600
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
@@ -89,25 +90,30 @@ class Settings(BaseSettings):
     FILE_STORAGE_BACKEND: str = "local"   # "local" | "cloudinary"
 
     # ── Cloudinary (production file storage) ──────────────────────────────────
-    CLOUDINARY_CLOUD_NAME: str = ""
-    CLOUDINARY_API_KEY: str = ""
-    CLOUDINARY_API_SECRET: str = ""
+    CLOUDINARY_CLOUD_NAME: str = os.getenv("CLOUDINARY_CLOUD_NAME") or ""
+    CLOUDINARY_API_KEY: str = os.getenv("CLOUDINARY_API_KEY") or ""
+    CLOUDINARY_API_SECRET: str = os.getenv("CLOUDINARY_API_SECRET") or ""
 
     # ── Job store ─────────────────────────────────────────────────────────────
     JOB_STORE_TTL_SECONDS: int = 3600
-    JOB_STORE_BACKEND: str = "memory"    # "memory" | "redis"
+    JOB_STORE_BACKEND: Literal["memory", "redis"] = "memory"    # "memory" | "redis"
     REDIS_URL: str | None = None
 
     # ── Project / Data store ──────────────────────────────────────────────────
-    PROJECT_STORE_BACKEND: str = "memory" # "memory" | "postgres"
-    DATABASE_URL: str | None = None
+    PROJECT_STORE_BACKEND: Literal["memory", "postgres"] = "memory" # 
+    DATABASE_URL: str | None = os.getenv("DATABASE_URL")
 
     # ── Logging & meta ────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
     API_VERSION: str = "1.0.0"
-    GEMINI_API_KEY: str = ""
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY") or ""
+    GOOGLE_CLIENT_ID: str =os.getenv("GOOGLE_CLIENT_ID") or ""
+    GOOGLE_CLIENT_SCERET: str =os.getenv("GOOGLE_CLIENT_SCERET") or ""
     THINKING_MODEL: str = "gemini-3.1-flash-lite"
     ACTION_MODEL: str = "gemini-3.1-flash-lite"
+    RESEND_API_KEY: str =os.getenv("RESEND_API_KEY") or ""
+    SENDER_EMAIL: str =os.getenv("SENDER_EMAIL") or ""
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY") or ""
 
     # ── Derived properties ────────────────────────────────────────────────────
     @property
