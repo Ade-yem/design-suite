@@ -1,12 +1,33 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Paperclip } from "lucide-react";
+import { Send, Bot, User, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useProjectSocket } from "@/hooks/useProjectSocket";
+import { apiClient } from "@/lib/api";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+}
+
+interface GateBanner {
+  gate: string;
+  label: string;
+}
+
+const GATE_LABELS: Record<string, string> = {
+  geometry_gate: "Confirm parsed geometry to proceed to loading",
+  loading_gate: "Confirm load combinations to proceed to analysis",
+  design_gate: "Confirm reinforcement schedule to proceed to drafting",
+  drawing_gate: "Confirm final drawing set",
+};
+
+interface ChatSidebarProps {
+  projectId: string;
+  onGateReached?: (gate: string) => void;
 }
 
 function TypingIndicator() {
@@ -24,50 +45,145 @@ function TypingIndicator() {
   );
 }
 
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    role: "assistant",
-    content: "Welcome to StructAI Copilot. Upload a DXF file to begin structural analysis. I'll parse the geometry, identify members, and guide you through verification.",
-    timestamp: new Date(),
-  },
-];
+const WELCOME: Message = {
+  id: "welcome",
+  role: "assistant",
+  content:
+    "Welcome to StructAI Copilot. Upload a DXF or PDF file to begin structural analysis. I'll parse the geometry, identify members, and guide you through each stage.",
+  timestamp: new Date(),
+};
 
-export function ChatSidebar() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+export function ChatSidebar({ projectId, onGateReached }: ChatSidebarProps) {
+  const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [pendingGate, setPendingGate] = useState<GateBanner | null>(null);
+  const [approvingGate, setApprovingGate] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Accumulate streaming chunks into a single assistant message
+  const streamingIdRef = useRef<string | null>(null);
+
+  const appendAssistant = (content: string) => {
+    const id = `msg-${Date.now()}`;
+    streamingIdRef.current = id;
+    setMessages((prev) => [
+      ...prev,
+      { id, role: "assistant", content, timestamp: new Date() },
+    ]);
+    setIsTyping(false);
+  };
+
+  const appendChunk = (chunk: string) => {
+    const sid = streamingIdRef.current;
+    if (!sid) {
+      appendAssistant(chunk);
+      return;
+    }
+    setMessages((prev) =>
+      prev.map((m) => (m.id === sid ? { ...m, content: m.content + chunk } : m))
+    );
+  };
+
+  const { sendMessage } = useProjectSocket(projectId, {
+    onAgentMessage: ({ content }) => {
+      if (!streamingIdRef.current) {
+        setIsTyping(false);
+        appendAssistant(content);
+      } else {
+        appendChunk(content);
+      }
+    },
+    onStatusLog: ({ tool }) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `log-${Date.now()}`,
+          role: "assistant",
+          content: `✓ ${tool} complete`,
+          timestamp: new Date(),
+        },
+      ]);
+    },
+    onGateReached: ({ gate }) => {
+      streamingIdRef.current = null;
+      setPendingGate({ gate, label: GATE_LABELS[gate] ?? `Gate: ${gate}` });
+      onGateReached?.(gate);
+    },
+    onError: ({ message }) => {
+      setIsTyping(false);
+      streamingIdRef.current = null;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          role: "assistant",
+          content: `Error: ${message}`,
+          timestamp: new Date(),
+        },
+      ]);
+    },
+  });
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, isTyping]);
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, isTyping, pendingGate]);
 
   const handleSend = () => {
     if (!input.trim()) return;
+    const text = input.trim();
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: text,
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    setIsTyping(true);
+    streamingIdRef.current = null;
 
-    setTimeout(() => {
-      setIsTyping(false);
+    const sent = sendMessage(text);
+    if (sent) {
+      setIsTyping(true);
+    } else {
       setMessages((prev) => [
         ...prev,
         {
-          id: (Date.now() + 1).toString(),
+          id: `err-${Date.now()}`,
           role: "assistant",
-          content: "I'm ready to help. Upload a DXF file using the canvas area or the attachment button to get started with structural analysis.",
+          content: "Not connected to the pipeline. Please wait and try again.",
           timestamp: new Date(),
         },
       ]);
-    }, 1500);
+    }
+  };
+
+  const handleApproveGate = async () => {
+    if (!pendingGate) return;
+    setApprovingGate(true);
+    setGateError(null);
+    try {
+      await apiClient.post(`/api/v1/pipeline/${projectId}/resume`);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `approved-${Date.now()}`,
+          role: "assistant",
+          content: `Gate approved. Continuing pipeline…`,
+          timestamp: new Date(),
+        },
+      ]);
+      setPendingGate(null);
+    } catch (err: unknown) {
+      const detail = (err as { detail?: string }).detail ?? "Failed to resume pipeline.";
+      setGateError(detail);
+    } finally {
+      setApprovingGate(false);
+    }
   };
 
   return (
@@ -80,9 +196,18 @@ export function ChatSidebar() {
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
+      >
         {messages.map((msg) => (
-          <div key={msg.id} className={cn("flex items-start gap-3 animate-fade-in-up", msg.role === "user" && "flex-row-reverse")}>
+          <div
+            key={msg.id}
+            className={cn(
+              "flex items-start gap-3 animate-fade-in-up",
+              msg.role === "user" && "flex-row-reverse"
+            )}
+          >
             <div
               className={cn(
                 "h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5",
@@ -108,20 +233,39 @@ export function ChatSidebar() {
           </div>
         ))}
         {isTyping && <TypingIndicator />}
+
+        {/* Gate confirmation banner */}
+        {pendingGate && (
+          <div className="rounded-lg border border-primary/40 bg-primary/5 px-3 py-3 space-y-2 animate-fade-in-up">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
+              <p className="text-xs font-medium text-primary">Review Required</p>
+            </div>
+            <p className="text-xs text-muted-foreground">{pendingGate.label}</p>
+            {gateError && (
+              <p className="text-xs text-destructive">{gateError}</p>
+            )}
+            <button
+              onClick={handleApproveGate}
+              disabled={approvingGate}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
+            >
+              {approvingGate && <Loader2 className="h-3 w-3 animate-spin" />}
+              Approve &amp; Continue
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Input */}
       <div className="p-3 border-t border-border">
         <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
-          <button className="text-muted-foreground hover:text-foreground transition-colors">
-            <Paperclip className="h-4 w-4" />
-          </button>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Ask about structural elements..."
+            placeholder="Ask about structural elements…"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <button

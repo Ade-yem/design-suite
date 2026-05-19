@@ -31,7 +31,7 @@ function VerifyContent() {
     const triggerVerification = async () => {
       try {
         const payload: VerifyPayload = { token };
-        await apiClient.post<UserProfile>("/auth/verify", payload);
+        await apiClient.post<UserProfile>("/api/auth/verify", payload);
         setStatus("success");
         toast.success("Email verification successful!");
       } catch (err: unknown) {

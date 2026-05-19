@@ -85,7 +85,8 @@ class EmailService:
                 "html": html_content,
             }
             # Execute synchronous Resend SDK call in a separate worker thread
-            await asyncio.to_thread(resend.Emails.send, **params)
+            # pyrefly: ignore [bad-argument-type]
+            await asyncio.to_thread(resend.Emails.send, params)
             logger.info("Successfully dispatched email to %s (Subject: '%s').", to_email, subject)
         except Exception as e:
             logger.error("Failed to send email to %s via Resend: %s", to_email, str(e), exc_info=True)
@@ -193,7 +194,7 @@ class EmailService:
         """
         subject = "Verify Your Account - Structural Design Copilot"
         # In production, point this link to your frontend verification route
-        verify_url = f"http://localhost:5173/verify?token={token}"
+        verify_url = f"{settings.FRONTEND_URL}/verify?token={token}"
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -281,7 +282,7 @@ class EmailService:
             FastAPIUsers signed password reset token.
         """
         subject = "Reset Your Password - Structural Design Copilot"
-        reset_url = f"{settings.APP_URL}/reset-password?token={token}"
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
         html_content = f"""
         <!DOCTYPE html>
         <html>

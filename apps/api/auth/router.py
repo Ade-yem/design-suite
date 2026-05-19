@@ -22,10 +22,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import FastAPIUsers
 from fastapi_users.authentication import JWTStrategy
 from httpx_oauth.clients.google import GoogleOAuth2
+from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from pydantic import BaseModel, Field
 
 from auth.backend import auth_backend
@@ -270,8 +272,13 @@ users_router = fastapi_users.get_users_router(UserRead, UserUpdate)
 
 google_client = GoogleOAuth2(
     client_id=settings.GOOGLE_CLIENT_ID,
-    client_secret=settings.GOOGLE_CLIENT_SCERET,
+    client_secret=settings.GOOGLE_CLIENT_SECRET
 )
+
+if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
+    logger.warning(
+        "Google OAuth is missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET"
+    )
 
 google_oauth_router = fastapi_users.get_oauth_router(
     google_client,
@@ -280,5 +287,63 @@ google_oauth_router = fastapi_users.get_oauth_router(
     settings.SECRET_KEY,
     associate_by_email=True,
     is_verified_by_default=True,
+    redirect_url=f"{settings.APP_URL}/api/auth/google/callback"
 )
 """Google OAuth Authorization and callback endpoints router."""
+
+# ── Custom Google callback that redirects to the frontend ─────────────────────
+# fastapi-users' default OAuth callback returns a raw JSON token response, which
+# leaves the user staring at raw JSON in the browser. This override intercepts
+# the callback, issues the JWT, and redirects to the frontend /auth/callback page.
+
+_google_callback_dep = OAuth2AuthorizeCallback(
+    google_client,
+    redirect_url=f"{settings.APP_URL}/api/auth/google/callback",
+)
+
+google_callback_router = APIRouter()
+
+
+@google_callback_router.get("/callback")
+async def google_oauth_callback(
+    request: Request,
+    access_token_state: tuple = Depends(_google_callback_dep),
+    user_manager: UserManager = Depends(get_user_manager),
+    strategy: JWTStrategy = Depends(auth_backend.get_strategy),
+) -> RedirectResponse:
+    oauth_token, _ = access_token_state
+    account_id, account_email = await google_client.get_id_email(oauth_token["access_token"])
+
+    try:
+        # pyrefly: ignore [bad-argument-type]
+        user = await user_manager.oauth_callback(
+            "google",
+            oauth_token["access_token"],
+            account_id,
+            # pyrefly: ignore [bad-argument-type]
+            account_email,
+            oauth_token.get("expires_at"),
+            oauth_token.get("refresh_token"),
+            request,
+            associate_by_email=True,
+            is_verified_by_default=True,
+        )
+    except Exception:
+        logger.exception("OAuth callback failed for account %s", account_email)
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/login?error=oauth_failed",
+            status_code=302,
+        )
+
+    if not user.is_active:  # pyrefly: ignore [missing-attribute]
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/login?error=account_inactive",
+            status_code=302,
+        )
+
+    # pyrefly: ignore [bad-argument-type]
+    jwt = await strategy.write_token(user)
+    return RedirectResponse(
+        url=f"{settings.FRONTEND_URL}/auth/callback?token={jwt}",
+        status_code=302,
+    )

@@ -79,8 +79,8 @@ class Project(Base):
     )
 
     # ── Tenancy / Ownership ───────────────────────────────────────────────────
-    organisation_id: Mapped[str] = mapped_column(
-        String, ForeignKey("organisations.id"), nullable=False
+    organisation_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("organisations.id"), nullable=True
     )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
@@ -101,6 +101,15 @@ class Project(Base):
     )
     geometry: Mapped["ProjectGeometry | None"] = relationship(
         "ProjectGeometry", back_populates="project", uselist=False, cascade="all, delete-orphan"
+    )
+    analysis: Mapped["ProjectAnalysis | None"] = relationship(
+        "ProjectAnalysis", back_populates="project", uselist=False, cascade="all, delete-orphan"
+    )
+    design: Mapped["ProjectDesign | None"] = relationship(
+        "ProjectDesign", back_populates="project", uselist=False, cascade="all, delete-orphan"
+    )
+    drawing: Mapped["ProjectDrawing | None"] = relationship(
+        "ProjectDrawing", back_populates="project", uselist=False, cascade="all, delete-orphan"
     )
 
 
@@ -202,6 +211,7 @@ class ProjectGeometry(Base):
         String, ForeignKey("projects.project_id"), unique=True, nullable=False
     )
     geometry: Mapped[str] = mapped_column(Text, nullable=False)
+    scale_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

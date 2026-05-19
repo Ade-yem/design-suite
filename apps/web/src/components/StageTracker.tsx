@@ -10,6 +10,21 @@ const stages: { id: Stage; label: string; icon: React.ElementType }[] = [
   { id: "drafting", label: "Final Drafting", icon: PenTool },
 ];
 
+// Maps backend pipeline_status labels to the frontend Stage type.
+const STATUS_TO_STAGE: Record<string, Stage> = {
+  created: "parsing",
+  file_uploaded: "parsing",
+  geometry_verified: "verification",
+  loading_defined: "calculation",
+  analysis_complete: "calculation",
+  design_complete: "drafting",
+  report_generated: "drafting",
+};
+
+export function pipelineStatusToStage(status: string): Stage {
+  return STATUS_TO_STAGE[status] ?? "parsing";
+}
+
 interface StageTrackerProps {
   currentStage: Stage;
 }

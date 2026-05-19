@@ -39,6 +39,41 @@ from storage.project_store import project_store
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+# ---------------------------------------------------------------------------
+# DB persistence helper
+# ---------------------------------------------------------------------------
+
+
+async def _db_persist_project(project: ProjectResponse) -> None:
+    """Upsert a project row to PostgreSQL. Silent no-op if DB is unavailable."""
+    try:
+        from db.session import get_session_maker
+        from db.models.project import Project
+        from sqlalchemy import select
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            existing = (await session.execute(
+                select(Project).where(Project.project_id == project.project_id)
+            )).scalar_one_or_none()
+
+            if not existing:
+                session.add(Project(
+                    project_id=project.project_id,
+                    name=project.name,
+                    reference=project.reference,
+                    client=project.client,
+                    design_code=project.design_code,
+                    pipeline_status=project.pipeline_status_ordinal,
+                ))
+            await session.commit()
+    except RuntimeError:
+        pass  # DATABASE_URL not configured
+    except Exception as exc:
+        logger.warning("DB project persist failed for %s: %s", project.project_id, exc)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -80,7 +115,7 @@ def _build_gates(status_ordinal: int) -> dict[str, bool]:
 
 
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
-def create_project(payload: ProjectCreate) -> ProjectResponse:
+async def create_project(payload: ProjectCreate) -> ProjectResponse:
     """
     Create a new project entry and initialize the pipeline state machine.
 
@@ -95,6 +130,7 @@ def create_project(payload: ProjectCreate) -> ProjectResponse:
         Newly created project with ``pipeline_status = "created"``.
     """
     project = project_store.create(payload)
+    await _db_persist_project(project)
     logger.info("Project created: %s (%s)", project.project_id, project.name)
     return project
 

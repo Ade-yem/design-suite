@@ -30,7 +30,7 @@ function VerifyPendingContent() {
     setIsLoading(true);
     try {
       const payload: RequestVerifyTokenPayload = { email };
-      await apiClient.post<void>("/auth/request-verify-token", payload);
+      await apiClient.post<void>("/api/auth/request-verify-token", payload);
       toast.success("Verification token successfully dispatched. Check inbox.");
       
       // Start a 60-second cooldown to prevent abuse

@@ -1,26 +1,147 @@
-import { useState, useCallback } from "react";
-import { Upload, FileUp, ZoomIn, ZoomOut, Maximize2, Move, MousePointer } from "lucide-react";
-import { cn } from "@/lib/utils";
+"use client";
 
-export function CanvasViewport() {
+import { useState, useCallback, useRef } from "react";
+import {
+  Upload,
+  FileUp,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Move,
+  MousePointer,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api";
+import type { JobStatus } from "@/types/project";
+
+interface ParsedGeometrySummary {
+  memberCount: number;
+  scale: { factor: number; unit: string };
+}
+
+interface CanvasViewportProps {
+  projectId: string;
+  onParsed?: (summary: ParsedGeometrySummary) => void;
+}
+
+type UploadState = "idle" | "uploading" | "parsing" | "done" | "error";
+
+const POLL_INTERVAL_MS = 2000;
+const ACCEPTED_EXTS = [".dxf", ".pdf"];
+
+export function CanvasViewport({ projectId, onParsed }: CanvasViewportProps) {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [hasFile, setHasFile] = useState(false);
+  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [parsedSummary, setParsedSummary] = useState<ParsedGeometrySummary | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const uploadAndParse = useCallback(
+    async (file: File) => {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ACCEPTED_EXTS.includes(`.${ext}`)) {
+        setUploadError("Unsupported file type. Please upload a .dxf or .pdf file.");
+        setUploadState("error");
+        return;
+      }
+
+      setUploadState("uploading");
+      setUploadError(null);
+
+      try {
+        const form = new FormData();
+        form.append("file", file);
+
+        const { data: job } = await apiClient.post<{ job_id: string }>(
+          `/api/v1/files/upload/${projectId}`,
+          form,
+          { headers: { "Content-Type": "multipart/form-data" } }
+        );
+
+        setUploadState("parsing");
+
+        // Poll job until complete
+        const poll = async () => {
+          try {
+            const { data: status } = await apiClient.get<JobStatus>(
+              `/api/v1/jobs/${job.job_id}`
+            );
+
+            if (status.status === "complete") {
+              // Fetch actual parsed geometry from the result URL
+              let summary: ParsedGeometrySummary = { memberCount: 0, scale: { factor: 1, unit: "mm" } };
+              if (status.result_url) {
+                try {
+                  const { data: parsed } = await apiClient.get<{ members: unknown[]; scale: { factor: number; unit: string } }>(
+                    status.result_url
+                  );
+                  summary = {
+                    memberCount: (parsed.members ?? []).length,
+                    scale: parsed.scale ?? { factor: 1, unit: "mm" },
+                  };
+                } catch {
+                  // result_url fetch failed; proceed with empty summary
+                }
+              }
+              setParsedSummary(summary);
+              setUploadState("done");
+              onParsed?.(summary);
+            } else if (status.status === "failed") {
+              setUploadError((status.errors ?? [])[0] ?? "Parsing failed.");
+              setUploadState("error");
+            } else {
+              pollTimerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+            }
+          } catch {
+            setUploadError("Lost connection while checking parse status. Please retry.");
+            setUploadState("error");
+          }
+        };
+
+        await poll();
+      } catch (err: unknown) {
+        setUploadError((err as { detail?: string }).detail ?? "Upload failed.");
+        setUploadState("error");
+      }
+    },
+    [projectId, onParsed]
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
   }, []);
 
-  const handleDragLeave = useCallback(() => {
-    setIsDragOver(false);
-  }, []);
+  const handleDragLeave = useCallback(() => setIsDragOver(false), []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    // Simulate file upload
-    setHasFile(true);
-  }, []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = e.dataTransfer.files[0];
+      if (file) uploadAndParse(file);
+    },
+    [uploadAndParse]
+  );
+
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) uploadAndParse(file);
+    },
+    [uploadAndParse]
+  );
+
+  const handleRetry = () => {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    setUploadState("idle");
+    setUploadError(null);
+    setParsedSummary(null);
+  };
 
   return (
     <div className="h-full flex flex-col relative">
@@ -53,7 +174,10 @@ export function CanvasViewport() {
         </span>
         <div className="w-px h-3 bg-border" />
         <span className="text-xs font-mono text-muted-foreground">
-          Scale: <span className="text-foreground">1:100</span>
+          Scale:{" "}
+          <span className="text-foreground">
+            {parsedSummary ? `1 ${parsedSummary.scale.unit}` : "—"}
+          </span>
         </span>
       </div>
 
@@ -67,7 +191,15 @@ export function CanvasViewport() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {!hasFile ? (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".dxf,.pdf"
+          className="hidden"
+          onChange={handleFileInput}
+        />
+
+        {uploadState === "idle" && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div
               className={cn(
@@ -77,10 +209,12 @@ export function CanvasViewport() {
                   : "border-border hover:border-muted-foreground"
               )}
             >
-              <div className={cn(
-                "h-16 w-16 rounded-xl flex items-center justify-center transition-colors",
-                isDragOver ? "bg-primary/15" : "bg-muted"
-              )}>
+              <div
+                className={cn(
+                  "h-16 w-16 rounded-xl flex items-center justify-center transition-colors",
+                  isDragOver ? "bg-primary/15" : "bg-muted"
+                )}
+              >
                 {isDragOver ? (
                   <FileUp className="h-8 w-8 text-primary" />
                 ) : (
@@ -89,78 +223,76 @@ export function CanvasViewport() {
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium">
-                  {isDragOver ? "Drop DXF file here" : "Upload DXF File"}
+                  {isDragOver ? "Drop DXF or PDF here" : "Upload Drawing"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Drag and drop or click to browse
                 </p>
               </div>
               <button
-                onClick={() => setHasFile(true)}
+                onClick={() => fileInputRef.current?.click()}
                 className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
               >
                 Browse Files
               </button>
-              <p className="text-xs text-muted-foreground font-mono">.dxf, .dwg supported</p>
+              <p className="text-xs text-muted-foreground font-mono">.dxf, .pdf supported</p>
             </div>
           </div>
-        ) : (
-          <DemoGeometry />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DemoGeometry() {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center">
-      <svg viewBox="0 0 600 400" className="w-[80%] h-[70%] opacity-90">
-        {/* Grid lines - subtle */}
-        {Array.from({ length: 7 }).map((_, i) => (
-          <line key={`gv-${i}`} x1={80 + i * 80} y1={40} x2={80 + i * 80} y2={360} stroke="hsl(217, 33%, 15%)" strokeWidth="0.5" strokeDasharray="4 4" />
-        ))}
-        {Array.from({ length: 5 }).map((_, i) => (
-          <line key={`gh-${i}`} x1={40} y1={60 + i * 70} x2={560} y2={60 + i * 70} stroke="hsl(217, 33%, 15%)" strokeWidth="0.5" strokeDasharray="4 4" />
-        ))}
-
-        {/* Beams - engineering blue */}
-        <line x1={100} y1={100} x2={300} y2={100} stroke="hsl(217, 91%, 60%)" strokeWidth="3" />
-        <line x1={300} y1={100} x2={500} y2={100} stroke="hsl(217, 91%, 60%)" strokeWidth="3" />
-        <line x1={100} y1={250} x2={300} y2={250} stroke="hsl(217, 91%, 60%)" strokeWidth="3" />
-        <line x1={300} y1={250} x2={500} y2={250} stroke="hsl(217, 91%, 60%)" strokeWidth="3" />
-
-        {/* Columns */}
-        {[100, 300, 500].map((x) =>
-          [100, 250].map((y) => (
-            <g key={`col-${x}-${y}`}>
-              <rect x={x - 8} y={y - 8} width={16} height={16} fill="hsl(217, 91%, 60%)" fillOpacity={0.3} stroke="hsl(217, 91%, 60%)" strokeWidth="2" />
-              <circle cx={x} cy={y} r={2} fill="hsl(217, 91%, 60%)" />
-            </g>
-          ))
         )}
 
-        {/* Labels */}
-        <text x={200} y={90} fill="hsl(217, 91%, 60%)" fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle" opacity={0.8}>B-01</text>
-        <text x={400} y={90} fill="hsl(217, 91%, 60%)" fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle" opacity={0.8}>B-02</text>
-        <text x={200} y={270} fill="hsl(217, 91%, 60%)" fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle" opacity={0.8}>B-03</text>
-        <text x={400} y={270} fill="hsl(217, 91%, 60%)" fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle" opacity={0.8}>B-04</text>
+        {(uploadState === "uploading" || uploadState === "parsing") && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-10 w-10 text-primary animate-spin" />
+              <p className="text-sm font-medium">
+                {uploadState === "uploading" ? "Uploading file…" : "AI parsing geometry…"}
+              </p>
+              <p className="text-xs text-muted-foreground font-mono">
+                {uploadState === "parsing"
+                  ? "Extracting members, spans, and section data"
+                  : "Transferring to server"}
+              </p>
+            </div>
+          </div>
+        )}
 
-        <text x={85} y={95} fill="hsl(142, 71%, 45%)" fontSize="9" fontFamily="JetBrains Mono" textAnchor="end">C-01</text>
-        <text x={85} y={245} fill="hsl(142, 71%, 45%)" fontSize="9" fontFamily="JetBrains Mono" textAnchor="end">C-04</text>
+        {uploadState === "error" && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4 max-w-sm text-center">
+              <AlertCircle className="h-10 w-10 text-destructive" />
+              <p className="text-sm font-medium text-destructive">{uploadError}</p>
+              <button
+                onClick={handleRetry}
+                className="px-4 py-2 bg-muted text-foreground text-sm rounded-lg hover:bg-muted/80 transition-colors"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        )}
 
-        {/* Dimension line */}
-        <line x1={100} y1={310} x2={300} y2={310} stroke="hsl(215, 20%, 55%)" strokeWidth="0.8" />
-        <line x1={100} y1={305} x2={100} y2={315} stroke="hsl(215, 20%, 55%)" strokeWidth="0.8" />
-        <line x1={300} y1={305} x2={300} y2={315} stroke="hsl(215, 20%, 55%)" strokeWidth="0.8" />
-        <text x={200} y={325} fill="hsl(215, 20%, 55%)" fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle">6000 mm</text>
-      </svg>
+        {uploadState === "done" && parsedSummary && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <p className="text-sm text-muted-foreground font-mono">
+                Drawing renderer coming in Phase 5
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Parsed geometry is ready for analysis.
+              </p>
+            </div>
 
-      {/* Status badge */}
-      <div className="absolute top-4 left-4 flex items-center gap-2 bg-card/90 backdrop-blur-sm border border-border rounded-md px-3 py-1.5">
-        <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-        <span className="text-xs font-medium">AI Parsing Complete</span>
-        <span className="text-xs font-mono text-muted-foreground">· 14 members detected</span>
+            {/* Status badge */}
+            <div className="absolute top-4 left-4 flex items-center gap-2 bg-card/90 backdrop-blur-sm border border-border rounded-md px-3 py-1.5">
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+              <span className="text-xs font-medium">Parsing Complete</span>
+              <span className="text-xs font-mono text-muted-foreground">
+                · {parsedSummary.memberCount} member
+                {parsedSummary.memberCount !== 1 ? "s" : ""} detected
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

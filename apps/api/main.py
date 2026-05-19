@@ -19,7 +19,7 @@ All responsibilities are delegated to routers → services → core modules.
 
 Startup
 -------
-    uvicorn main:app --reload --port 8000
+    uvicorn main:app --reload --port 5000
 """
 
 from __future__ import annotations
@@ -61,6 +61,7 @@ from auth.router import (
     verify_router,
     users_router,
     google_oauth_router,
+    google_callback_router,
 )
 
 
@@ -113,12 +114,16 @@ app.include_router(pipeline.router,  prefix="/api/v1/pipeline",  tags=["Pipeline
 app.include_router(jobs.router,      prefix="/api/v1/jobs",      tags=["Jobs"])
 
 # ── Auth routes (fastapi-users) ────────────────────────────────────────────────
-app.include_router(auth_router,          prefix="/auth/jwt",    tags=["Auth"])
-app.include_router(register_router,      prefix="/auth",        tags=["Auth"])
-app.include_router(reset_router,         prefix="/auth",        tags=["Auth"])
-app.include_router(verify_router,        prefix="/auth",        tags=["Auth"])
-app.include_router(users_router,         prefix="/users",       tags=["Users"])
-app.include_router(google_oauth_router,  prefix="/auth/google", tags=["Auth"])
+app.include_router(auth_router,          prefix="/api/auth/jwt",    tags=["Auth"])
+app.include_router(register_router,      prefix="/api/auth",        tags=["Auth"])
+app.include_router(reset_router,         prefix="/api/auth",        tags=["Auth"])
+app.include_router(verify_router,        prefix="/api/auth",        tags=["Auth"])
+app.include_router(users_router,         prefix="/api/users",       tags=["Users"])
+# google_callback_router must be mounted first — FastAPI uses first-match-wins,
+# so this custom redirect handler takes precedence over the default JSON response
+# from google_oauth_router's /callback route.
+app.include_router(google_callback_router, prefix="/api/auth/google", tags=["Auth"])
+app.include_router(google_oauth_router,    prefix="/api/auth/google", tags=["Auth"])
 
 # WebSockets
 app.include_router(websocket.router, tags=["WebSockets"])

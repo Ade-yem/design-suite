@@ -26,7 +26,7 @@ from fastapi_users.authentication import (
 from config import settings
 
 # Transport: token is sent in the Authorization header as "Bearer <token>".
-bearer_transport = BearerTransport(tokenUrl="/auth/jwt/login")
+bearer_transport = BearerTransport(tokenUrl="/api/auth/jwt/login")
 
 
 def get_jwt_strategy() -> JWTStrategy:

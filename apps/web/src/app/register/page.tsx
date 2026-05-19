@@ -11,15 +11,16 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { apiClient, ApiError } from "@/lib/api";
+import { apiClient, ApiError, getFriendlyErrorMessage } from "@/lib/api";
 import { toast, Toaster } from "sonner";
 import { UserPlus, User, Mail, Lock, RefreshCw, ArrowRight } from "lucide-react";
 import { RegisterPayload, UserProfile } from "@/types/auth";
+import { GoogleSsoButton } from "@/components/auth/GoogleSsoButton";
 
 // Form validation schemas
 const registerSchema = z.object({
   fullName: z.string().min(2, "Full display name must be at least 2 characters."),
-  email: z.string().email("Please enter a valid active email address."),
+  email: z.email("Please enter a valid active email address."),
   password: z.string().min(8, "Security key must be at least 8 characters long."),
 });
 
@@ -50,7 +51,7 @@ export default function RegisterPage() {
         full_name: data.fullName,
       };
 
-      await apiClient.post<UserProfile>("/auth/register", payload);
+      await apiClient.post<UserProfile>("/api/auth/register", payload);
 
       toast.success("Account successfully initialized!");
       
@@ -58,7 +59,7 @@ export default function RegisterPage() {
       router.push(`/verify-pending?email=${encodeURIComponent(data.email)}`);
     } catch (err: unknown) {
       const apiErr = err as ApiError;
-      toast.error(apiErr.detail || "Registration failed. This email may already be linked to an active profile.");
+      toast.error(getFriendlyErrorMessage(apiErr.detail));
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +68,7 @@ export default function RegisterPage() {
   return (
     <div className="relative min-h-screen bg-canvas-bg dot-grid flex items-center justify-center p-4 overflow-hidden">
       <Toaster position="top-right" theme="dark" closeButton richColors />
-      
+
       {/* Dynamic graphic highlights */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-[100px] pointer-events-none" />
@@ -81,11 +82,11 @@ export default function RegisterPage() {
             <UserPlus className="w-6 h-6 text-primary" />
           </div>
           <h1 className="text-xl font-bold font-sans tracking-wide text-foreground">
-            Initialize Profile
+            Create Account
           </h1>
-          <p className="text-muted-foreground text-xs font-mono mt-1 text-center">
+          {/* <p className="text-muted-foreground text-xs font-mono mt-1 text-center">
             Sign up to unlock automated calculations and AI structural drafts.
-          </p>
+          </p> */}
         </div>
 
         {/* Credentials Form */}
@@ -94,7 +95,7 @@ export default function RegisterPage() {
           {/* Full Name field */}
           <div className="space-y-1.5">
             <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider block">
-              Professional Display Name
+              Name
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-muted-foreground pointer-events-none">
@@ -118,7 +119,7 @@ export default function RegisterPage() {
           {/* Email field */}
           <div className="space-y-1.5">
             <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider block">
-              Corporate Email ID
+              Email
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-muted-foreground pointer-events-none">
@@ -127,7 +128,7 @@ export default function RegisterPage() {
               <input
                 type="email"
                 disabled={isLoading}
-                placeholder="engineer@firm.com"
+                placeholder="mail@firm.com"
                 className="w-full bg-secondary/35 border border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/30 rounded-lg pl-10 pr-4 py-2.5 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/45"
                 {...register("email")}
               />
@@ -142,7 +143,7 @@ export default function RegisterPage() {
           {/* Password field */}
           <div className="space-y-1.5">
             <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider block">
-              Master Access Key (Password)
+              Password
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-muted-foreground pointer-events-none">
@@ -173,11 +174,24 @@ export default function RegisterPage() {
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
               <>
-                <span>Configure Environment</span>
+                <span>Create Account</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
+
+          {/* Divider */}
+          <div className="relative my-6 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <span className="relative z-10 px-3 bg-[#090d16] text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+              OR
+            </span>
+          </div>
+
+          {/* Google OAuth Button */}
+          <GoogleSsoButton label="Sign up with Google Account" disabled={isLoading} />
 
           {/* Navigation Footer */}
           <div className="text-center mt-6">

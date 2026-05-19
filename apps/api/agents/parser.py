@@ -40,8 +40,7 @@ logger = logging.getLogger(__name__)
 _llm = ChatGoogleGenerativeAI(
     model=settings.ACTION_MODEL,
     temperature=0,
-    google_api_key="AIzaSyBPYtSTusmiOFfp6704FlnmKWtIC-kkpiU"
-    # google_api_key=settings.GEMINI_API_KEY,
+    google_api_key=settings.GEMINI_API_KEY,
 )
 
 

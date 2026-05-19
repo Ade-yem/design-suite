@@ -66,6 +66,10 @@ class Settings(BaseSettings):
         Semantic version string embedded in OpenAPI metadata.
     GEMINI_API_KEY : str
         Google Gemini API key for AI agent calls.
+    GOOGLE_CLIENT_ID : str
+        Google OAuth client ID.
+    GOOGLE_CLIENT_SECRET : str
+        Google OAuth client secret.
     """
 
     model_config = SettingsConfigDict(
@@ -77,7 +81,8 @@ class Settings(BaseSettings):
 
     # ── App ───────────────────────────────────────────────────────────────────
     APP_ENV: str = os.getenv("APP_ENV") or "development"
-    APP_URL: str = "http://localhost:3000"
+    APP_URL: str = "http://localhost:5000"
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL") or "http://localhost:3000"
     SECRET_KEY: str = os.getenv("SECRET_KEY") or "change-me-in-production"
     JWT_LIFETIME_SECONDS: int = int(os.getenv("JWT_LIFETIME_SECONDS") or "") if os.getenv("JWT_LIFETIME_SECONDS") else 3600
 
@@ -108,7 +113,7 @@ class Settings(BaseSettings):
     API_VERSION: str = "1.0.0"
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY") or ""
     GOOGLE_CLIENT_ID: str =os.getenv("GOOGLE_CLIENT_ID") or ""
-    GOOGLE_CLIENT_SCERET: str =os.getenv("GOOGLE_CLIENT_SCERET") or ""
+    GOOGLE_CLIENT_SECRET: str =os.getenv("GOOGLE_CLIENT_SECRET") or ""
     THINKING_MODEL: str = "gemini-3.1-flash-lite"
     ACTION_MODEL: str = "gemini-3.1-flash-lite"
     RESEND_API_KEY: str =os.getenv("RESEND_API_KEY") or ""

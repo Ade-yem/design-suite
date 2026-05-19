@@ -18,6 +18,7 @@ design_service.clear(project_id)                                      → None
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
@@ -194,6 +195,7 @@ class DesignService:
 
         _store.set(project_id, output)
         project_store.advance_status(project_id, ProjectStatus.DESIGN_COMPLETE)
+        await self._db_save_design(project_id, output)
 
         logger.info(
             "Design complete for project %s: %d member(s), code=%s.",
@@ -338,6 +340,42 @@ class DesignService:
         project_id : str
         """
         _store.clear(project_id)
+
+    # ── DB persistence helper ─────────────────────────────────────────────────
+
+    async def _db_save_design(self, project_id: str, output: dict) -> None:
+        """Upsert design output to ProjectDesign. Silent no-op if DB unavailable."""
+        try:
+            from db.session import get_session_maker
+            from db.models.pipeline import ProjectDesign
+            from sqlalchemy import select
+
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                row = (await session.execute(
+                    select(ProjectDesign).where(ProjectDesign.project_id == project_id)
+                )).scalar_one_or_none()
+
+                out_str = json.dumps(output)
+                design_id = output.get("design_id", "")
+                design_code = output.get("design_code", "BS8110")
+
+                if row:
+                    row.output = out_str
+                    row.design_id = design_id
+                    row.design_code = design_code
+                else:
+                    session.add(ProjectDesign(
+                        project_id=project_id,
+                        design_id=design_id,
+                        design_code=design_code,
+                        output=out_str,
+                    ))
+                await session.commit()
+        except RuntimeError:
+            pass  # DATABASE_URL not configured
+        except Exception as exc:
+            logger.warning("DB design save failed for project %s: %s", project_id, exc)
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

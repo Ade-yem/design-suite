@@ -12,7 +12,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { apiClient, ApiError } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { Lock, RefreshCw, KeyRound, CheckCircle2, ArrowRight } from "lucide-react";
+import {
+  Lock,
+  RefreshCw,
+  KeyRound,
+  CheckCircle2,
+  ArrowRight,
+} from "lucide-react";
 import { ResetPasswordPayload } from "@/types/auth";
 
 // Form validation schemas ensuring password matches and is secure
@@ -61,13 +67,16 @@ function ResetPasswordContent() {
         password: data.password,
       };
 
-      await apiClient.post<void>("/auth/reset-password", payload);
+      await apiClient.post<void>("/api/auth/reset-password", payload);
 
       setIsSuccess(true);
       toast.success("Security key updated successfully!");
     } catch (err: unknown) {
       const apiErr = err as ApiError;
-      toast.error(apiErr.detail || "Unable to reset security credentials. The token may have expired.");
+      toast.error(
+        apiErr.detail ||
+          "Unable to reset security credentials. The token may have expired.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -86,10 +95,9 @@ function ResetPasswordContent() {
           Override Security Key
         </h1>
         <p className="text-muted-foreground text-xs font-mono mt-1 text-center leading-relaxed">
-          {isSuccess 
-            ? "Credentials updated successfully." 
-            : "Enter a new secure password display credentials."
-          }
+          {isSuccess
+            ? "Credentials updated successfully."
+            : "Enter a new secure password display credentials."}
         </p>
       </div>
 
@@ -101,7 +109,8 @@ function ResetPasswordContent() {
               <CheckCircle2 className="w-10 h-10 text-success" />
             </div>
             <p className="text-muted-foreground text-xs font-mono text-center leading-relaxed">
-              Your password key has been updated successfully. You may now return to the login screen and authenticate.
+              Your password key has been updated successfully. You may now
+              return to the login screen and authenticate.
             </p>
           </div>
 
@@ -117,7 +126,6 @@ function ResetPasswordContent() {
       ) : (
         /* ── Screen: Form Input ── */
         <form onSubmit={handleSubmit(onResetSubmit)} className="space-y-5">
-          
           {/* New password input */}
           <div className="space-y-1.5">
             <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider block">
@@ -193,12 +201,14 @@ export default function ResetPasswordPage() {
       {/* Background ambient highlights */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-[100px] pointer-events-none" />
-      
-      <Suspense fallback={
-        <div className="w-full max-w-md bg-card/45 backdrop-blur-md border border-border rounded-xl p-8 flex items-center justify-center">
-          <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-        </div>
-      }>
+
+      <Suspense
+        fallback={
+          <div className="w-full max-w-md bg-card/45 backdrop-blur-md border border-border rounded-xl p-8 flex items-center justify-center">
+            <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+          </div>
+        }
+      >
         <ResetPasswordContent />
       </Suspense>
     </div>

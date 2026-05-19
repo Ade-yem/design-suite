@@ -19,6 +19,8 @@ loading_service.clear(project_id)                           → None
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -102,6 +104,7 @@ class LoadingService:
             ``{project_id, status, design_code, occupancy_category, created_at}``
         """
         _store.set_definition(project_id, definition)
+        self._schedule_db_save(self._db_save_loads(project_id, definition, None))
         logger.info(
             "Load definition stored for project %s. Code: %s, Occupancy: %s.",
             project_id,
@@ -202,6 +205,7 @@ class LoadingService:
         output = self._run_engine(project_id, definition)
         _store.set_output(project_id, output)
         project_store.advance_status(project_id, ProjectStatus.LOADING_DEFINED)
+        self._schedule_db_save(self._db_save_loads(project_id, definition, output))
 
         logger.info(
             "Load combinations computed for project %s: %d member(s), code=%s.",
@@ -294,6 +298,52 @@ class LoadingService:
         project_id : str
         """
         _store.clear(project_id)
+
+    # ── DB persistence helpers ────────────────────────────────────────────────
+
+    async def _db_save_loads(self, project_id: str, definition: dict, output: dict | None) -> None:
+        """Upsert load definition and output to ProjectLoad. Silent no-op if DB unavailable."""
+        from config import settings
+        if settings.PROJECT_STORE_BACKEND != "postgres":
+            return
+        try:
+            from db.session import get_session_maker
+            from db.models.project import ProjectLoad
+            from sqlalchemy import select
+
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                row = (await session.execute(
+                    select(ProjectLoad).where(ProjectLoad.project_id == project_id)
+                )).scalar_one_or_none()
+
+                def_str = json.dumps(definition)
+                out_str = json.dumps(output) if output is not None else None
+
+                if row:
+                    row.definition = def_str
+                    if out_str is not None:
+                        row.output = out_str
+                else:
+                    session.add(ProjectLoad(
+                        project_id=project_id,
+                        definition=def_str,
+                        output=out_str,
+                    ))
+                await session.commit()
+        except RuntimeError:
+            pass  # DATABASE_URL not configured
+        except Exception as exc:
+            logger.warning("DB load save failed for project %s: %s", project_id, exc)
+
+    def _schedule_db_save(self, coro) -> None:
+        """Schedule a DB-write coroutine on the running event loop (fire-and-forget)."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(coro)
+        except RuntimeError:
+            pass
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

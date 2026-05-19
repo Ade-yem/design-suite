@@ -21,6 +21,7 @@ file_service.clear(project_id)                   → None
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -183,6 +184,7 @@ class FileService:
 
         _store.set_parsed(project_id, parsed)
         _store.set_scale(project_id, scale_dict)
+        self._schedule_db_save(self._db_save_geometry(project_id, parsed, scale_dict))
 
         # Register all detected members with the project store
         for member in parsed.get("members", []):
@@ -287,6 +289,8 @@ class FileService:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         _store.set_scale(project_id, new_scale)
+        parsed_after = _store.get_parsed(project_id) or {}
+        self._schedule_db_save(self._db_save_geometry(project_id, parsed_after, new_scale))
 
         # Rescale spans_m in cached geometry
         parsed = _store.get_parsed(project_id)
@@ -348,6 +352,8 @@ class FileService:
             _store.set_parsed(project_id, parsed)
 
         project_store.advance_status(project_id, ProjectStatus.GEOMETRY_VERIFIED)
+        scale = _store.get_scale(project_id) or {}
+        self._schedule_db_save(self._db_save_geometry(project_id, parsed, scale))
         member_count = len(parsed.get("members", []))
 
         logger.info(
@@ -385,6 +391,53 @@ class FileService:
         project_id : str
         """
         _store.clear(project_id)
+
+    # ── DB persistence helpers ────────────────────────────────────────────────
+
+    async def _db_save_geometry(self, project_id: str, geometry: dict, scale: dict) -> None:
+        """Upsert parsed geometry and scale to ProjectGeometry. Silent no-op if DB unavailable."""
+        from config import settings
+        if settings.PROJECT_STORE_BACKEND != "postgres":
+            return
+        try:
+            from db.session import get_session_maker
+            from db.models.project import ProjectGeometry
+            from sqlalchemy import select
+
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                row = (await session.execute(
+                    select(ProjectGeometry).where(ProjectGeometry.project_id == project_id)
+                )).scalar_one_or_none()
+
+                geo_str = json.dumps(geometry)
+                scale_str = json.dumps(scale)
+                now = datetime.now(timezone.utc)
+
+                if row:
+                    row.geometry = geo_str
+                    row.scale_json = scale_str
+                    row.updated_at = now
+                else:
+                    session.add(ProjectGeometry(
+                        project_id=project_id,
+                        geometry=geo_str,
+                        scale_json=scale_str,
+                    ))
+                await session.commit()
+        except RuntimeError:
+            pass  # DATABASE_URL not configured
+        except Exception as exc:
+            logger.warning("DB geometry save failed for project %s: %s", project_id, exc)
+
+    def _schedule_db_save(self, coro) -> None:
+        """Schedule a DB-write coroutine on the running event loop (fire-and-forget)."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(coro)
+        except RuntimeError:
+            pass
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

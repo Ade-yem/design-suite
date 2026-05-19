@@ -111,7 +111,8 @@ async def _parse_file_background(
     job_id: str,
 ) -> None:
     """
-    Background task: invoke ``file_service.parse()`` and update the job store.
+    Background task: invoke ``file_service.parse()`` then run LLM member
+    extraction if the low-level parser found no classified members.
 
     Parameters
     ----------
@@ -124,7 +125,22 @@ async def _parse_file_background(
     """
     job_store.mark_running(job_id, "Parsing file…")
     try:
-        await file_service.parse(project_id, file_path)
+        parsed = await file_service.parse(project_id, file_path)
+
+        # ezdxf extracts raw geometry only; run LLM classification when no
+        # members were identified by the DXF/PDF parser itself.
+        if not parsed.get("members"):
+            job_store.update_progress(job_id, 60.0, "Classifying structural members…")
+            from agents.parser import _run_llm_member_extraction
+            from storage.project_store import project_store as _pstore
+            members = await _run_llm_member_extraction(project_id, parsed)
+            parsed["members"] = members
+            file_service.register_geometry(project_id, parsed)
+            for member in members:
+                mid = member.get("member_id")
+                if mid:
+                    _pstore.register_member(project_id, mid)
+
         job_store.mark_complete(job_id, result_url=f"/api/v1/files/{project_id}/parsed")
         logger.info("Parsing complete for project %s.", project_id)
     except Exception as exc:

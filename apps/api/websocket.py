@@ -10,6 +10,7 @@ in real-time to the React UI.
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from agents.graph import app as graph
 from langchain_core.messages import HumanMessage
+from storage.project_store import project_store
 import logging
 import json
 
@@ -33,10 +34,13 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
                 continue
 
             config = {"configurable": {"thread_id": project_id}}
-            
+
+            stored_status = project_store.get_status(project_id)
+            pipeline_status = stored_status.label() if stored_status is not None else "created"
+
             # Send streaming updates back to frontend
             async for event in graph.astream_events(
-                {"messages": [HumanMessage(content=user_text)], "project_id": project_id, "pipeline_status": "created"},
+                {"messages": [HumanMessage(content=user_text)], "project_id": project_id, "pipeline_status": pipeline_status},
                 config=config,
                 version="v2"
             ):

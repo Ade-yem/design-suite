@@ -6,21 +6,29 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuthStore } from "@/stores/authStore";
-import { apiClient, ApiError } from "@/lib/api";
+import { apiClient, ApiError, getFriendlyErrorMessage } from "@/lib/api";
 import { toast, Toaster } from "sonner";
-import { ShieldCheck, Mail, Lock, LogIn, ArrowRight, RefreshCw, KeyRound } from "lucide-react";
-import { Google } from "@/components/icon/google";
-import { 
-  AuthResponse, 
-  LoginResponse, 
-  UserProfile, 
-  TwoFactorVerifyPayload, 
-  is2faChallenge 
+import {
+  ShieldCheck,
+  Mail,
+  Lock,
+  LogIn,
+  ArrowRight,
+  RefreshCw,
+  KeyRound,
+} from "lucide-react";
+import { GoogleSsoButton } from "@/components/auth/GoogleSsoButton";
+import {
+  AuthResponse,
+  LoginResponse,
+  UserProfile,
+  TwoFactorVerifyPayload,
+  is2faChallenge,
 } from "@/types/auth";
 
 // Form input validations using Zod schemas
 const loginSchema = z.object({
-  email: z.email("Please enter a valid engineering email address."),
+  email: z.email("Please enter a valid email address."),
   password: z.string().min(6, "Password must be at least 6 characters."),
 });
 
@@ -28,13 +36,13 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { 
-    is2faRequired, 
-    pendingEmail, 
-    pendingUserId, 
-    setAuth, 
-    set2faChallenge, 
-    clearAuth 
+  const {
+    is2faRequired,
+    pendingEmail,
+    pendingUserId,
+    setAuth,
+    set2faChallenge,
+    clearAuth,
   } = useAuthStore();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -79,40 +87,45 @@ export default function LoginPage() {
       formData.append("password", data.password);
 
       const response = await apiClient.post<AuthResponse>(
-        "/auth/jwt/login",
+        "/api/auth/jwt/login",
         formData,
-        { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
       );
 
       // Handle 2FA Challenge interception using type guard
       if (is2faChallenge(response.data)) {
         set2faChallenge(response.data.user_id, response.data.email);
-        toast.info("Stateful 2FA Required. We've dispatched a PIN code to your email.");
+        toast.info(
+          "Stateful 2FA Required. We've dispatched a PIN code to your email.",
+        );
         setIsLoading(false);
         return;
       }
-      
+
       // Standard Login Success (TypeScript knows this is LoginResponse)
       const token = response.data.access_token;
-      
+
       // 2. Fetch logged-in user profile details
       toast.info("Login successful. We are taking you to your environment.");
-      const userProfileResponse = await apiClient.get<UserProfile>("/users/me", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const userProfileResponse = await apiClient.get<UserProfile>(
+        "/api/users/me",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       // 3. Save to Zustand Auth Store
       setAuth(
         userProfileResponse.data,
         token,
-        userProfileResponse.data.organisation
+        userProfileResponse.data.organisation,
       );
 
       toast.success("Welcome back! Loading CAD Workspace...");
       router.push("/");
     } catch (err: unknown) {
       const apiErr = err as ApiError;
-      toast.error(apiErr.detail || "Incorrect username or password. Please verify credentials.");
+      toast.error(getFriendlyErrorMessage(apiErr.detail));
     } finally {
       setIsLoading(false);
     }
@@ -140,71 +153,73 @@ export default function LoginPage() {
         code: otpCode,
       };
 
-      const response = await apiClient.post<LoginResponse>("/auth/jwt/two-factor-verify", payload);
+      const response = await apiClient.post<LoginResponse>(
+        "/api/auth/jwt/two-factor-verify",
+        payload,
+      );
 
       const token = response.data.access_token;
 
       // Fetch profile
-      const userProfileResponse = await apiClient.get<UserProfile>("/users/me", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const userProfileResponse = await apiClient.get<UserProfile>(
+        "/api/users/me",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       setAuth(
         userProfileResponse.data,
         token,
-        userProfileResponse.data.organisation
+        userProfileResponse.data.organisation,
       );
 
       toast.success("Two-Factor Verified! Entry Granted.");
       router.push("/");
     } catch (err: unknown) {
       const apiErr = err as ApiError;
-      toast.error(apiErr.detail || "Verification failed. Incorrect or expired PIN.");
+      toast.error(getFriendlyErrorMessage(apiErr.detail));
     } finally {
       setIsLoading(false);
     }
   };
 
-  /**
-   * Initiate OAuth Single-Sign-On redirect.
-   */
-  const handleGoogleSso = () => {
-    const redirectUrl = `${window.location.origin}/auth/google/callback`;
-    window.location.href = `/auth/google/authorize?redirect_uri=${encodeURIComponent(redirectUrl)}`;
-  };
+
 
   return (
     <div className="relative min-h-screen bg-canvas-bg dot-grid flex items-center justify-center p-4 overflow-hidden">
       <Toaster position="top-right" theme="dark" closeButton richColors />
-      
+
       {/* Visual background ambient glow highlights */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Main Container Card */}
       <div className="w-full max-w-md bg-card/45 backdrop-blur-md border border-border rounded-xl p-8 shadow-2xl relative z-10 animate-fade-in-up">
-        
-        {/* Engineering Header Profile */}
+        {/* Header Profile */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-12 h-12 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-center mb-3 glow-blue">
             <ShieldCheck className="w-6 h-6 text-primary" />
           </div>
           <h1 className="text-xl font-bold font-sans tracking-wide text-foreground">
-            {is2faRequired ? "Security Verification" : "Structural Design Copilot"}
+            {is2faRequired
+              ? "Security Verification"
+              : "Structural Design Copilot"}
           </h1>
           <p className="text-muted-foreground text-xs font-mono mt-1 text-center">
-            {is2faRequired 
-              ? `Verification dispatch active for ${pendingEmail}` 
-              : "Enter credentials to access CAD environments."
-            }
+            {is2faRequired
+              ? `Verification dispatch active for ${pendingEmail}`
+              : "Enter credentials to access CAD environments."}
           </p>
         </div>
 
         {/* Dynamic Screen Routing */}
         {!is2faRequired ? (
           /* ── Standard Credentials Screen ── */
-          <form onSubmit={handleSubmit(onCredentialsSubmit)} className="space-y-5">
-            
+          <form
+            onSubmit={handleSubmit(onCredentialsSubmit)}
+            className="space-y-5"
+          >
             {/* Email field */}
             <div className="space-y-1.5">
               <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider block">
@@ -288,15 +303,7 @@ export default function LoginPage() {
             </div>
 
             {/* Google OAuth Button */}
-            <button
-              type="button"
-              onClick={handleGoogleSso}
-              disabled={isLoading}
-              className="w-full bg-secondary/20 hover:bg-secondary/45 border border-border text-foreground rounded-lg py-2.5 text-sm font-medium flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-[0.98]"
-            >
-              <Google className="w-4 h-4 text-primary" />
-              <span>Continue with Google Account</span>
-            </button>
+            <GoogleSsoButton label="Continue with Google Account" disabled={isLoading} />
 
             {/* Footer Onboarding Routing */}
             <div className="text-center mt-6">
@@ -314,15 +321,17 @@ export default function LoginPage() {
         ) : (
           /* ── Stateful 2FA Verification Screen ── */
           <form onSubmit={onOtpSubmit} className="space-y-6">
-            
             {/* OTP description details */}
             <div className="bg-secondary/25 border border-border rounded-lg p-4 space-y-2">
               <div className="flex items-center space-x-2 text-primary">
                 <KeyRound className="w-4 h-4" />
-                <span className="text-xs font-mono font-bold uppercase tracking-wider">Verification Key Required</span>
+                <span className="text-xs font-mono font-bold uppercase tracking-wider">
+                  Verification Key Required
+                </span>
               </div>
               <p className="text-muted-foreground text-[11px] leading-relaxed font-sans">
-                We have emailed a 6-digit verification code PIN. Please retrieve it to verify authentication profile.
+                We have emailed a 6-digit verification code PIN. Please retrieve
+                it to verify authentication profile.
               </p>
             </div>
 
@@ -340,12 +349,13 @@ export default function LoginPage() {
                 placeholder="0 0 0 0 0 0"
                 className="w-full bg-secondary/35 border border-border focus:border-primary/50 text-center tracking-[0.75em] text-lg font-mono rounded-lg py-3 outline-none transition-all placeholder:text-muted-foreground/35"
               />
-              
+
               {/* Cooldown timer visual indicator */}
               <div className="flex justify-between items-center text-[10px] font-mono text-muted-foreground px-1 mt-1">
                 <span>Verification session expires in:</span>
                 <span className="text-primary font-bold">
-                  {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, "0")}
+                  {Math.floor(countdown / 60)}:
+                  {(countdown % 60).toString().padStart(2, "0")}
                 </span>
               </div>
             </div>
