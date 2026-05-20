@@ -2,7 +2,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from main import app
 from storage.project_store import project_store
-from schemas.project import ProjectCreate
+from schemas.project import ProjectCreate, ProjectStatus
 
 @pytest.fixture(autouse=True)
 def clear_stores():
@@ -25,6 +25,19 @@ def test_project():
     )
     project = project_store.create(data)
     return project.model_dump()
+
+@pytest.fixture
+def geometry_verified_project():
+    """Project already past Gate 1 — GEOMETRY_VERIFIED status."""
+    data = ProjectCreate(
+        name="Test Project",
+        reference="REF-123",
+        client="Test Client",
+        design_code="BS8110"
+    )
+    project = project_store.create(data)
+    project_store.advance_status(project.project_id, ProjectStatus.GEOMETRY_VERIFIED)
+    return project_store.get(project.project_id).model_dump()
 
 @pytest.fixture
 async def project_with_loads_defined(async_client, test_project):
