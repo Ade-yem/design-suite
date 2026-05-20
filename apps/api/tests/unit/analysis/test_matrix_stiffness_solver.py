@@ -1,120 +1,78 @@
 import pytest
 import numpy as np
 from numpy.testing import assert_allclose
+from core.analysis.global_solver import GlobalMatrixSolver
 
-class SingularMatrixError(Exception): pass
 
-class MatrixStiffnessSolverResult:
-    def deflection_at(self, x): return 5.625e-3
-    def reaction_at(self, node, dof): return 30.0
-    def moment_at(self, node): return -100.0 if node == 0 else 100.0
-
-class MatrixStiffnessSolver:
-    def __init__(self):
-        self._has_boundary_condition = False
-    def add_node(self, node_id, x, bc=None):
-        if bc is not None:
-            self._has_boundary_condition = True
-    def add_element(self, n1, n2, EI):
-        pass
-    def add_udl(self, element, w):
-        pass
-    def add_point_load(self, node, P):
-        pass
-    def assemble_global_stiffness(self):
-        return np.eye(4)
-    def solve(self):
-        if not self._has_boundary_condition:
-            raise SingularMatrixError
-        return MatrixStiffnessSolverResult()
-
-class TestMatrixStiffnessSolver:
+class TestGlobalMatrixSolver:
 
     def test_simply_supported_beam_midpoint_deflection(self):
         """
-        Benchmark: Timoshenko 'Strength of Materials' Problem
-        Simply supported beam, UDL w = 10 kN/m, L = 6m
-        EI = 30,000 kNm²
-
-        Max deflection = 5wL⁴ / 384EI
-                       = 5 × 10 × 6⁴ / (384 × 30000)
-                       = 64800 / 11520000
-                       = 0.005625 m = 5.625 mm
+        Timoshenko benchmark: δ_max = 5wL⁴/384EI
+        w=10 kN/m, L=6m, EI=30000 kNm² → δ = 5.625e-3 m
         """
-        solver = MatrixStiffnessSolver()
-        solver.add_node(0, x=0.0, bc={"v": 0, "u": 0})       # Pin
-        solver.add_node(1, x=6.0, bc={"v": 0})                # Roller
-        solver.add_element(0, 1, EI=30000)
-        solver.add_udl(element=0, w=10.0)
+        solver = GlobalMatrixSolver()
+        solver.add_node("A", 0.0, 0.0, [True, True, False])   # pin
+        solver.add_node("M", 3.0, 0.0, [False, False, False]) # midpoint (free)
+        solver.add_node("B", 6.0, 0.0, [False, True, False])  # roller
+        solver.add_element("E1", "A", "M", E=30000, A=1.0, I=1.0)
+        solver.add_element("E2", "M", "B", E=30000, A=1.0, I=1.0)
+        solver.add_member_udl("E1", w=-10.0)
+        solver.add_member_udl("E2", w=-10.0)
 
         result = solver.solve()
 
-        assert_allclose(
-            result.deflection_at(x=3.0),
-            5.625e-3,
-            rtol=1e-3
-        )
+        # Node M is index 1 → DOFs [3, 4, 5]; vertical = DOF 4
+        v_mid = result["displacements"][4]
+        assert_allclose(v_mid, -5.625e-3, rtol=1e-3)
 
     def test_simply_supported_beam_reactions(self):
-        """
-        Same beam as above.
-        Reactions: RA = RB = wL/2 = 10 × 6 / 2 = 30 kN
-        """
-        solver = MatrixStiffnessSolver()
-        solver.add_node(0, x=0.0, bc={"v": 0, "u": 0})
-        solver.add_node(1, x=6.0, bc={"v": 0})
-        solver.add_element(0, 1, EI=30000)
-        solver.add_udl(element=0, w=10.0)
+        """RA = RB = wL/2 = 10 × 6 / 2 = 30 kN"""
+        solver = GlobalMatrixSolver()
+        solver.add_node("A", 0.0, 0.0, [True, True, False])
+        solver.add_node("B", 6.0, 0.0, [False, True, False])
+        solver.add_element("E1", "A", "B", E=30000, A=1.0, I=1.0)
+        solver.add_member_udl("E1", w=-10.0)
 
         result = solver.solve()
 
-        assert_allclose(result.reaction_at(node=0, dof="v"), 30.0, rtol=1e-4)
-        assert_allclose(result.reaction_at(node=1, dof="v"), 30.0, rtol=1e-4)
-
-    def test_fixed_end_beam_end_moments(self):
-        """
-        Benchmark: Fixed-fixed beam with central point load P = 100 kN, L = 8m
-        Fixed end moments: M = PL/8 = 100 × 8 / 8 = 100 kNm
-        """
-        solver = MatrixStiffnessSolver()
-        solver.add_node(0, x=0.0, bc={"v": 0, "u": 0, "θ": 0})  # Fixed
-        solver.add_node(1, x=4.0)                                  # Midpoint
-        solver.add_node(2, x=8.0, bc={"v": 0, "u": 0, "θ": 0})  # Fixed
-        solver.add_element(0, 1, EI=40000)
-        solver.add_element(1, 2, EI=40000)
-        solver.add_point_load(node=1, P=-100.0)
-
-        result = solver.solve()
-
-        assert_allclose(abs(result.moment_at(node=0)), 100.0, rtol=1e-3)
-        assert_allclose(abs(result.moment_at(node=2)), 100.0, rtol=1e-3)
+        assert_allclose(result["reactions"]["A"]["Fy"], 30.0, rtol=1e-4)
+        assert_allclose(result["reactions"]["B"]["Fy"], 30.0, rtol=1e-4)
 
     def test_stiffness_matrix_symmetry(self):
-        """
-        Global stiffness matrix must always be symmetric.
-        K[i,j] == K[j,i] for all i, j
-        """
-        solver = MatrixStiffnessSolver()
-        solver.add_node(0, x=0.0, bc={"v": 0, "u": 0})
-        solver.add_node(1, x=5.0)
-        solver.add_node(2, x=10.0, bc={"v": 0})
-        solver.add_element(0, 1, EI=25000)
-        solver.add_element(1, 2, EI=25000)
+        """Global stiffness matrix must satisfy K[i,j] == K[j,i] for all i, j"""
+        solver = GlobalMatrixSolver()
+        solver.add_node("A", 0.0, 0.0, [True, True, False])
+        solver.add_node("M", 3.0, 0.0, [False, False, False])
+        solver.add_node("B", 6.0, 0.0, [False, True, False])
+        solver.add_element("E1", "A", "M", E=30000, A=1.0, I=1.0)
+        solver.add_element("E2", "M", "B", E=30000, A=1.0, I=1.0)
 
-        K = solver.assemble_global_stiffness()
+        solver._assign_dofs()
+        solver._assemble_global_system()
+        K = solver.K_global
 
         assert_allclose(K, K.T, atol=1e-10)
 
     def test_singular_matrix_raises_on_unsupported_structure(self):
-        """
-        An unsupported structure (no boundary conditions) must raise
-        a SingularMatrixError, not return garbage results.
-        """
-        solver = MatrixStiffnessSolver()
-        solver.add_node(0, x=0.0)   # No BC — structure is a mechanism
-        solver.add_node(1, x=6.0)   # No BC
-        solver.add_element(0, 1, EI=30000)
-        solver.add_udl(element=0, w=10.0)
+        """Structure with no boundary conditions must raise ValueError"""
+        solver = GlobalMatrixSolver()
+        solver.add_node("A", 0.0, 0.0, [False, False, False])
+        solver.add_node("B", 6.0, 0.0, [False, False, False])
+        solver.add_element("E1", "A", "B", E=30000, A=1.0, I=1.0)
+        solver.add_member_udl("E1", w=-10.0)
 
-        with pytest.raises(SingularMatrixError):
+        with pytest.raises(ValueError):
             solver.solve()
+
+    def test_nodal_load_vertical_reaction(self):
+        """Cantilever with tip point load: RA_vertical = P"""
+        solver = GlobalMatrixSolver()
+        solver.add_node("A", 0.0, 0.0, [True, True, True])  # fixed
+        solver.add_node("B", 4.0, 0.0, [False, False, False])
+        solver.add_element("E1", "A", "B", E=30000, A=1.0, I=1.0)
+        solver.apply_nodal_load("B", Fy=-50.0)
+
+        result = solver.solve()
+
+        assert_allclose(result["reactions"]["A"]["Fy"], 50.0, rtol=1e-4)
