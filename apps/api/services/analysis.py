@@ -108,7 +108,7 @@ class AnalysisService:
             If no load output is available for this project.
         """
         opts = options or {}
-        all_ids = member_ids or project_store.get_member_ids(project_id)
+        all_ids = member_ids or await project_store.get_member_ids(project_id)
 
         # Validate prerequisites
         from services.loading import loading_service
@@ -190,7 +190,7 @@ class AnalysisService:
         }
 
         _store.set(project_id, output)
-        project_store.advance_status(project_id, ProjectStatus.ANALYSIS_COMPLETE)
+        await project_store.advance_status(project_id, ProjectStatus.ANALYSIS_COMPLETE)
         await self._db_save_analysis(project_id, output)
 
         logger.info(

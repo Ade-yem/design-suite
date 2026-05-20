@@ -5,10 +5,12 @@ from storage.project_store import project_store
 from schemas.project import ProjectCreate, ProjectStatus
 
 @pytest.fixture(autouse=True)
-def clear_stores():
+async def clear_stores():
     """Ensure a clean slate for every test."""
-    project_store._projects.clear()
-    project_store._members.clear()
+    if hasattr(project_store, "_projects"):
+        project_store._projects.clear()
+    if hasattr(project_store, "_members"):
+        project_store._members.clear()
 
 @pytest.fixture
 async def async_client():
@@ -16,18 +18,18 @@ async def async_client():
         yield client
 
 @pytest.fixture
-def test_project():
+async def test_project():
     data = ProjectCreate(
         name="Test Project",
         reference="REF-123",
         client="Test Client",
         design_code="BS8110"
     )
-    project = project_store.create(data)
+    project = await project_store.create(data)
     return project.model_dump()
 
 @pytest.fixture
-def geometry_verified_project():
+async def geometry_verified_project():
     """Project already past Gate 1 — GEOMETRY_VERIFIED status."""
     data = ProjectCreate(
         name="Test Project",
@@ -35,21 +37,24 @@ def geometry_verified_project():
         client="Test Client",
         design_code="BS8110"
     )
-    project = project_store.create(data)
-    project_store.advance_status(project.project_id, ProjectStatus.GEOMETRY_VERIFIED)
-    return project_store.get(project.project_id).model_dump()
+    project = await project_store.create(data)
+    await project_store.advance_status(project.project_id, ProjectStatus.GEOMETRY_VERIFIED)
+    resolved = await project_store.get(project.project_id)
+    assert resolved is not None
+    return resolved.model_dump()
 
 @pytest.fixture
 async def project_with_loads_defined(async_client, test_project):
     # Stub fixture for integration testing
-    return test_project
+    return await test_project
 
 @pytest.fixture
 async def project_with_analysis_complete(async_client, test_project):
     # Stub fixture
-    return test_project
+    return await test_project
 
 @pytest.fixture
 async def project_with_design_failures(async_client, test_project):
     # Stub fixture
-    return {"project_id": test_project["project_id"], "failed_member_id": "B-01"}
+    proj = await test_project
+    return {"project_id": proj["project_id"], "failed_member_id": "B-01"}

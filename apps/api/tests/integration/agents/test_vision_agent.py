@@ -46,7 +46,7 @@ class TestVisionAgentProduction:
             pytest.skip(f"Real drawing file not found at: {dxf_path}")
 
         # Initialize mock project in database
-        project = project_store.create(
+        project = await project_store.create(
             ProjectCreate(
                 name="Unit Test Project",
                 reference="REF-UNIT",
@@ -80,7 +80,7 @@ class TestVisionAgentProduction:
         if not os.path.exists(dxf_path):
             pytest.skip(f"Real drawing file not found at: {dxf_path}")
 
-        project = project_store.create(
+        project = await project_store.create(
             ProjectCreate(
                 name="Candidates Test Project",
                 reference="REF-CAND",
@@ -123,7 +123,7 @@ class TestVisionAgentProduction:
         if not os.path.exists(dxf_path):
             pytest.skip(f"Real drawing file not found at: {dxf_path}")
 
-        project = project_store.create(
+        project = await project_store.create(
             ProjectCreate(
                 name="LLM Test Project",
                 reference="REF-LLM",
@@ -185,7 +185,7 @@ class TestVisionAgentProduction:
             pytest.skip(f"Real drawing file not found at: {dxf_path}")
 
         # Create active project
-        project = project_store.create(
+        project = await project_store.create(
             ProjectCreate(
                 name="End-to-End Parser Project",
                 reference="REF-E2E",
@@ -218,7 +218,7 @@ class TestVisionAgentProduction:
         assert len(members) > 0
 
         # 4. Storage registers all member IDs
-        registered_ids = project_store.get_member_ids(project_id)
+        registered_ids = await project_store.get_member_ids(project_id)
         assert len(registered_ids) == len(members)
         for m in members:
             assert m["member_id"] in registered_ids

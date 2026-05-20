@@ -16,7 +16,7 @@ GET    /api/v1/files/{project_id}/parse-status Poll async parsing job status
 Gate enforcement
 ----------------
 ``PUT /verify`` is the mandatory human-in-the-loop gate (Safety Gate 1).
-Until it returns ``{\"status\": \"verified\"}``, the loading, analysis, and design
+Until it returns ``{"status": "verified"}``, the loading, analysis, and design
 endpoints will reject requests for this project.
 """
 
@@ -123,14 +123,14 @@ async def _parse_file_background(
     job_id : str
         Job ID corresponding to this parse operation.
     """
-    job_store.mark_running(job_id, "Parsing file…")
+    await job_store.mark_running(job_id, "Parsing file…")
     try:
         parsed = await file_service.parse(project_id, file_path)
 
         # ezdxf extracts raw geometry only; run LLM classification when no
         # members were identified by the DXF/PDF parser itself.
         if not parsed.get("members"):
-            job_store.update_progress(job_id, 60.0, "Classifying structural members…")
+            await job_store.update_progress(job_id, 60.0, "Classifying structural members…")
             from agents.parser import _run_llm_member_extraction
             from storage.project_store import project_store as _pstore
             members = await _run_llm_member_extraction(project_id, parsed)
@@ -139,13 +139,13 @@ async def _parse_file_background(
             for member in members:
                 mid = member.get("member_id")
                 if mid:
-                    _pstore.register_member(project_id, mid)
+                    await _pstore.register_member(project_id, mid)
 
-        job_store.mark_complete(job_id, result_url=f"/api/v1/files/{project_id}/parsed")
+        await job_store.mark_complete(job_id, result_url=f"/api/v1/files/{project_id}/parsed")
         logger.info("Parsing complete for project %s.", project_id)
     except Exception as exc:
         logger.exception("Parsing failed for project %s.", project_id)
-        job_store.mark_failed(job_id, errors=[str(exc)])
+        await job_store.mark_failed(job_id, errors=[str(exc)])
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ async def upload_file(
         ``FILE_TOO_LARGE``  — exceeds 50 MB.
     """
     saved_path = await file_handler.save(project_id, file)
-    job_id = job_store.create("parsing", project_id=project_id)
+    job_id = await job_store.create("parsing", project_id=project_id)
     background_tasks.add_task(
         _parse_file_background,
         project_id=project_id,
@@ -213,7 +213,7 @@ async def upload_file(
 
 
 @router.get("/{project_id}/parse-status/{job_id}")
-def get_parse_status(project_id: str, job_id: str) -> dict:
+async def get_parse_status(project_id: str, job_id: str) -> dict:
     """
     Poll the status of an async parsing job.
 
@@ -229,7 +229,7 @@ def get_parse_status(project_id: str, job_id: str) -> dict:
     dict
         JobStatus dict for the parse job.
     """
-    job = job_store.get_or_404(job_id)
+    job = await job_store.get_or_404(job_id)
     return job.model_dump()
 
 
@@ -308,7 +308,7 @@ async def verify_geometry(
             status_code=400,
         )
     try:
-        return file_service.verify_geometry(
+        return await file_service.verify_geometry(
             project_id,
             corrections=payload.corrections,
             notes=payload.notes,

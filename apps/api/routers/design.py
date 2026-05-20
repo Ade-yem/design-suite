@@ -74,10 +74,10 @@ async def _run_design_background(
     design_code : str | None
         Code override for this run (BS8110 or EC2).
     """
-    job_store.mark_running(job_id, "Initialising design suite…")
+    await job_store.mark_running(job_id, "Initialising design suite…")
     try:
-        def _progress(step: str, pct: float) -> None:
-            job_store.update_progress(job_id, pct, step)
+        async def _progress(step: str, pct: float) -> None:
+            await job_store.update_progress(job_id, pct, step)
 
         await design_service.run(
             project_id,
@@ -85,17 +85,16 @@ async def _run_design_background(
             design_code=design_code,
             progress_cb=_progress,
         )
-        job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
+        await job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
         logger.info("Design complete for project %s.", project_id)
     except Exception as exc:
         logger.exception("Design failed for project %s.", project_id)
-        job_store.mark_failed(job_id, errors=[str(exc)])
-
+        await job_store.mark_failed(job_id, errors=[str(exc)])
 
 
 # ─── Shared helper ────────────────────────────────────────────────────────────
 
-def _enqueue_design(
+async def _enqueue_design(
     project_id: str,
     background_tasks: BackgroundTasks,
     request: DesignRunRequest,
@@ -113,7 +112,7 @@ def _enqueue_design(
     -------
     DesignJobStarted
     """
-    job_id = job_store.create("design", project_id=project_id)
+    job_id = await job_store.create("design", project_id=project_id)
     background_tasks.add_task(
         _run_design_background,
         project_id=project_id,
@@ -157,7 +156,7 @@ async def run_full_design(
     DesignJobStarted
     """
     logger.info("Full design queued for project %s.", project_id)
-    return _enqueue_design(project_id, background_tasks, request)
+    return await _enqueue_design(project_id, background_tasks, request)
 
 
 @router.post("/{project_id}/beam", response_model=DesignJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -181,7 +180,7 @@ async def design_beams(
     -------
     DesignJobStarted
     """
-    return _enqueue_design(project_id, background_tasks, request)
+    return await _enqueue_design(project_id, background_tasks, request)
 
 
 @router.post("/{project_id}/slab", response_model=DesignJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -205,7 +204,7 @@ async def design_slabs(
     -------
     DesignJobStarted
     """
-    return _enqueue_design(project_id, background_tasks, request)
+    return await _enqueue_design(project_id, background_tasks, request)
 
 
 @router.post("/{project_id}/column", response_model=DesignJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -229,7 +228,7 @@ async def design_columns(
     -------
     DesignJobStarted
     """
-    return _enqueue_design(project_id, background_tasks, request)
+    return await _enqueue_design(project_id, background_tasks, request)
 
 
 @router.post("/{project_id}/wall", response_model=DesignJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -253,7 +252,7 @@ async def design_walls(
     -------
     DesignJobStarted
     """
-    return _enqueue_design(project_id, background_tasks, request)
+    return await _enqueue_design(project_id, background_tasks, request)
 
 
 @router.post("/{project_id}/footing", response_model=DesignJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -277,7 +276,7 @@ async def design_footings(
     -------
     DesignJobStarted
     """
-    return _enqueue_design(project_id, background_tasks, request)
+    return await _enqueue_design(project_id, background_tasks, request)
 
 
 @router.post("/{project_id}/staircase", response_model=DesignJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -301,11 +300,11 @@ async def design_staircases(
     -------
     DesignJobStarted
     """
-    return _enqueue_design(project_id, background_tasks, request)
+    return await _enqueue_design(project_id, background_tasks, request)
 
 
 @router.get("/{project_id}/status/{job_id}")
-def get_design_status(
+async def get_design_status(
     project_id: str,
     job_id: str,
     project: ProjectResponse = Depends(require_analysis_complete),
@@ -324,7 +323,8 @@ def get_design_status(
     dict
         Full JobStatus dict.
     """
-    return job_store.get_or_404(job_id).model_dump()
+    job = await job_store.get_or_404(job_id)
+    return job.model_dump()
 
 
 @router.get("/{project_id}/results", response_model=DesignResultsResponse)
@@ -446,4 +446,4 @@ async def rerun_member_design(
     DesignJobStarted
     """
     request = DesignRunRequest(member_ids=[member_id])
-    return _enqueue_design(project_id, background_tasks, request)
+    return await _enqueue_design(project_id, background_tasks, request)

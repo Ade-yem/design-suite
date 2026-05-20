@@ -66,33 +66,33 @@ def _build_members_payload(project_id: str, member_ids: Any) -> list[dict]:
     # Fetch from design service
     design_results = design_service.get_results(project_id)
     designed_members = design_results.get("members", [])
-    
+
     # Filter by member_ids if specified
     if member_ids != "all" and isinstance(member_ids, list):
         id_set = set(member_ids)
         designed_members = [m for m in designed_members if m.get("member_id") in id_set]
-        
+
     # Fetch loading outputs
     try:
         loading_output = loading_service.get_output(project_id)
         loading_map = {m["member_id"]: m for m in loading_output.get("members", [])}
     except Exception:
         loading_map = {}
-        
+
     # Fetch analysis outputs
     try:
         analysis_results = analysis_service.get_results(project_id)
         analysis_map = {m["member_id"]: m for m in analysis_results.get("members", [])}
     except Exception:
         analysis_map = {}
-        
+
     # Fetch parsed geometry (for floor level, etc.)
     try:
         parsed_geom = file_service.get_parsed(project_id)
         geom_map = {m["member_id"]: m for m in parsed_geom.get("members", [])}
     except Exception:
         geom_map = {}
-        
+
     members_payload = []
     for dm in designed_members:
         mid = dm["member_id"]
@@ -130,18 +130,18 @@ async def upload_structural_file(project_id: str, file_path: str) -> dict:
     dict
         ``{message, job_id, status_url}``
     """
-    job_id = job_store.create("parsing", project_id=project_id)
-    
+    job_id = await job_store.create("parsing", project_id=project_id)
+
     async def parse_bg():
-        job_store.mark_running(job_id, "Parsing file…")
+        await job_store.mark_running(job_id, "Parsing file…")
         try:
             await file_service.parse(project_id, file_path)
-            job_store.mark_complete(job_id, result_url=f"/api/v1/files/{project_id}/parsed")
+            await job_store.mark_complete(job_id, result_url=f"/api/v1/files/{project_id}/parsed")
         except Exception as exc:
-            job_store.mark_failed(job_id, errors=[str(exc)])
-            
+            await job_store.mark_failed(job_id, errors=[str(exc)])
+
     asyncio.create_task(parse_bg())
-    
+
     return {
         "message": "File uploaded. Parsing in progress.",
         "job_id": job_id,
@@ -193,7 +193,7 @@ async def confirm_geometry(
     dict
         ``{status: "verified", member_count, verified_at}``
     """
-    return file_service.verify_geometry(
+    return await file_service.verify_geometry(
         project_id,
         corrections=corrections,
         notes=notes,
@@ -314,7 +314,7 @@ async def run_load_combinations(project_id: str) -> dict:
     dict
         Full loading output with factored loads per member.
     """
-    return loading_service.run_combinations(project_id)
+    return await loading_service.run_combinations(project_id)
 
 
 @tool
@@ -389,26 +389,26 @@ async def run_full_analysis(project_id: str, options: Optional[dict] = None) -> 
     dict
         ``{job_id, status_url, message}``
     """
-    job_id = job_store.create("analysis", project_id=project_id)
-    
+    job_id = await job_store.create("analysis", project_id=project_id)
+
     async def run_analysis_bg():
-        job_store.mark_running(job_id, "Initialising analysis engine…")
+        await job_store.mark_running(job_id, "Initialising analysis engine…")
         try:
-            def _progress(step: str, pct: float) -> None:
-                job_store.update_progress(job_id, pct, step)
-                
+            async def _progress(step: str, pct: float) -> None:
+                await job_store.update_progress(job_id, pct, step)
+
             await analysis_service.run(
                 project_id,
                 member_ids=None,
                 options=options or {},
                 progress_cb=_progress,
             )
-            job_store.mark_complete(job_id, result_url=f"/api/v1/analysis/{project_id}/results")
+            await job_store.mark_complete(job_id, result_url=f"/api/v1/analysis/{project_id}/results")
         except Exception as exc:
-            job_store.mark_failed(job_id, errors=[str(exc)])
-            
+            await job_store.mark_failed(job_id, errors=[str(exc)])
+
     asyncio.create_task(run_analysis_bg())
-    
+
     return {
         "job_id": job_id,
         "status_url": f"/api/v1/analysis/{project_id}/status/{job_id}",
@@ -437,26 +437,26 @@ async def run_member_analysis(
     dict
         ``{job_id, status_url, message}``
     """
-    job_id = job_store.create("analysis", project_id=project_id)
-    
+    job_id = await job_store.create("analysis", project_id=project_id)
+
     async def run_analysis_bg():
-        job_store.mark_running(job_id, "Initialising analysis engine…")
+        await job_store.mark_running(job_id, "Initialising analysis engine…")
         try:
-            def _progress(step: str, pct: float) -> None:
-                job_store.update_progress(job_id, pct, step)
-                
+            async def _progress(step: str, pct: float) -> None:
+                await job_store.update_progress(job_id, pct, step)
+
             await analysis_service.run(
                 project_id,
                 member_ids=member_ids,
                 options={},
                 progress_cb=_progress,
             )
-            job_store.mark_complete(job_id, result_url=f"/api/v1/analysis/{project_id}/results")
+            await job_store.mark_complete(job_id, result_url=f"/api/v1/analysis/{project_id}/results")
         except Exception as exc:
-            job_store.mark_failed(job_id, errors=[str(exc)])
-            
+            await job_store.mark_failed(job_id, errors=[str(exc)])
+
     asyncio.create_task(run_analysis_bg())
-    
+
     return {
         "job_id": job_id,
         "status_url": f"/api/v1/analysis/{project_id}/status/{job_id}",
@@ -527,26 +527,26 @@ async def run_full_design(
     dict
         ``{job_id, status_url, message}``
     """
-    job_id = job_store.create("design", project_id=project_id)
-    
+    job_id = await job_store.create("design", project_id=project_id)
+
     async def run_design_bg():
-        job_store.mark_running(job_id, "Initialising design suite…")
+        await job_store.mark_running(job_id, "Initialising design suite…")
         try:
-            def _progress(step: str, pct: float) -> None:
-                job_store.update_progress(job_id, pct, step)
-                
+            async def _progress(step: str, pct: float) -> None:
+                await job_store.update_progress(job_id, pct, step)
+
             await design_service.run(
                 project_id,
                 member_ids=None,
                 design_code=design_code,
                 progress_cb=_progress,
             )
-            job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
+            await job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
         except Exception as exc:
-            job_store.mark_failed(job_id, errors=[str(exc)])
-            
+            await job_store.mark_failed(job_id, errors=[str(exc)])
+
     asyncio.create_task(run_design_bg())
-    
+
     return {
         "job_id": job_id,
         "status_url": f"/api/v1/design/{project_id}/status/{job_id}",
@@ -575,26 +575,26 @@ async def run_member_design(
     dict
         ``{job_id, status_url, message}``
     """
-    job_id = job_store.create("design", project_id=project_id)
-    
+    job_id = await job_store.create("design", project_id=project_id)
+
     async def run_design_bg():
-        job_store.mark_running(job_id, "Initialising design suite…")
+        await job_store.mark_running(job_id, "Initialising design suite…")
         try:
-            def _progress(step: str, pct: float) -> None:
-                job_store.update_progress(job_id, pct, step)
-                
+            async def _progress(step: str, pct: float) -> None:
+                await job_store.update_progress(job_id, pct, step)
+
             await design_service.run(
                 project_id,
                 member_ids=member_ids,
                 design_code=None,
                 progress_cb=_progress,
             )
-            job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
+            await job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
         except Exception as exc:
-            job_store.mark_failed(job_id, errors=[str(exc)])
-            
+            await job_store.mark_failed(job_id, errors=[str(exc)])
+
     asyncio.create_task(run_design_bg())
-    
+
     return {
         "job_id": job_id,
         "status_url": f"/api/v1/design/{project_id}/status/{job_id}",
@@ -672,26 +672,26 @@ async def rerun_member_design(project_id: str, member_id: str) -> dict:
     dict
         ``{job_id, status_url, message}``
     """
-    job_id = job_store.create("design", project_id=project_id)
-    
+    job_id = await job_store.create("design", project_id=project_id)
+
     async def run_design_bg():
-        job_store.mark_running(job_id, "Initialising design suite…")
+        await job_store.mark_running(job_id, "Initialising design suite…")
         try:
-            def _progress(step: str, pct: float) -> None:
-                job_store.update_progress(job_id, pct, step)
-                
+            async def _progress(step: str, pct: float) -> None:
+                await job_store.update_progress(job_id, pct, step)
+
             await design_service.run(
                 project_id,
                 member_ids=[member_id],
                 design_code=None,
                 progress_cb=_progress,
             )
-            job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
+            await job_store.mark_complete(job_id, result_url=f"/api/v1/design/{project_id}/results")
         except Exception as exc:
-            job_store.mark_failed(job_id, errors=[str(exc)])
-            
+            await job_store.mark_failed(job_id, errors=[str(exc)])
+
     asyncio.create_task(run_design_bg())
-    
+
     return {
         "job_id": job_id,
         "status_url": f"/api/v1/design/{project_id}/status/{job_id}",
@@ -720,8 +720,8 @@ async def generate_drawings(project_id: str) -> dict:
     dict
         ``{job_id, status_url, message}``
     """
-    job_id = job_store.create("drawings", project_id=project_id)
-    job_store.mark_running(job_id, "Generating drawing commands…")
+    job_id = await job_store.create("drawings", project_id=project_id)
+    await job_store.mark_running(job_id, "Generating drawing commands…")
     try:
         design_results = design_service.get_results(project_id)
         members = design_results.get("members", [])
@@ -733,18 +733,18 @@ async def generate_drawings(project_id: str) -> dict:
                 "member_type": member["member_type"],
                 "commands": cmds
             })
-            
+
         from routers.drawings import _drawings_store
         _drawings_store[project_id] = drawing_commands
-        job_store.mark_complete(job_id)
-        
+        await job_store.mark_complete(job_id)
+
         return {
             "job_id": job_id,
             "status_url": f"/api/v1/drawings/{project_id}/status/{job_id}",
             "message": "Drawing generation in progress."
         }
     except Exception as exc:
-        job_store.mark_failed(job_id, errors=[str(exc)])
+        await job_store.mark_failed(job_id, errors=[str(exc)])
         raise exc
 
 
@@ -796,14 +796,14 @@ async def regenerate_member_drawing(project_id: str, member_id: str) -> dict:
     member = next((m for m in members if m.get("member_id") == member_id), None)
     if not member:
         raise ValueError(f"Member '{member_id}' not found in design results.")
-        
+
     cmds = generate_drawing_commands(member)
     updated_drawing = {
         "member_id": member_id,
         "member_type": member["member_type"],
         "commands": cmds
     }
-    
+
     drawings = _drawings_store.setdefault(project_id, [])
     for i, d in enumerate(drawings):
         if d.get("member_id") == member_id:
@@ -811,7 +811,7 @@ async def regenerate_member_drawing(project_id: str, member_id: str) -> dict:
             break
     else:
         drawings.append(updated_drawing)
-        
+
     return updated_drawing
 
 
@@ -883,12 +883,12 @@ async def generate_report(
     dict
         ``{report_id, preview_url, download_url, status, member_count}``
     """
-    project = project_store.get_or_404(project_id)
-    
+    project = await project_store.get_or_404(project_id)
+
     design_code_edition = "BS 8110-1:1997" if project.design_code == "BS8110" else "EN 1992-1-1:2004"
-    
+
     from routers.reports import generate_report as run_report_generation, GenerateReportRequest, ProjectMeta
-    
+
     project_meta = ProjectMeta(
         name=project.name,
         reference=project.reference,
@@ -900,9 +900,9 @@ async def generate_report(
         design_code=project.design_code,
         design_code_edition=design_code_edition
     )
-    
+
     members_payload = _build_members_payload(project_id, member_ids)
-    
+
     req = GenerateReportRequest(
         project_id=project_id,
         project=project_meta,
@@ -911,13 +911,13 @@ async def generate_report(
         member_ids=member_ids,
         format="html"
     )
-    
+
     from fastapi import BackgroundTasks
     bg = BackgroundTasks()
     res = await run_report_generation(req, bg)
-    
-    project_store.advance_status(project_id, ProjectStatus.REPORT_GENERATED)
-    
+
+    await project_store.advance_status(project_id, ProjectStatus.REPORT_GENERATED)
+
     return res.model_dump() if hasattr(res, "model_dump") else res
 
 
@@ -939,12 +939,12 @@ async def get_pipeline_status(project_id: str) -> dict:
     dict
         ``PipelineStatusResponse`` with gates, next_action, and blocking_issues.
     """
-    project = project_store.get_or_404(project_id)
+    project = await project_store.get_or_404(project_id)
     current = ProjectStatus(project.pipeline_status_ordinal)
-    
+
     from routers.pipeline import _build_gates, _NEXT_ACTION_MAP
     gates = _build_gates(project.pipeline_status_ordinal)
-    
+
     return {
         "project_id": project.project_id,
         "current_stage": project.pipeline_status,
@@ -979,9 +979,9 @@ async def confirm_pipeline_gate(project_id: str, gate: str) -> dict:
     target_status = _GATE_TO_STATUS.get(gate)
     if target_status is None:
         raise ValueError(f"Unknown gate '{gate}'. Valid gates: {list(_GATE_TO_STATUS.keys())}")
-        
-    project_store.advance_status(project_id, target_status)
-    
+
+    await project_store.advance_status(project_id, target_status)
+
     return {
         "gate": gate,
         "confirmed_at": datetime.now(timezone.utc).isoformat(),
@@ -1004,7 +1004,7 @@ async def poll_job(job_id: str) -> dict:
     dict
         ``JobStatus`` dict.
     """
-    job = job_store.get_or_404(job_id)
+    job = await job_store.get_or_404(job_id)
     return job.model_dump() if hasattr(job, "model_dump") else job
 
 

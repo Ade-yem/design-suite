@@ -143,18 +143,18 @@ async def _run_pipeline_background(
     stop_before : str | None
         Gate label before which the run should pause.
     """
-    job_store.mark_running(job_id, "Pipeline starting…")
+    await job_store.mark_running(job_id, "Pipeline starting…")
     try:
         # Stub implementation — real pipeline would invoke each service in sequence
         # loading_service.run(project_id)
         # analysis_service.run(project_id)
         # design_service.run(project_id)
-        job_store.update_progress(job_id, 50.0, "Running pipeline stages…")
-        job_store.mark_complete(job_id, result_url=f"/api/v1/pipeline/{project_id}/status")
+        await job_store.update_progress(job_id, 50.0, "Running pipeline stages…")
+        await job_store.mark_complete(job_id, result_url=f"/api/v1/pipeline/{project_id}/status")
         logger.info("Pipeline complete for project %s.", project_id)
     except Exception as exc:
         logger.exception("Pipeline failed for project %s.", project_id)
-        job_store.mark_failed(job_id, errors=[str(exc)])
+        await job_store.mark_failed(job_id, errors=[str(exc)])
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ async def run_pipeline(
     dict
         ``{job_id, status_url, message}``
     """
-    job_id = job_store.create("analysis", project_id=project_id)  # 'analysis' as closest proxy
+    job_id = await job_store.create("analysis", project_id=project_id)
     background_tasks.add_task(
         _run_pipeline_background,
         project_id=project_id,
@@ -226,7 +226,7 @@ async def resume_pipeline(
         ``{job_id, status_url, message}``
     """
     current = ProjectStatus(project.pipeline_status_ordinal)
-    job_id = job_store.create("analysis", project_id=project_id)
+    job_id = await job_store.create("analysis", project_id=project_id)
     background_tasks.add_task(
         _run_pipeline_background,
         project_id=project_id,
@@ -272,7 +272,7 @@ def get_pipeline_status(project: ProjectResponse = Depends(get_project)) -> Pipe
 
 
 @router.post("/{project_id}/reset", status_code=status.HTTP_200_OK)
-def reset_pipeline(
+async def reset_pipeline(
     project_id: str,
     payload: PipelineResetRequest,
     project: ProjectResponse = Depends(get_project),
@@ -315,7 +315,7 @@ def reset_pipeline(
         )
 
     previous = project.pipeline_status
-    project_store.advance_status(project_id, target)
+    await project_store.advance_status(project_id, target)
     logger.info(
         "Pipeline reset for project %s: %s → %s.",
         project_id,
@@ -353,7 +353,7 @@ def list_gates(project: ProjectResponse = Depends(get_project)) -> dict:
 
 
 @router.post("/{project_id}/gates/{gate}/confirm")
-def confirm_gate(
+async def confirm_gate(
     project_id: str,
     gate: str,
     project: ProjectResponse = Depends(get_project),
@@ -392,7 +392,7 @@ def confirm_gate(
             status_code=400,
         )
 
-    project_store.advance_status(project_id, target_status)
+    await project_store.advance_status(project_id, target_status)
     logger.info("Gate '%s' confirmed for project %s.", gate, project_id)
     return {
         "gate": gate,

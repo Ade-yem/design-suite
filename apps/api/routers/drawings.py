@@ -22,9 +22,9 @@ async def generate_drawings(
     background_tasks: BackgroundTasks,
     project=Depends(require_design_complete)
 ):
-    job_id = job_store.create("drawings", project_id=project_id)
+    job_id = await job_store.create("drawings", project_id=project_id)
     # Stub generation logic; ideally handled by agent, but if router triggers:
-    job_store.mark_complete(job_id)
+    await job_store.mark_complete(job_id)
     return {
         "job_id": job_id,
         "status_url": f"/api/v1/drawings/{project_id}/status/{job_id}",
@@ -57,4 +57,4 @@ async def get_layers(project_id: str):
 
 @router.get("/{project_id}/status/{job_id}", response_model=JobStatus)
 async def get_drawing_status(project_id: str, job_id: str):
-    return job_store.get_or_404(job_id)
+    return await job_store.get_or_404(job_id)

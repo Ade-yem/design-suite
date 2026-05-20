@@ -44,7 +44,7 @@ class JobStatus(BaseModel):
     """
 
     job_id: str = Field(..., description="Unique job identifier.")
-    job_type: Literal["parsing", "analysis", "design", "reporting"] = Field(
+    job_type: Literal["parsing", "analysis", "design", "reporting", "drawings"] = Field(
         ..., description="Operation category."
     )
     status: Literal["queued", "running", "complete", "failed", "cancelled"] = Field(

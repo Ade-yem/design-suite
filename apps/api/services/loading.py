@@ -174,7 +174,7 @@ class LoadingService:
 
         return LoadValidationResult(valid=len(errors) == 0, errors=errors, warnings=warnings)
 
-    def run_combinations(self, project_id: str) -> dict:
+    async def run_combinations(self, project_id: str) -> dict:
         """
         Run the load combination engine for all registered members.
 
@@ -204,7 +204,7 @@ class LoadingService:
 
         output = self._run_engine(project_id, definition)
         _store.set_output(project_id, output)
-        project_store.advance_status(project_id, ProjectStatus.LOADING_DEFINED)
+        await project_store.advance_status(project_id, ProjectStatus.LOADING_DEFINED)
         self._schedule_db_save(self._db_save_loads(project_id, definition, output))
 
         logger.info(

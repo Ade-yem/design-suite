@@ -37,11 +37,12 @@ from storage.project_store import project_store
 
 logger = logging.getLogger(__name__)
 
-_llm = ChatGoogleGenerativeAI(
-    model=settings.ACTION_MODEL,
-    temperature=0,
-    google_api_key=settings.GEMINI_API_KEY,
-)
+def _get_llm():
+    return ChatGoogleGenerativeAI(
+        model=settings.ACTION_MODEL,
+        temperature=0,
+        google_api_key=settings.GEMINI_API_KEY,
+    )
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -385,7 +386,8 @@ Return ONLY a valid JSON array of members. Do not include markdown block wrapper
 """
 
     try:
-        response = await _llm.ainvoke(prompt)
+        llm = _get_llm()
+        response = await llm.ainvoke(prompt)
         text = response.text.strip()
         
         if "```" in text:
@@ -560,7 +562,7 @@ async def parser_node(state: StructuralDesignState) -> dict:
         for member in members:
             mid = member.get("member_id")
             if mid:
-                project_store.register_member(project_id, mid)
+                await project_store.register_member(project_id, mid)
 
     # ── Step 5: geometry summary ───────────────────────────────────────────────
     scale = file_service.get_scale(project_id)

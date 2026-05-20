@@ -1,28 +1,29 @@
 """
 storage/project_store.py
 ========================
-In-process project persistence layer.
+Pluggable project persistence layer.
 
-In development this is a plain dict-backed store that lives for the lifetime of
-the server process.  In production, replace the ``_store`` dict with a proper
-database session (PostgreSQL via SQLAlchemy, or Redis if sub-second latency is
-required for status checks).
+Supports two backends controlled by ``settings.PROJECT_STORE_BACKEND``:
+- ``"memory"``   — in-process dict store (development / testing)
+- ``"postgres"`` — async SQLAlchemy store backed by PostgreSQL
 
-The store owns the **project state machine** — it is the single source of truth
-for ``pipeline_status`` and is the only place status transitions are written.
+The public interface is identical for both backends (all methods are
+``async def``) so routers and agents call ``await project_store.<method>()``
+regardless of the active backend.
 
 Public interface
 ----------------
-ProjectStore.create(data)                 → ProjectResponse
-ProjectStore.get(project_id)              → ProjectResponse | None
-ProjectStore.list_all()                   → list[ProjectListItem]
-ProjectStore.update(project_id, data)     → ProjectResponse | None
-ProjectStore.delete(project_id)           → bool
-ProjectStore.advance_status(project_id, new_status) → ProjectResponse
-ProjectStore.get_or_404(project_id)       → ProjectResponse  (raises StructuralError)
-ProjectStore.register_member(project_id, member_id) → None
-ProjectStore.remove_member(project_id, member_id)   → None
-ProjectStore.get_member_ids(project_id)   → list[str]
+create(data)                              → ProjectResponse
+get(project_id)                           → ProjectResponse | None
+get_or_404(project_id)                    → ProjectResponse
+list_all()                                → list[ProjectListItem]
+update(project_id, data)                  → ProjectResponse | None
+delete(project_id)                        → bool
+advance_status(project_id, new_status)    → ProjectResponse
+get_status(project_id)                    → ProjectStatus | None
+register_member(project_id, member_id)    → None
+remove_member(project_id, member_id)      → None
+get_member_ids(project_id)                → list[str]
 """
 
 from __future__ import annotations
@@ -43,9 +44,15 @@ from schemas.project import (
 )
 
 
-class ProjectStore:
+# ── In-memory implementation ──────────────────────────────────────────────────
+
+
+class MemoryProjectStore:
     """
-    Thread-safe (single-process) in-memory project repository.
+    In-process in-memory project repository.
+
+    All methods are ``async def`` with synchronous bodies so they can be
+    awaited uniformly by callers without importing asyncio.
 
     Attributes
     ----------
@@ -59,22 +66,9 @@ class ProjectStore:
         self._projects: dict[str, dict] = {}
         self._members: dict[str, set[str]] = {}
 
-    # ── CRUD ────────────────────────────────────────────────────────────────
+    # ── CRUD ─────────────────────────────────────────────────────────────────
 
-    def create(self, data: ProjectCreate) -> ProjectResponse:
-        """
-        Create a new project and persist it to the in-memory store.
-
-        Parameters
-        ----------
-        data : ProjectCreate
-            Validated project creation payload.
-
-        Returns
-        -------
-        ProjectResponse
-            The fully-populated project entity with generated ``project_id``.
-        """
+    async def create(self, data: ProjectCreate) -> ProjectResponse:
         project_id = f"PRJ-{uuid.uuid4().hex[:8].upper()}"
         now = datetime.now(timezone.utc)
         record = {
@@ -91,46 +85,14 @@ class ProjectStore:
         self._members[project_id] = set()
         return self._to_response(record)
 
-    def get(self, project_id: str) -> Optional[ProjectResponse]:
-        """
-        Retrieve a project by ID.
-
-        Parameters
-        ----------
-        project_id : str
-            Project identifier.
-
-        Returns
-        -------
-        ProjectResponse | None
-            The project, or None if not found.
-        """
+    async def get(self, project_id: str) -> Optional[ProjectResponse]:
         record = self._projects.get(project_id)
         if record is None:
             return None
         return self._to_response(record)
 
-    def get_or_404(self, project_id: str) -> ProjectResponse:
-        """
-        Retrieve a project or raise a ``StructuralError`` with
-        ``error_code = "PROJECT_NOT_FOUND"`` and HTTP 404.
-
-        Parameters
-        ----------
-        project_id : str
-            Project identifier.
-
-        Returns
-        -------
-        ProjectResponse
-            The project.
-
-        Raises
-        ------
-        StructuralError
-            If the project does not exist.
-        """
-        project = self.get(project_id)
+    async def get_or_404(self, project_id: str) -> ProjectResponse:
+        project = await self.get(project_id)
         if project is None:
             raise StructuralError(
                 error_code="PROJECT_NOT_FOUND",
@@ -139,15 +101,7 @@ class ProjectStore:
             )
         return project
 
-    def list_all(self) -> list[ProjectListItem]:
-        """
-        Return lightweight summaries of all projects, ordered by most recently updated.
-
-        Returns
-        -------
-        list[ProjectListItem]
-            Sorted list of project summaries.
-        """
+    async def list_all(self) -> list[ProjectListItem]:
         items = [
             ProjectListItem(
                 project_id=r["project_id"],
@@ -160,22 +114,7 @@ class ProjectStore:
         ]
         return sorted(items, key=lambda x: x.updated_at, reverse=True)
 
-    def update(self, project_id: str, data: ProjectUpdate) -> Optional[ProjectResponse]:
-        """
-        Apply a partial update to an existing project.
-
-        Parameters
-        ----------
-        project_id : str
-            Target project identifier.
-        data : ProjectUpdate
-            Fields to update (only non-None fields are applied).
-
-        Returns
-        -------
-        ProjectResponse | None
-            Updated project, or None if project does not exist.
-        """
+    async def update(self, project_id: str, data: ProjectUpdate) -> Optional[ProjectResponse]:
         record = self._projects.get(project_id)
         if record is None:
             return None
@@ -190,54 +129,16 @@ class ProjectStore:
         record["updated_at"] = datetime.now(timezone.utc)
         return self._to_response(record)
 
-    def delete(self, project_id: str) -> bool:
-        """
-        Delete a project and all associated member records.
-
-        Parameters
-        ----------
-        project_id : str
-            Target project identifier.
-
-        Returns
-        -------
-        bool
-            True if deleted, False if not found.
-        """
+    async def delete(self, project_id: str) -> bool:
         if project_id not in self._projects:
             return False
         del self._projects[project_id]
         self._members.pop(project_id, None)
         return True
 
-    # ── Status machine ───────────────────────────────────────────────────────
+    # ── Status machine ────────────────────────────────────────────────────────
 
-    def advance_status(self, project_id: str, new_status: ProjectStatus) -> ProjectResponse:
-        """
-        Advance the pipeline status of a project.
-
-        The new status must be **greater than or equal to** the current status
-        (never step backwards).
-
-        Parameters
-        ----------
-        project_id : str
-            Target project identifier.
-        new_status : ProjectStatus
-            Target pipeline stage.
-
-        Returns
-        -------
-        ProjectResponse
-            Updated project.
-
-        Raises
-        ------
-        StructuralError
-            If the project does not exist (PROJECT_NOT_FOUND).
-        ValueError
-            If ``new_status`` is less than the current status (regression attempt).
-        """
+    async def advance_status(self, project_id: str, new_status: ProjectStatus) -> ProjectResponse:
         record = self._projects.get(project_id)
         if record is None:
             raise StructuralError(
@@ -249,72 +150,26 @@ class ProjectStore:
         record["updated_at"] = datetime.now(timezone.utc)
         return self._to_response(record)
 
-    def get_status(self, project_id: str) -> Optional[ProjectStatus]:
-        """
-        Return the current pipeline status without a full response object.
-
-        Parameters
-        ----------
-        project_id : str
-            Project identifier.
-
-        Returns
-        -------
-        ProjectStatus | None
-        """
+    async def get_status(self, project_id: str) -> Optional[ProjectStatus]:
         record = self._projects.get(project_id)
         return record["pipeline_status"] if record else None
 
-    # ── Member tracking ──────────────────────────────────────────────────────
+    # ── Member tracking ───────────────────────────────────────────────────────
 
-    def register_member(self, project_id: str, member_id: str) -> None:
-        """
-        Register a member ID under a project.
-
-        Parameters
-        ----------
-        project_id : str
-            Parent project.
-        member_id : str
-            Member identifier to register.
-        """
+    async def register_member(self, project_id: str, member_id: str) -> None:
         if project_id in self._members:
             self._members[project_id].add(member_id)
 
-    def remove_member(self, project_id: str, member_id: str) -> None:
-        """
-        Remove a member ID from a project's member registry.
-
-        Parameters
-        ----------
-        project_id : str
-            Parent project.
-        member_id : str
-            Member to remove.
-        """
+    async def remove_member(self, project_id: str, member_id: str) -> None:
         if project_id in self._members:
             self._members[project_id].discard(member_id)
 
-    def get_member_ids(self, project_id: str) -> list[str]:
-        """
-        Return the set of registered member IDs for a project.
-
-        Parameters
-        ----------
-        project_id : str
-            Parent project.
-
-        Returns
-        -------
-        list[str]
-            Sorted list of member IDs.
-        """
+    async def get_member_ids(self, project_id: str) -> list[str]:
         return sorted(self._members.get(project_id, set()))
 
-    # ── Internal ─────────────────────────────────────────────────────────────
+    # ── Internal ──────────────────────────────────────────────────────────────
 
     def _to_response(self, record: dict) -> ProjectResponse:
-        """Convert an internal record dict to a ``ProjectResponse``."""
         project_id = record["project_id"]
         status: ProjectStatus = record["pipeline_status"]
         return ProjectResponse(
@@ -331,5 +186,299 @@ class ProjectStore:
         )
 
 
-# ── Singleton ────────────────────────────────────────────────────────────────
-project_store = ProjectStore()
+# ── PostgreSQL implementation ─────────────────────────────────────────────────
+
+
+class PostgresProjectStore:
+    """
+    PostgreSQL-backed project repository using async SQLAlchemy.
+
+    Each method opens its own session via ``get_session_maker()``.
+    The ``pipeline_status`` ORM column is an int; this class converts to/from
+    the ``ProjectStatus`` IntEnum.
+    """
+
+    # ── CRUD ─────────────────────────────────────────────────────────────────
+
+    async def create(self, data: ProjectCreate) -> ProjectResponse:
+        from db.session import get_session_maker
+        from db.models.project import Project
+
+        project_id = f"PRJ-{uuid.uuid4().hex[:8].upper()}"
+        now = datetime.now(timezone.utc)
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            row = Project(
+                project_id=project_id,
+                name=data.name,
+                reference=data.reference,
+                client=data.client,
+                design_code=data.design_code,
+                pipeline_status=int(ProjectStatus.CREATED),
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            return self._to_response(row, member_count=0)
+
+    async def get(self, project_id: str) -> Optional[ProjectResponse]:
+        from db.session import get_session_maker
+        from db.models.project import Project, ProjectMember
+        from sqlalchemy import select, func
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            row = (
+                await session.execute(
+                    select(Project).where(Project.project_id == project_id)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            count = (
+                await session.execute(
+                    select(func.count()).where(ProjectMember.project_id == project_id)
+                )
+            ).scalar_one()
+            return self._to_response(row, member_count=count)
+
+    async def get_or_404(self, project_id: str) -> ProjectResponse:
+        project = await self.get(project_id)
+        if project is None:
+            raise StructuralError(
+                error_code="PROJECT_NOT_FOUND",
+                details={"project_id": project_id},
+                status_code=http_status.HTTP_404_NOT_FOUND,
+            )
+        return project
+
+    async def list_all(self) -> list[ProjectListItem]:
+        from db.session import get_session_maker
+        from db.models.project import Project
+        from sqlalchemy import select
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            rows = (
+                await session.execute(
+                    select(Project).order_by(Project.updated_at.desc())
+                )
+            ).scalars().all()
+            return [
+                ProjectListItem(
+                    project_id=r.project_id,
+                    name=r.name,
+                    reference=r.reference or "",
+                    pipeline_status=ProjectStatus(r.pipeline_status).label(),
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]
+
+    async def update(self, project_id: str, data: ProjectUpdate) -> Optional[ProjectResponse]:
+        from db.session import get_session_maker
+        from db.models.project import Project, ProjectMember
+        from sqlalchemy import select, func
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            row = (
+                await session.execute(
+                    select(Project).where(Project.project_id == project_id)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            if data.name is not None:
+                row.name = data.name
+            if data.reference is not None:
+                row.reference = data.reference
+            if data.client is not None:
+                row.client = data.client
+            if data.design_code is not None:
+                row.design_code = data.design_code
+            row.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            await session.refresh(row)
+            count = (
+                await session.execute(
+                    select(func.count()).where(ProjectMember.project_id == project_id)
+                )
+            ).scalar_one()
+            return self._to_response(row, member_count=count)
+
+    async def delete(self, project_id: str) -> bool:
+        from db.session import get_session_maker
+        from db.models.project import Project
+        from sqlalchemy import select
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            row = (
+                await session.execute(
+                    select(Project).where(Project.project_id == project_id)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True
+
+    # ── Status machine ────────────────────────────────────────────────────────
+
+    async def advance_status(self, project_id: str, new_status: ProjectStatus) -> ProjectResponse:
+        from db.session import get_session_maker
+        from db.models.project import Project, ProjectMember
+        from sqlalchemy import select, func
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            row = (
+                await session.execute(
+                    select(Project).where(Project.project_id == project_id)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                raise StructuralError(
+                    "PROJECT_NOT_FOUND",
+                    details={"project_id": project_id},
+                    status_code=http_status.HTTP_404_NOT_FOUND,
+                )
+            row.pipeline_status = int(new_status)
+            row.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            await session.refresh(row)
+            count = (
+                await session.execute(
+                    select(func.count()).where(ProjectMember.project_id == project_id)
+                )
+            ).scalar_one()
+            return self._to_response(row, member_count=count)
+
+    async def get_status(self, project_id: str) -> Optional[ProjectStatus]:
+        from db.session import get_session_maker
+        from db.models.project import Project
+        from sqlalchemy import select
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            row = (
+                await session.execute(
+                    select(Project.pipeline_status).where(Project.project_id == project_id)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            return ProjectStatus(row)
+
+    # ── Member tracking ───────────────────────────────────────────────────────
+
+    async def register_member(self, project_id: str, member_id: str) -> None:
+        from db.session import get_session_maker
+        from db.models.project import ProjectMember
+        from sqlalchemy import select
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            existing = (
+                await session.execute(
+                    select(ProjectMember).where(
+                        ProjectMember.project_id == project_id,
+                        ProjectMember.member_id == member_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                # Infer structural member type from standard prefix conventions
+                m_type = "beam"
+                upper_id = member_id.upper()
+                if upper_id.startswith("C"):
+                    m_type = "column"
+                elif upper_id.startswith("S"):
+                    m_type = "slab"
+                elif upper_id.startswith("F"):
+                    m_type = "footing"
+                elif upper_id.startswith("W"):
+                    m_type = "wall"
+
+                session.add(
+                    ProjectMember(
+                        project_id=project_id,
+                        member_id=member_id,
+                        member_type=m_type,
+                    )
+                )
+                await session.commit()
+
+    async def remove_member(self, project_id: str, member_id: str) -> None:
+        from db.session import get_session_maker
+        from db.models.project import ProjectMember
+        from sqlalchemy import select
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            row = (
+                await session.execute(
+                    select(ProjectMember).where(
+                        ProjectMember.project_id == project_id,
+                        ProjectMember.member_id == member_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is not None:
+                await session.delete(row)
+                await session.commit()
+
+    async def get_member_ids(self, project_id: str) -> list[str]:
+        from db.session import get_session_maker
+        from db.models.project import ProjectMember
+        from sqlalchemy import select
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            rows = (
+                await session.execute(
+                    select(ProjectMember.member_id).where(
+                        ProjectMember.project_id == project_id
+                    )
+                )
+            ).scalars().all()
+            return sorted(rows)
+
+    # ── Internal ──────────────────────────────────────────────────────────────
+
+    def _to_response(self, row: object, member_count: int) -> ProjectResponse:
+        status = ProjectStatus(row.pipeline_status)  # type: ignore[attr-defined]
+        return ProjectResponse(
+            project_id=row.project_id,  # type: ignore[attr-defined]
+            name=row.name,  # type: ignore[attr-defined]
+            reference=row.reference or "",  # type: ignore[attr-defined]
+            client=row.client or "",  # type: ignore[attr-defined]
+            design_code=row.design_code,  # type: ignore[attr-defined]
+            pipeline_status=status.label(),
+            pipeline_status_ordinal=int(status),
+            created_at=row.created_at,  # type: ignore[attr-defined]
+            updated_at=row.updated_at,  # type: ignore[attr-defined]
+            member_count=member_count,
+        )
+
+
+def make_project_store() -> MemoryProjectStore | PostgresProjectStore:
+    """Instantiate and return the configured project store backend."""
+    from config import settings
+
+    if settings.PROJECT_STORE_BACKEND == "postgres":
+        if not settings.DATABASE_URL:
+            raise RuntimeError(
+                "DATABASE_URL must be configured in your environment or .env file "
+                "when PROJECT_STORE_BACKEND is set to 'postgres'."
+            )
+        return PostgresProjectStore()
+    return MemoryProjectStore()
+
+
+project_store = make_project_store()
