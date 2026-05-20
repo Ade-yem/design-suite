@@ -1,57 +1,102 @@
 import pytest
-from html.parser import HTMLParser
+import xml.etree.ElementTree as ET
+from core.reporting.calc_sheet import BMDGenerator, SFDGenerator, CalcSheetEngine
+from core.reporting.normalizer import ReportProject, ReportMember
 
-class CalcTraceRenderer:
-    def render(self, trace):
-        html_out = "<html><body>"
-        for t in trace:
-            cls = 'class="check-fail"' if t.get("result") == "FAIL" else ""
-            html_out += f"<div {cls}>{t.get('description', '')} {t.get('clause_reference', '')} {t.get('result', '')}</div>"
-        html_out += "</body></html>"
-        return html_out
 
-class TestCalcTraceRenderer:
+def _sample_project() -> ReportProject:
+    return ReportProject(name="Test Project", reference="REF-001")
 
-    def test_all_trace_steps_rendered(self):
-        """Every step in calculation_trace must appear in rendered HTML"""
-        trace = [
-            {"step": 1, "description": "Calculate K",
-             "formula": "K = M/(fcu×b×d²)",
-             "result": 0.114, "clause_reference": "BS8110 Cl 3.4.4.4"},
-            {"step": 2, "description": "Calculate lever arm z",
-             "formula": "z = d[0.5 + √(0.25 - K/0.9)]",
-             "result": 383.0, "clause_reference": "BS8110 Cl 3.4.4.4"}
-        ]
 
-        renderer = CalcTraceRenderer()
-        html = renderer.render(trace)
+def _sample_member() -> ReportMember:
+    return ReportMember(
+        member_id="B-01",
+        member_type="beam",
+        floor_level="First Floor",
+        design_code="BS8110",
+        loading_output={"gk": 5.0, "qk": 3.0, "n_design": 13.8},
+        analysis_output={
+            "M_max_kNm": 145.8,
+            "V_max_kN": 81.0,
+            "span_m": 6.0,
+            "bmd_points": [
+                {"position_m": 0.0, "moment_kNm": 0.0},
+                {"position_m": 3.0, "moment_kNm": 145.8},
+                {"position_m": 6.0, "moment_kNm": 0.0},
+            ],
+            "sfd_points": [
+                {"position_m": 0.0, "shear_kN": 81.0},
+                {"position_m": 6.0, "shear_kN": -81.0},
+            ],
+        },
+        design_output={"fcu": 30, "fy": 460, "As_req": 950.0, "As_prov": 1005.0},
+        geometry={"span_m": 6.0, "b": 300, "h": 550},
+        status="PASS",
+    )
 
-        assert "Calculate K" in html
-        assert "BS8110 Cl 3.4.4.4" in html
-        assert "383.0" in html
 
-    def test_failed_check_renders_with_fail_class(self):
-        """Failed checks must have CSS class 'check-fail' for red styling"""
-        trace = [{
-            "step": 1,
-            "description": "Shear check",
-            "result": "FAIL",
-            "actual": 1.24,
-            "limit": 1.18
-        }]
+class TestBMDGenerator:
 
-        renderer = CalcTraceRenderer()
-        html = renderer.render(trace)
+    def test_svg_is_valid_xml(self):
+        """BMDGenerator must return well-formed SVG (parseable by stdlib ET)"""
+        gen = BMDGenerator()
+        svg = gen.generate({}, span_m=6.0)
+        ET.fromstring(svg)  # raises xml.etree.ElementTree.ParseError if malformed
 
-        assert 'class="check-fail"' in html
+    def test_bmd_points_produce_peak_label(self):
+        """Peak moment value must appear as text in the generated SVG"""
+        gen = BMDGenerator()
+        svg = gen.generate(_sample_member().analysis_output, span_m=6.0)
+        assert "145.8" in svg
 
-    def test_html_is_valid_and_parseable(self):
-        """Rendered HTML must be parseable — no malformed tags"""
-        trace = [{"step": 1, "description": "Test step",
-                  "formula": "x = y + z", "result": 42.0}]
+    def test_empty_analysis_output_still_returns_svg(self):
+        """Calling generate with an empty dict must not raise"""
+        gen = BMDGenerator()
+        svg = gen.generate({}, span_m=4.0)
+        assert svg.startswith("<svg")
 
-        renderer = CalcTraceRenderer()
-        html = renderer.render(trace)
 
-        parser = HTMLParser()
-        parser.feed(html)  # Raises if malformed
+class TestSFDGenerator:
+
+    def test_svg_is_valid_xml(self):
+        """SFDGenerator must return well-formed SVG"""
+        gen = SFDGenerator()
+        svg = gen.generate({}, span_m=6.0)
+        ET.fromstring(svg)
+
+    def test_empty_analysis_output_still_returns_svg(self):
+        """Calling generate with an empty dict must not raise"""
+        gen = SFDGenerator()
+        svg = gen.generate({}, span_m=4.0)
+        assert svg.startswith("<svg")
+
+
+class TestCalcSheetEngine:
+
+    def test_build_returns_all_required_keys(self):
+        """build() must return all keys consumed by the Jinja2 template"""
+        engine = CalcSheetEngine()
+        ctx = engine.build(_sample_project(), _sample_member())
+
+        required_keys = {
+            "project", "member", "design_basis", "loading",
+            "analysis", "calc_steps", "results", "bmd_svg", "sfd_svg",
+        }
+        assert required_keys.issubset(ctx.keys())
+
+    def test_bmd_svg_is_embedded_in_context(self):
+        """bmd_svg in context must be a non-empty SVG string"""
+        engine = CalcSheetEngine()
+        ctx = engine.build(_sample_project(), _sample_member())
+
+        assert ctx["bmd_svg"].startswith("<svg")
+
+    def test_project_and_member_are_forwarded_unchanged(self):
+        """project and member in context must be the same objects passed in"""
+        engine = CalcSheetEngine()
+        project = _sample_project()
+        member = _sample_member()
+        ctx = engine.build(project, member)
+
+        assert ctx["project"] is project
+        assert ctx["member"] is member
