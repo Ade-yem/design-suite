@@ -46,8 +46,9 @@ apiClient.interceptors.response.use(
   (error: AxiosError<{ detail?: string }>) => {
     const status = error.response?.status || 500;
 
-    // Automatic session clearance on 401 Unauthorized (session expired)
-    if (status === 401) {
+    // Clear auth on 401 only if there was a token — prevents a no-op clear
+    // from re-persisting a null token and stomping on the stored session.
+    if (status === 401 && useAuthStore.getState().token) {
       useAuthStore.getState().clearAuth();
     }
 

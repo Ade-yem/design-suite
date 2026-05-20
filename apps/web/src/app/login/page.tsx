@@ -101,8 +101,6 @@ export default function LoginPage() {
         setIsLoading(false);
         return;
       }
-
-      // Standard Login Success (TypeScript knows this is LoginResponse)
       const token = response.data.access_token;
 
       // 2. Fetch logged-in user profile details
@@ -121,7 +119,7 @@ export default function LoginPage() {
         userProfileResponse.data.organisation,
       );
 
-      toast.success("Welcome back! Loading CAD Workspace...");
+      toast.success("Welcome back! Loading your Workspace...");
       router.push("/");
     } catch (err: unknown) {
       const apiErr = err as ApiError;

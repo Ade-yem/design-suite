@@ -190,10 +190,10 @@ class FileService:
         for member in parsed.get("members", []):
             mid = member.get("member_id")
             if mid:
-                project_store.register_member(project_id, mid)
+                await project_store.register_member(project_id, mid)
 
         # Advance pipeline status
-        project_store.advance_status(project_id, ProjectStatus.FILE_UPLOADED)
+        await project_store.advance_status(project_id, ProjectStatus.FILE_UPLOADED)
 
         logger.info(
             "Parse complete for project %s: %d member(s) detected.",
@@ -310,7 +310,7 @@ class FileService:
         )
         return new_scale
 
-    def verify_geometry(
+    async def verify_geometry(
         self,
         project_id: str,
         corrections: Optional[list[dict]] = None,
@@ -351,7 +351,7 @@ class FileService:
             parsed["user_corrections"] = corrections
             _store.set_parsed(project_id, parsed)
 
-        project_store.advance_status(project_id, ProjectStatus.GEOMETRY_VERIFIED)
+        await project_store.advance_status(project_id, ProjectStatus.GEOMETRY_VERIFIED)
         scale = _store.get_scale(project_id) or {}
         self._schedule_db_save(self._db_save_geometry(project_id, parsed, scale))
         member_count = len(parsed.get("members", []))

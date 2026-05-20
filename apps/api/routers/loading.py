@@ -141,7 +141,7 @@ def update_member_loads(
 
 
 @router.post("/{project_id}/combinations", status_code=status.HTTP_200_OK)
-def run_combinations(
+async def run_combinations(
     project_id: str,
     project: ProjectResponse = Depends(require_geometry_verified),
 ) -> dict:
@@ -168,7 +168,7 @@ def run_combinations(
         ``INVALID_LOAD_INPUT`` if no load definition has been submitted.
     """
     try:
-        return loading_service.run_combinations(project_id)
+        return await loading_service.run_combinations(project_id)
     except ValueError as exc:
         raise StructuralError(
             "INVALID_LOAD_INPUT",

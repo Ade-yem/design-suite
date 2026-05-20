@@ -7,6 +7,9 @@ All gate-enforcement logic lives here — routers call these as ``Depends()``
 arguments rather than embedding gate checks in handler bodies.  This enforces
 **Rule 2** from the architecture spec: "Gates are enforced at the router level."
 
+All functions are ``async def`` because the project store interface is now
+fully async.
+
 Available dependencies
 ----------------------
 get_project          : Returns project or raises 404.
@@ -26,7 +29,7 @@ from schemas.project import ProjectResponse, ProjectStatus
 from storage.project_store import project_store
 
 
-def get_project(project_id: str) -> ProjectResponse:
+async def get_project(project_id: str) -> ProjectResponse:
     """
     FastAPI dependency: resolve and return a project entity.
 
@@ -45,10 +48,10 @@ def get_project(project_id: str) -> ProjectResponse:
     StructuralError
         HTTP 404 ``PROJECT_NOT_FOUND`` if the project does not exist.
     """
-    return project_store.get_or_404(project_id)
+    return await project_store.get_or_404(project_id)
 
 
-def _require_status(project_id: str, required: ProjectStatus, stage_label: str) -> ProjectResponse:
+async def _require_status(project_id: str, required: ProjectStatus, stage_label: str) -> ProjectResponse:
     """
     Internal helper: assert that a project has reached at least ``required`` status.
 
@@ -71,8 +74,8 @@ def _require_status(project_id: str, required: ProjectStatus, stage_label: str) 
     StructuralError
         HTTP 403 ``GATE_NOT_PASSED`` if the project has not yet reached ``required``.
     """
-    project = project_store.get_or_404(project_id)
-    current = project_store.get_status(project_id)
+    project = await project_store.get_or_404(project_id)
+    current = await project_store.get_status(project_id)
     if current is None or current < required:
         raise StructuralError(
             "GATE_NOT_PASSED",
@@ -86,7 +89,7 @@ def _require_status(project_id: str, required: ProjectStatus, stage_label: str) 
     return project
 
 
-def require_file_uploaded(project_id: str) -> ProjectResponse:
+async def require_file_uploaded(project_id: str) -> ProjectResponse:
     """
     FastAPI dependency: project must have a file uploaded.
 
@@ -99,10 +102,10 @@ def require_file_uploaded(project_id: str) -> ProjectResponse:
     -------
     ProjectResponse
     """
-    return _require_status(project_id, ProjectStatus.FILE_UPLOADED, "file_upload")
+    return await _require_status(project_id, ProjectStatus.FILE_UPLOADED, "file_upload")
 
 
-def require_geometry_verified(project_id: str) -> ProjectResponse:
+async def require_geometry_verified(project_id: str) -> ProjectResponse:
     """
     FastAPI dependency: geometry must have been human-verified (Safety Gate 1).
 
@@ -115,10 +118,10 @@ def require_geometry_verified(project_id: str) -> ProjectResponse:
     -------
     ProjectResponse
     """
-    return _require_status(project_id, ProjectStatus.GEOMETRY_VERIFIED, "geometry_verification")
+    return await _require_status(project_id, ProjectStatus.GEOMETRY_VERIFIED, "geometry_verification")
 
 
-def require_loading_defined(project_id: str) -> ProjectResponse:
+async def require_loading_defined(project_id: str) -> ProjectResponse:
     """
     FastAPI dependency: load definitions must have been submitted.
 
@@ -131,10 +134,10 @@ def require_loading_defined(project_id: str) -> ProjectResponse:
     -------
     ProjectResponse
     """
-    return _require_status(project_id, ProjectStatus.LOADING_DEFINED, "loading_definition")
+    return await _require_status(project_id, ProjectStatus.LOADING_DEFINED, "loading_definition")
 
 
-def require_analysis_complete(project_id: str) -> ProjectResponse:
+async def require_analysis_complete(project_id: str) -> ProjectResponse:
     """
     FastAPI dependency: analysis must be complete before design can run.
 
@@ -147,10 +150,10 @@ def require_analysis_complete(project_id: str) -> ProjectResponse:
     -------
     ProjectResponse
     """
-    return _require_status(project_id, ProjectStatus.ANALYSIS_COMPLETE, "analysis")
+    return await _require_status(project_id, ProjectStatus.ANALYSIS_COMPLETE, "analysis")
 
 
-def require_design_complete(project_id: str) -> ProjectResponse:
+async def require_design_complete(project_id: str) -> ProjectResponse:
     """
     FastAPI dependency: design must be complete before reports can be generated.
 
@@ -163,4 +166,4 @@ def require_design_complete(project_id: str) -> ProjectResponse:
     -------
     ProjectResponse
     """
-    return _require_status(project_id, ProjectStatus.DESIGN_COMPLETE, "design")
+    return await _require_status(project_id, ProjectStatus.DESIGN_COMPLETE, "design")

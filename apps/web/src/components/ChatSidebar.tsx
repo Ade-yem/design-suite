@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, CheckCircle2, Loader2 } from "lucide-react";
+import { Send, Bot, User, CheckCircle2, Loader2, X } from "lucide-react";
+import { useUIStore } from "@/stores/uiStore";
 import { cn } from "@/lib/utils";
 import { useProjectSocket } from "@/hooks/useProjectSocket";
 import { apiClient } from "@/lib/api";
@@ -28,6 +29,7 @@ const GATE_LABELS: Record<string, string> = {
 interface ChatSidebarProps {
   projectId: string;
   onGateReached?: (gate: string) => void;
+  onClose?: () => void;
 }
 
 function TypingIndicator() {
@@ -53,7 +55,8 @@ const WELCOME: Message = {
   timestamp: new Date(),
 };
 
-export function ChatSidebar({ projectId, onGateReached }: ChatSidebarProps) {
+export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarProps) {
+  const { chatOpen, incrementUnread } = useUIStore();
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -63,6 +66,11 @@ export function ChatSidebar({ projectId, onGateReached }: ChatSidebarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Accumulate streaming chunks into a single assistant message
   const streamingIdRef = useRef<string | null>(null);
+
+  const appendAssistantAndNotify = (content: string) => {
+    if (!chatOpen) incrementUnread();
+    appendAssistant(content);
+  };
 
   const appendAssistant = (content: string) => {
     const id = `msg-${Date.now()}`;
@@ -89,7 +97,7 @@ export function ChatSidebar({ projectId, onGateReached }: ChatSidebarProps) {
     onAgentMessage: ({ content }) => {
       if (!streamingIdRef.current) {
         setIsTyping(false);
-        appendAssistant(content);
+        appendAssistantAndNotify(content);
       } else {
         appendChunk(content);
       }
@@ -189,10 +197,18 @@ export function ChatSidebar({ projectId, onGateReached }: ChatSidebarProps) {
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-        <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
-        <span className="text-sm font-medium">StructAI Agent</span>
-        <span className="text-xs text-muted-foreground ml-auto font-mono">v1.0</span>
+      <div className="h-8 px-3 border-b border-border flex items-center gap-2 flex-shrink-0">
+        <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+        <span className="text-xs text-muted-foreground font-mono flex-1">Connected</span>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            aria-label="Hide chat"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
       </div>
 
       {/* Messages */}

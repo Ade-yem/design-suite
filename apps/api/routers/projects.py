@@ -41,40 +41,6 @@ router = APIRouter()
 
 
 # ---------------------------------------------------------------------------
-# DB persistence helper
-# ---------------------------------------------------------------------------
-
-
-async def _db_persist_project(project: ProjectResponse) -> None:
-    """Upsert a project row to PostgreSQL. Silent no-op if DB is unavailable."""
-    try:
-        from db.session import get_session_maker
-        from db.models.project import Project
-        from sqlalchemy import select
-
-        session_maker = get_session_maker()
-        async with session_maker() as session:
-            existing = (await session.execute(
-                select(Project).where(Project.project_id == project.project_id)
-            )).scalar_one_or_none()
-
-            if not existing:
-                session.add(Project(
-                    project_id=project.project_id,
-                    name=project.name,
-                    reference=project.reference,
-                    client=project.client,
-                    design_code=project.design_code,
-                    pipeline_status=project.pipeline_status_ordinal,
-                ))
-            await session.commit()
-    except RuntimeError:
-        pass  # DATABASE_URL not configured
-    except Exception as exc:
-        logger.warning("DB project persist failed for %s: %s", project.project_id, exc)
-
-
-# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -129,14 +95,13 @@ async def create_project(payload: ProjectCreate) -> ProjectResponse:
     ProjectResponse
         Newly created project with ``pipeline_status = "created"``.
     """
-    project = project_store.create(payload)
-    await _db_persist_project(project)
+    project = await project_store.create(payload)
     logger.info("Project created: %s (%s)", project.project_id, project.name)
     return project
 
 
 @router.get("/", response_model=list[ProjectListItem])
-def list_projects() -> list[ProjectListItem]:
+async def list_projects() -> list[ProjectListItem]:
     """
     Return lightweight summaries of all projects, most recently updated first.
 
@@ -145,7 +110,7 @@ def list_projects() -> list[ProjectListItem]:
     list[ProjectListItem]
         Summary list of all registered projects.
     """
-    return project_store.list_all()
+    return await project_store.list_all()
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -166,7 +131,7 @@ def get_project_detail(project: ProjectResponse = Depends(get_project)) -> Proje
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
-def update_project(
+async def update_project(
     project_id: str,
     payload: ProjectUpdate,
     project: ProjectResponse = Depends(get_project),
@@ -190,16 +155,16 @@ def update_project(
     ProjectResponse
         Updated project.
     """
-    updated = project_store.update(project_id, payload)
+    updated = await project_store.update(project_id, payload)
     if updated is None:
-        return project_store.get_or_404(project_id)
+        return await project_store.get_or_404(project_id)
 
     logger.info("Project updated: %s", project_id)
     return updated
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(
+async def delete_project(
     project_id: str,
     project: ProjectResponse = Depends(get_project),
 ) -> None:
@@ -215,7 +180,7 @@ def delete_project(
     """
     from storage.file_handler import file_handler
 
-    project_store.delete(project_id)
+    await project_store.delete(project_id)
     file_handler.delete_project(project_id)
     logger.info("Project deleted: %s", project_id)
 

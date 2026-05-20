@@ -74,10 +74,10 @@ async def _run_analysis_background(
     options : AnalysisOptions
         Solver configuration.
     """
-    job_store.mark_running(job_id, "Initialising analysis engine…")
+    await job_store.mark_running(job_id, "Initialising analysis engine…")
     try:
-        def _progress(step: str, pct: float) -> None:
-            job_store.update_progress(job_id, pct, step)
+        async def _progress(step: str, pct: float) -> None:
+            await job_store.update_progress(job_id, pct, step)
 
         await analysis_service.run(
             project_id,
@@ -85,19 +85,16 @@ async def _run_analysis_background(
             options=options.model_dump() if hasattr(options, "model_dump") else {},
             progress_cb=_progress,
         )
-        job_store.mark_complete(job_id, result_url=f"/api/v1/analysis/{project_id}/results")
+        await job_store.mark_complete(job_id, result_url=f"/api/v1/analysis/{project_id}/results")
         logger.info("Analysis complete for project %s.", project_id)
     except Exception as exc:
         logger.exception("Analysis failed for project %s.", project_id)
-        job_store.mark_failed(job_id, errors=[str(exc)])
-
-
-
+        await job_store.mark_failed(job_id, errors=[str(exc)])
 
 
 # ─── Shared helper ────────────────────────────────────────────────────────────
 
-def _enqueue_analysis(
+async def _enqueue_analysis(
     project_id: str,
     background_tasks: BackgroundTasks,
     member_ids: Optional[list[str]],
@@ -121,7 +118,7 @@ def _enqueue_analysis(
     -------
     AnalysisJobStarted
     """
-    job_id = job_store.create("analysis", project_id=project_id)
+    job_id = await job_store.create("analysis", project_id=project_id)
     background_tasks.add_task(
         _run_analysis_background,
         project_id=project_id,
@@ -168,7 +165,7 @@ async def run_full_analysis(
     AnalysisJobStarted
     """
     logger.info("Full analysis queued for project %s.", project_id)
-    return _enqueue_analysis(project_id, background_tasks, options.member_ids, options)
+    return await _enqueue_analysis(project_id, background_tasks, options.member_ids, options)
 
 
 @router.post("/{project_id}/beam", response_model=AnalysisJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -195,7 +192,7 @@ async def analyse_beams(
     -------
     AnalysisJobStarted
     """
-    return _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
+    return await _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
 
 
 @router.post("/{project_id}/slab", response_model=AnalysisJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -219,7 +216,7 @@ async def analyse_slabs(
     -------
     AnalysisJobStarted
     """
-    return _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
+    return await _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
 
 
 @router.post("/{project_id}/column", response_model=AnalysisJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -243,7 +240,7 @@ async def analyse_columns(
     -------
     AnalysisJobStarted
     """
-    return _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
+    return await _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
 
 
 @router.post("/{project_id}/wall", response_model=AnalysisJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -267,7 +264,7 @@ async def analyse_walls(
     -------
     AnalysisJobStarted
     """
-    return _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
+    return await _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
 
 
 @router.post("/{project_id}/footing", response_model=AnalysisJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -291,7 +288,7 @@ async def analyse_footings(
     -------
     AnalysisJobStarted
     """
-    return _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
+    return await _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
 
 
 @router.post("/{project_id}/staircase", response_model=AnalysisJobStarted, status_code=status.HTTP_202_ACCEPTED)
@@ -315,11 +312,11 @@ async def analyse_staircases(
     -------
     AnalysisJobStarted
     """
-    return _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
+    return await _enqueue_analysis(project_id, background_tasks, payload.member_ids, payload.options)
 
 
 @router.get("/{project_id}/status/{job_id}", response_model=AnalysisStatusResponse)
-def get_analysis_status(
+async def get_analysis_status(
     project_id: str,
     job_id: str,
     project: ProjectResponse = Depends(require_loading_defined),
@@ -342,8 +339,8 @@ def get_analysis_status(
     AnalysisStatusResponse
         Progress, status, and errors.
     """
-    job = job_store.get_or_404(job_id)
-    all_ids = project_store.get_member_ids(project_id)
+    job = await job_store.get_or_404(job_id)
+    all_ids = await project_store.get_member_ids(project_id)
     total = len(all_ids)
     completed = int(job.progress_pct / 100 * total) if total > 0 else 0
 

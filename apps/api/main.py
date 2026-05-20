@@ -45,6 +45,7 @@ from routers import (
     design,
     drawings,
     files,
+    greeting,
     jobs,
     loading,
     pipeline,
@@ -103,6 +104,7 @@ register_error_handlers(app)
 
 # ── Routers ────────────────────────────────────────────────────────────────────
 # v1 domain routers
+app.include_router(greeting.router,  prefix="/api/v1/greeting",  tags=["Greeting"])
 app.include_router(projects.router,  prefix="/api/v1/projects",  tags=["Projects"])
 app.include_router(files.router,     prefix="/api/v1/files",     tags=["Files"])
 app.include_router(loading.router,   prefix="/api/v1/loading",   tags=["Loading"])

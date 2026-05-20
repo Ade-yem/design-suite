@@ -108,7 +108,7 @@ class DesignService:
         ValueError
             If no analysis results are available for this project.
         """
-        all_ids = member_ids or project_store.get_member_ids(project_id)
+        all_ids = member_ids or await project_store.get_member_ids(project_id)
 
         from services.analysis import analysis_service
         try:
@@ -194,7 +194,7 @@ class DesignService:
         }
 
         _store.set(project_id, output)
-        project_store.advance_status(project_id, ProjectStatus.DESIGN_COMPLETE)
+        await project_store.advance_status(project_id, ProjectStatus.DESIGN_COMPLETE)
         await self._db_save_design(project_id, output)
 
         logger.info(
