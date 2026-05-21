@@ -194,7 +194,7 @@ def main() -> None:
     
     # Configure input and output paths
     target_dxf = project_root / "sample" / "Floor-beam.dxf"
-    output_svg = script_dir / "Floor-beam.svg"
+    output_svg = project_root / "output" / "Floor-beam.svg"
     
     logger.info("Project root resolved to: %s", project_root)
     logger.info("Source DXF file: %s", target_dxf)
