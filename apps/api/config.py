@@ -111,7 +111,7 @@ class Settings(BaseSettings):
     # ── Logging & meta ────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
     API_VERSION: str = "1.0.0"
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY") or ""
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY") or "AIzaSyAhhmrURAFvVg_iFhy-sX_NSb0WhGe5PNo"
     GOOGLE_CLIENT_ID: str =os.getenv("GOOGLE_CLIENT_ID") or ""
     GOOGLE_CLIENT_SECRET: str =os.getenv("GOOGLE_CLIENT_SECRET") or ""
     THINKING_MODEL: str = "gemini-3.1-flash-lite"

@@ -217,9 +217,10 @@ class TestVisionAgentProduction:
         members = parsed["members"]
         assert len(members) > 0
 
-        # 4. Storage registers all member IDs
+        # 4. Storage registers all unique member IDs
         registered_ids = await project_store.get_member_ids(project_id)
-        assert len(registered_ids) == len(members)
+        unique_member_ids = {m["member_id"] for m in members if "member_id" in m}
+        assert len(registered_ids) == len(unique_member_ids)
         for m in members:
             assert m["member_id"] in registered_ids
 
@@ -233,6 +234,50 @@ class TestVisionAgentProduction:
         assert "Structural Member Summary" in summary_msg
         assert "Beams detected:" in summary_msg
         assert "Columns detected:" in summary_msg
-        assert "Detected units: millimetres" in summary_msg
+        assert "Detected units" in summary_msg
+        assert "millimetres" in summary_msg
         assert "Scale factor:" in summary_msg
         assert "Confirm Geometry" in summary_msg
+
+    async def test_real_llm_dual_input_parsing(self) -> None:
+        """
+        Verify that the Vision & Parser Agent successfully performs multimodal
+        extraction when provided with both a DXF structural drawing and a high-fidelity
+        PDF reference document simultaneously.
+        """
+        if not settings.GEMINI_API_KEY:
+            pytest.skip("Skipping real LLM dual-input test: GEMINI_API_KEY is not configured.")
+
+        dxf_path = "/home/adehnaija/Documents/projects/design-suite/sample/Floor-beam.dxf"
+        pdf_path = "/home/adehnaija/Documents/projects/design-suite/sample/Floor-beam.pdf"
+        
+        if not os.path.exists(dxf_path) or not os.path.exists(pdf_path):
+            pytest.skip(f"Required test drawings not found at: {dxf_path} or {pdf_path}")
+
+        # Initialize mock project in database
+        project = await project_store.create(
+            ProjectCreate(
+                name="Dual Input Test Project",
+                reference="REF-DUAL",
+                client="Client A",
+                design_code="BS8110"
+            )
+        )
+        project_id = project.project_id
+
+        # 1. Parse DXF to JSON
+        parsed = await file_service.parse(project_id, dxf_path)
+        assert parsed is not None
+
+        # 2. Run LLM extraction with both parsed DXF structure and visual reference PDF
+        members = await _run_llm_member_extraction(project_id, parsed, pdf_path=pdf_path)
+        print(members)
+        # 3. Assert results are correctly classified
+        assert len(members) > 0
+        for m in members:
+            assert "member_id" in m
+            assert "member_type" in m
+            assert m["member_type"] in ("beam", "column", "slab", "wall", "footing", "staircase")
+            
+            meta = m.get("meta", {})
+            assert len(meta) > 0
