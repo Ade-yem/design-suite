@@ -23,11 +23,12 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from agents.state import StructuralDesignState
@@ -296,9 +297,16 @@ def _fallback_members_heuristics(candidates: list[dict]) -> list[dict]:
     return members
 
 
-async def _run_llm_member_extraction(project_id: str, parsed_json: dict) -> list[dict]:
+async def _run_llm_member_extraction(
+    project_id: str,
+    parsed_json: dict,
+    pdf_path: Optional[str] = None,
+) -> list[dict]:
     """
     Runs Gemini to classify raw geometry entities into structured members.
+
+    If an optional visual reference PDF is provided, it is base64 encoded
+    and appended to the multimodal message body.
 
     Parameters
     ----------
@@ -306,6 +314,8 @@ async def _run_llm_member_extraction(project_id: str, parsed_json: dict) -> list
         Project identifier.
     parsed_json : dict
         Parsed structural JSON.
+    pdf_path : str | None
+        Optional absolute filesystem path to a reference visual layout PDF.
 
     Returns
     -------
@@ -315,7 +325,7 @@ async def _run_llm_member_extraction(project_id: str, parsed_json: dict) -> list
     candidates = _prepare_candidates_summary(parsed_json)
     if not candidates:
         return parsed_json.get("members", [])
-        
+
     candidates_data = []
     for cand in candidates:
         cand_summary = {
@@ -329,7 +339,7 @@ async def _run_llm_member_extraction(project_id: str, parsed_json: dict) -> list
             "nearby_text": cand["nearest_text"]
         }
         candidates_data.append(cand_summary)
-        
+
     prompt = f"""
 You are the Vision & Parsing Agent (the "Eyes") of an AI-driven structural design copilot. 
 Analyze these structural candidates from a parsed DXF drawing and identify/classify them into standard structural member objects.
@@ -387,21 +397,60 @@ Return ONLY a valid JSON array of members. Do not include markdown block wrapper
 
     try:
         llm = _get_llm()
-        response = await llm.ainvoke(prompt)
+        content = [{"type": "text", "text": prompt}]
+
+        if pdf_path and os.path.exists(pdf_path):
+            try:
+                import base64
+                with open(pdf_path, "rb") as f:
+                    pdf_data = base64.b64encode(f.read()).decode("utf-8")
+                content.append({
+                    "type": "file",
+                    "mime_type": "application/pdf",
+                    "base64": pdf_data
+                })
+                logger.info(f"PDF reference at '{pdf_path}' attached successfully for project {project_id}")
+            except Exception as pdf_err:
+                logger.warning(f"Failed to encode visual PDF reference: {pdf_err}")
+
+        # pyrefly: ignore [no-matching-overload]
+        message = HumanMessage(content=content)
+        response = await llm.ainvoke([message])
+
         text = response.text.strip()
-        
+        logger.info(text)
+        # Unpack nested message block/list wraps commonly generated in testing mock layers
+        try:
+            parsed_blocks = json.loads(text)
+            if isinstance(parsed_blocks, list) and len(parsed_blocks) > 0:
+                first_block = parsed_blocks[0]
+                if isinstance(first_block, dict) and "text" in first_block:
+                    logger.info("Unpacked nested text block from LLM response wrapper.")
+                    text = first_block["text"].strip()
+        except Exception:
+            pass
+
         if "```" in text:
             match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
             if match:
                 text = match.group(1).strip()
-                
-        members = json.loads(text)
+
+        try:
+            members = json.loads(text)
+        except json.JSONDecodeError:
+            try:
+                import ast
+                members = ast.literal_eval(text)
+            except Exception as ast_err:
+                logger.warning(f"Fallback ast.literal_eval parsing also failed: {ast_err}")
+                raise
+
         if isinstance(members, list):
             for m in members:
                 m_type = m.get("member_type", m.get("type", "beam"))
                 m["member_type"] = m_type
                 m["type"] = m_type
-                
+
                 if m_type == "beam":
                     meta = m.setdefault("meta", {})
                     b = float(meta.setdefault("b_mm", 300))
@@ -421,7 +470,7 @@ Return ONLY a valid JSON array of members. Do not include markdown block wrapper
     except Exception as e:
         logger.error(f"Error parsing members from LLM response: {e}")
         return _fallback_members_heuristics(candidates)
-        
+
     return []
 
 

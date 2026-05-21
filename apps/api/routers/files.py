@@ -23,10 +23,13 @@ endpoints will reject requests for this project.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, status
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from dependencies import get_project, require_file_uploaded
@@ -102,6 +105,31 @@ class UploadResponse(BaseModel):
     status_url: str
 
 
+class ProjectFileMetadata(BaseModel):
+    """
+    Metadata for an uploaded project reference drawing file.
+
+    Attributes
+    ----------
+    filename : str
+        Sanitized safe stored filename (with timestamp prefix).
+    original_name : str
+        User-friendly original filename without timestamp prefix.
+    size_bytes : int
+        File size in bytes.
+    file_type : str
+        Drawing type ('dxf' | 'pdf' | 'unknown').
+    download_url : str
+        Relative endpoint path to stream the file.
+    """
+
+    filename: str = Field(..., description="Unique safe stored filename.")
+    original_name: str = Field(..., description="User-friendly original filename.")
+    size_bytes: int = Field(..., description="File size in bytes.")
+    file_type: str = Field(..., description="Drawing type (dxf | pdf | unknown).")
+    download_url: str = Field(..., description="Download API path.")
+
+
 # ─── Background parse task ────────────────────────────────────────────────────
 
 
@@ -109,6 +137,7 @@ async def _parse_file_background(
     project_id: str,
     file_path: str,
     job_id: str,
+    pdf_path: Optional[str] = None,
 ) -> None:
     """
     Background task: invoke ``file_service.parse()`` then run LLM member
@@ -122,10 +151,16 @@ async def _parse_file_background(
         Absolute filesystem path to the uploaded file.
     job_id : str
         Job ID corresponding to this parse operation.
+    pdf_path : str | None
+        Optional absolute filesystem path to the uploaded reference PDF.
     """
     await job_store.mark_running(job_id, "Parsing file…")
     try:
         parsed = await file_service.parse(project_id, file_path)
+
+        # Cache reference paths in geometry dictionary for visual grounding
+        if pdf_path:
+            parsed["uploaded_pdf_path"] = pdf_path
 
         # ezdxf extracts raw geometry only; run LLM classification when no
         # members were identified by the DXF/PDF parser itself.
@@ -133,7 +168,7 @@ async def _parse_file_background(
             await job_store.update_progress(job_id, 60.0, "Classifying structural members…")
             from agents.parser import _run_llm_member_extraction
             from storage.project_store import project_store as _pstore
-            members = await _run_llm_member_extraction(project_id, parsed)
+            members = await _run_llm_member_extraction(project_id, parsed, pdf_path=pdf_path)
             parsed["members"] = members
             file_service.register_geometry(project_id, parsed)
             for member in members:
@@ -160,13 +195,14 @@ async def upload_file(
     project_id: str,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    pdf_file: Optional[UploadFile] = File(None),
     project: ProjectResponse = Depends(get_project),
 ) -> UploadResponse:
     """
-    Upload a DXF or PDF file and trigger asynchronous Vision Agent parsing.
+    Upload a DXF drawing and an optional reference PDF file, triggering Vision Agent parsing.
 
-    The endpoint returns immediately with a ``job_id``.  Poll ``status_url`` to
-    track parse progress.  When parsing completes the project advances to
+    The endpoint returns immediately with a ``job_id``. Poll ``status_url`` to
+    track parse progress. When parsing completes the project advances to
     ``FILE_UPLOADED`` status.
 
     Parameters
@@ -176,7 +212,9 @@ async def upload_file(
     background_tasks : BackgroundTasks
         FastAPI background task queue.
     file : UploadFile
-        Uploaded file (DXF or PDF).
+        Uploaded primary drawing file (DXF).
+    pdf_file : UploadFile | None
+        Optional uploaded reference PDF file for layout and visual grounding.
     project : ProjectResponse
         Gate dependency confirming the project exists.
 
@@ -192,16 +230,23 @@ async def upload_file(
         ``FILE_TOO_LARGE``  — exceeds 50 MB.
     """
     saved_path = await file_handler.save(project_id, file)
+
+    saved_pdf_path: Optional[str] = None
+    if pdf_file:
+        saved_pdf_path = await file_handler.save(project_id, pdf_file)
+
     job_id = await job_store.create("parsing", project_id=project_id)
     background_tasks.add_task(
         _parse_file_background,
         project_id=project_id,
-        file_path=str(saved_path),
+        file_path=saved_path,
         job_id=job_id,
+        pdf_path=saved_pdf_path,
     )
     logger.info(
-        "File '%s' uploaded for project %s. Parse job: %s.",
+        "File '%s' (PDF ref: '%s') uploaded for project %s. Parse job: %s.",
         file.filename,
+        pdf_file.filename if pdf_file else "none",
         project_id,
         job_id,
     )
@@ -381,3 +426,100 @@ def confirm_scale(
         scale_factor=payload.scale_factor,
         unit_label=payload.unit_label,
     )
+
+
+# ─── File Listing & Downloading Endpoints ─────────────────────────────────────
+
+@router.get("/{project_id}/files", response_model=list[ProjectFileMetadata])
+async def list_project_files(
+    project_id: str,
+    project: ProjectResponse = Depends(get_project),
+) -> list[ProjectFileMetadata]:
+    """
+    List all uploaded DXF and PDF drawings associated with a project.
+
+    Parameters
+    ----------
+    project_id : str
+        Target project identifier.
+    project : ProjectResponse
+        Project validation dependency.
+
+    Returns
+    -------
+    list[ProjectFileMetadata]
+        List of reference drawing file records.
+    """
+    filenames = file_handler.list_files(project_id)
+    files = []
+    for fname in filenames:
+        url = await file_handler.get_url(project_id, fname)
+        if not url:
+            continue
+
+        original_name = fname
+        parts = fname.split("_", 1)
+        if len(parts) > 1 and parts[0].isdigit():
+            original_name = parts[1]
+
+        suffix = Path(fname).suffix.lower()
+        file_type = "dxf" if suffix == ".dxf" else "pdf" if suffix == ".pdf" else "unknown"
+
+        size_bytes = 0
+        if os.path.exists(url):
+            size_bytes = os.path.getsize(url)
+
+        files.append(
+            ProjectFileMetadata(
+                filename=fname,
+                original_name=original_name,
+                size_bytes=size_bytes,
+                file_type=file_type,
+                download_url=f"/api/v1/files/{project_id}/download/{fname}",
+            )
+        )
+    return files
+
+
+@router.get("/{project_id}/download/{filename}")
+async def download_project_file(
+    project_id: str,
+    filename: str,
+    project: ProjectResponse = Depends(get_project),
+):
+    """
+    Stream or redirect to an uploaded project reference drawing file.
+
+    Parameters
+    ----------
+    project_id : str
+        Owning project.
+    filename : str
+        Unique stored name of the file to retrieve.
+
+    Returns
+    -------
+    FileResponse or RedirectResponse
+        File stream response for local storage, or redirect for remote storage.
+    """
+    url = await file_handler.get_url(project_id, filename)
+    if not url:
+        raise StructuralError(
+            "FILE_PARSE_ERROR",
+            stage="download",
+            details={"reason": f"File '{filename}' does not exist."},
+            status_code=404,
+        )
+
+    if os.path.exists(url):
+        original_name = filename
+        parts = filename.split("_", 1)
+        if len(parts) > 1 and parts[0].isdigit():
+            original_name = parts[1]
+        return FileResponse(
+            path=url,
+            filename=original_name,
+            media_type="application/octet-stream",
+        )
+
+    return RedirectResponse(url=url)

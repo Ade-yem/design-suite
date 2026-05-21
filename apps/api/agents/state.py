@@ -91,6 +91,9 @@ class StructuralDesignState(TypedDict, total=False):
     uploaded_file_path: Optional[str]
     """Filesystem path to the uploaded DXF or PDF file."""
 
+    uploaded_pdf_path: Optional[str]
+    """Filesystem path to the user-uploaded reference PDF file (visual layout context)."""
+
     parse_job_id: Optional[str]
     """Job ID for the async parsing task (poll via GET /api/v1/jobs/{job_id})."""
 
@@ -249,6 +252,7 @@ def initial_state(project_id: str, design_code: str = "BS8110") -> StructuralDes
         messages=[],
         agent_logs=[],
         uploaded_file_path=None,
+        uploaded_pdf_path=None,
         parse_job_id=None,
         parsed_structural_json=None,
         geometry_verified=False,
