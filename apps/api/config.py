@@ -17,6 +17,11 @@ from typing import Literal
 import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
+
+# Dynamically load the .env file relative to this config.py file path
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(env_path)
 
 
 class Settings(BaseSettings):
@@ -73,7 +78,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(env_path),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -111,7 +116,7 @@ class Settings(BaseSettings):
     # ── Logging & meta ────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
     API_VERSION: str = "1.0.0"
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY") or "AIzaSyAhhmrURAFvVg_iFhy-sX_NSb0WhGe5PNo"
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY") or ""
     GOOGLE_CLIENT_ID: str =os.getenv("GOOGLE_CLIENT_ID") or ""
     GOOGLE_CLIENT_SECRET: str =os.getenv("GOOGLE_CLIENT_SECRET") or ""
     THINKING_MODEL: str = "gemini-3.1-flash-lite"
