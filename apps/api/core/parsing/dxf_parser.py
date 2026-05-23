@@ -112,6 +112,16 @@ SQUARE_ASPECT_THRESHOLD = 1.5
 # Order matters: first match wins.
 
 LAYER_HINT_PATTERNS: list[tuple[str, str]] = [
+    # --- Structural annotations / text / dimensions (First match wins, so check text first to avoid BeamText matching beam) ---
+    (r"text",               "dimension_annotation"),
+    (r"txt",                "dimension_annotation"),
+    (r"label",              "dimension_annotation"),
+    (r"note",               "dimension_annotation"),
+    (r"dim",                "dimension_annotation"),
+    (r"annotation",         "dimension_annotation"),
+    (r"s[_\-]?note",        "dimension_annotation"),
+    (r"s[_\-]?text",        "dimension_annotation"),
+
     # --- Structural members ---
     (r"s[_\-]?col",         "column_candidate"),
     (r"str[_\-]?col",       "column_candidate"),
@@ -155,12 +165,6 @@ LAYER_HINT_PATTERNS: list[tuple[str, str]] = [
     (r"s[_\-]?grid",        "grid_line"),
     (r"column[_\-]?grid",   "grid_line"),
     (r"ref[_\-]?line",      "grid_line"),
-
-    (r"dim",                "dimension_annotation"),
-    (r"annotation",         "dimension_annotation"),
-    (r"s[_\-]?note",        "dimension_annotation"),
-    (r"s[_\-]?text",        "dimension_annotation"),
-    (r"label",              "dimension_annotation"),
 
     # --- Architectural (to be deprioritised, not deleted) ---
     (r"^a[_\-]",            "architectural"),
@@ -453,7 +457,32 @@ class DXFGeometricExtractor:
             )
             return raw, inferred_label, inferred_factor, warning
 
-        if factor == 1.0 and raw != 4:
+        # Cross-validate scale factor against drawing extents to detect unit misalignment
+        try:
+            extmin_val = doc.header.get("$EXTMIN", (0.0, 0.0, 0.0))
+            extmax_val = doc.header.get("$EXTMAX", (0.0, 0.0, 0.0))
+            x1 = extmin_val[0] if isinstance(extmin_val, (tuple, list)) else getattr(extmin_val, "x", 0.0)
+            x2 = extmax_val[0] if isinstance(extmax_val, (tuple, list)) else getattr(extmax_val, "x", 0.0)
+            
+            implied_width_m = abs(x2 - x1) * factor / 1000.0
+            if implied_width_m > 300.0 and factor > 1.0:
+                # CAD template is almost certainly set to Inches/Feet incorrectly
+                # while coordinates are actually millimeters. Force override to MM factor.
+                logger.warning(
+                    f"Scale override triggered: $INSUNITS={raw} ({label}) implies "
+                    f"an absurd implied building width of {implied_width_m:.2f} meters. "
+                    f"Overriding scale factor to 1.0 (millimeters)."
+                )
+                warning = (
+                    f"$INSUNITS={raw} ({label}) implies an implausible implied width of "
+                    f"{implied_width_m:.1f} m. Overriding scale factor to 1.0 (mm)."
+                )
+                factor = 1.0
+                label = "millimetres (overridden)"
+        except Exception as err:
+            logger.warning(f"Cross-validating drawing extents failed: {err}")
+
+        if factor == 1.0 and raw != 4 and warning is None:
             warning = (
                 f"Unrecognised $INSUNITS value {raw}. "
                 f"Defaulting conversion factor to 1.0 (treating as mm). "

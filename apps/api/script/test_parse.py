@@ -6,7 +6,9 @@ from config import settings
 from schemas.project import ProjectCreate
 from services.files import file_service
 from storage.project_store import project_store
+from dotenv import load_dotenv
 
+load_dotenv()
 async def test_real_llm_dual_input_parsing() -> None:
     """
     Verify that the Vision & Parser Agent successfully performs multimodal
