@@ -8,6 +8,16 @@ export interface StatusLog { type: "status_log"; tool: string; status: string }
 export interface GateReached { type: "gate_reached"; gate: string; action_required: string }
 export interface DrawingCommands { type: "drawing_commands"; data: unknown }
 export interface DrawingUpdate { type: "drawing_update"; data: unknown }
+export interface JobUpdate {
+  type: "job_update";
+  job_id: string;
+  job_type: string;
+  status: "queued" | "running" | "complete" | "failed" | "cancelled";
+  progress_pct: number;
+  current_step: string;
+  result_url?: string | null;
+  errors?: string[];
+}
 export interface SocketError { type: "error"; message: string }
 
 export type SocketMessage =
@@ -16,6 +26,7 @@ export type SocketMessage =
   | GateReached
   | DrawingCommands
   | DrawingUpdate
+  | JobUpdate
   | SocketError;
 
 export interface SocketCallbacks {
@@ -23,6 +34,7 @@ export interface SocketCallbacks {
   onStatusLog?: (msg: StatusLog) => void;
   onGateReached?: (msg: GateReached) => void;
   onDrawingCommands?: (msg: DrawingCommands) => void;
+  onJobUpdate?: (msg: JobUpdate) => void;
   onError?: (msg: SocketError) => void;
 }
 
@@ -72,6 +84,9 @@ export function useProjectSocket(
           case "drawing_commands":
           case "drawing_update":
             callbacksRef.current.onDrawingCommands?.(msg as DrawingCommands);
+            break;
+          case "job_update":
+            callbacksRef.current.onJobUpdate?.(msg as JobUpdate);
             break;
           case "error":
             callbacksRef.current.onError?.(msg);

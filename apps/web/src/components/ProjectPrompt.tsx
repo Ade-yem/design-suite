@@ -224,7 +224,7 @@ export function ProjectPrompt() {
 
       {/* ── Greeting + action header ── */}
       <div className="px-10 pt-12 pb-6 shrink-0 flex items-end justify-between">
-        <div className="min-h-[3.5rem]">
+        <div className="min-h-14">
           {greetingLoading ? (
             <div className="space-y-2.5 animate-pulse">
               <div className="h-7 w-52 bg-muted rounded-lg" />

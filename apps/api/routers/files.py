@@ -171,10 +171,8 @@ async def _parse_file_background(
             members = await _run_llm_member_extraction(project_id, parsed, pdf_path=pdf_path)
             parsed["members"] = members
             file_service.register_geometry(project_id, parsed)
-            for member in members:
-                mid = member.get("member_id")
-                if mid:
-                    await _pstore.register_member(project_id, mid)
+            mids = [member.get("member_id") for member in members if member.get("member_id")]
+            await _pstore.register_members_batch(project_id, mids)
 
         await job_store.mark_complete(job_id, result_url=f"/api/v1/files/{project_id}/parsed")
         logger.info("Parsing complete for project %s.", project_id)

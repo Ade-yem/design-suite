@@ -37,6 +37,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const isPublicRoute =
     pathname === "/login" ||
     pathname === "/register" ||
+    pathname === "/auth/callback" ||
     pathname === "/verify" ||
     pathname === "/verify-pending" ||
     pathname === "/forgot-password" ||

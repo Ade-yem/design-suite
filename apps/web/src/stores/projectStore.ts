@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { Project, ProjectListItem, CreateProjectPayload } from "@/types/project";
+import type {
+  Project,
+  ProjectListItem,
+  CreateProjectPayload,
+} from "@/types/project";
 import { apiClient } from "@/lib/api";
 
 interface ProjectState {
@@ -26,7 +30,7 @@ export const useProjectStore = create<ProjectStore>()(
     (set, get) => ({
       activeProject: null,
       projects: [],
-      isLoading: false,
+      isLoading: true,
       error: null,
 
       setActiveProject: (project) => set({ activeProject: project }),
@@ -36,16 +40,21 @@ export const useProjectStore = create<ProjectStore>()(
       fetchProjects: async () => {
         set({ isLoading: true, error: null });
         try {
-          const { data } = await apiClient.get<ProjectListItem[]>("/api/v1/projects/");
+          const { data } =
+            await apiClient.get<ProjectListItem[]>("/api/v1/projects");
           set({ projects: data, isLoading: false });
         } catch (err: unknown) {
-          const detail = (err as { detail?: string }).detail ?? "Failed to load projects.";
+          const detail =
+            (err as { detail?: string }).detail ?? "Failed to load projects.";
           set({ error: detail, isLoading: false });
         }
       },
 
       createProject: async (payload) => {
-        const { data } = await apiClient.post<Project>("/api/v1/projects/", payload);
+        const { data } = await apiClient.post<Project>(
+          "/api/v1/projects",
+          payload,
+        );
         set((state) => ({
           projects: [
             {
@@ -65,10 +74,13 @@ export const useProjectStore = create<ProjectStore>()(
         const active = get().activeProject;
         if (!active) return;
         try {
-          const { data } = await apiClient.get<Project>(`/api/v1/projects/${active.project_id}`);
+          const { data } = await apiClient.get<Project>(
+            `/api/v1/projects/${active.project_id}`,
+          );
           set({ activeProject: data });
-        } catch {
-          // silently ignore — stale data is acceptable
+        } catch (err: unknown) {
+          const status = (err as { status?: number }).status;
+          if (status === 404) set({ activeProject: null });
         }
       },
 
@@ -89,6 +101,6 @@ export const useProjectStore = create<ProjectStore>()(
       name: "structai-project-session",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ activeProject: state.activeProject }),
-    }
-  )
+    },
+  ),
 );

@@ -72,6 +72,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     __tablename__ = "users"
 
     full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    image: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(50), default="engineer")
     organisation_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("organisations.id"), nullable=True

@@ -31,7 +31,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-
+import logging
 from fastapi import status as http_status
 
 from middleware.error_handler import StructuralError
@@ -43,6 +43,8 @@ from schemas.project import (
     ProjectUpdate,
 )
 
+
+logger = logging.getLogger(__name__)
 
 # ── In-memory implementation ──────────────────────────────────────────────────
 
@@ -68,7 +70,12 @@ class MemoryProjectStore:
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
-    async def create(self, data: ProjectCreate) -> ProjectResponse:
+    async def create(
+        self,
+        data: ProjectCreate,
+        organisation_id: str | None = None,
+        user_id: uuid.UUID | None = None,
+    ) -> ProjectResponse:
         project_id = f"PRJ-{uuid.uuid4().hex[:8].upper()}"
         now = datetime.now(timezone.utc)
         record = {
@@ -80,19 +87,23 @@ class MemoryProjectStore:
             "pipeline_status": ProjectStatus.CREATED,
             "created_at": now,
             "updated_at": now,
+            "organisation_id": organisation_id,
+            "created_by": user_id,
         }
         self._projects[project_id] = record
         self._members[project_id] = set()
         return self._to_response(record)
 
-    async def get(self, project_id: str) -> Optional[ProjectResponse]:
+    async def get(self, project_id: str, organisation_id: str | None = None) -> Optional[ProjectResponse]:
         record = self._projects.get(project_id)
         if record is None:
             return None
+        if organisation_id is not None and record.get("organisation_id") != organisation_id:
+            return None
         return self._to_response(record)
 
-    async def get_or_404(self, project_id: str) -> ProjectResponse:
-        project = await self.get(project_id)
+    async def get_or_404(self, project_id: str, organisation_id: str | None = None) -> ProjectResponse:
+        project = await self.get(project_id, organisation_id)
         if project is None:
             raise StructuralError(
                 error_code="PROJECT_NOT_FOUND",
@@ -101,22 +112,29 @@ class MemoryProjectStore:
             )
         return project
 
-    async def list_all(self) -> list[ProjectListItem]:
-        items = [
-            ProjectListItem(
-                project_id=r["project_id"],
-                name=r["name"],
-                reference=r["reference"],
-                pipeline_status=r["pipeline_status"].label(),
-                updated_at=r["updated_at"],
+    async def list_all(self, organisation_id: str | None = None) -> list[ProjectListItem]:
+        items = []
+        for r in self._projects.values():
+            if organisation_id is not None and r.get("organisation_id") != organisation_id:
+                continue
+            items.append(
+                ProjectListItem(
+                    project_id=r["project_id"],
+                    name=r["name"],
+                    reference=r["reference"],
+                    pipeline_status=r["pipeline_status"].label(),
+                    updated_at=r["updated_at"],
+                )
             )
-            for r in self._projects.values()
-        ]
         return sorted(items, key=lambda x: x.updated_at, reverse=True)
 
-    async def update(self, project_id: str, data: ProjectUpdate) -> Optional[ProjectResponse]:
+    async def update(
+        self, project_id: str, data: ProjectUpdate, organisation_id: str | None = None
+    ) -> Optional[ProjectResponse]:
         record = self._projects.get(project_id)
         if record is None:
+            return None
+        if organisation_id is not None and record.get("organisation_id") != organisation_id:
             return None
         if data.name is not None:
             record["name"] = data.name
@@ -129,8 +147,11 @@ class MemoryProjectStore:
         record["updated_at"] = datetime.now(timezone.utc)
         return self._to_response(record)
 
-    async def delete(self, project_id: str) -> bool:
+    async def delete(self, project_id: str, organisation_id: str | None = None) -> bool:
         if project_id not in self._projects:
+            return False
+        record = self._projects[project_id]
+        if organisation_id is not None and record.get("organisation_id") != organisation_id:
             return False
         del self._projects[project_id]
         self._members.pop(project_id, None)
@@ -160,6 +181,21 @@ class MemoryProjectStore:
         if project_id in self._members:
             self._members[project_id].add(member_id)
 
+    async def register_members_batch(self, project_id: str, member_ids: list[str]) -> None:
+        """
+        Batch register multiple structural member IDs for a project.
+
+        Parameters
+        ----------
+        project_id : str
+            Project identifier.
+        member_ids : list[str]
+            List of member identifiers to register.
+        """
+        if project_id in self._members:
+            for mid in member_ids:
+                self._members[project_id].add(mid)
+
     async def remove_member(self, project_id: str, member_id: str) -> None:
         if project_id in self._members:
             self._members[project_id].discard(member_id)
@@ -183,7 +219,10 @@ class MemoryProjectStore:
             created_at=record["created_at"],
             updated_at=record["updated_at"],
             member_count=len(self._members.get(project_id, set())),
+            organisation_id=record.get("organisation_id"),
+            created_by=record.get("created_by"),
         )
+
 
 
 # ── PostgreSQL implementation ─────────────────────────────────────────────────
@@ -200,7 +239,12 @@ class PostgresProjectStore:
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
-    async def create(self, data: ProjectCreate) -> ProjectResponse:
+    async def create(
+        self,
+        data: ProjectCreate,
+        organisation_id: str | None = None,
+        user_id: uuid.UUID | None = None,
+    ) -> ProjectResponse:
         from db.session import get_session_maker
         from db.models.project import Project
 
@@ -218,24 +262,25 @@ class PostgresProjectStore:
                 pipeline_status=int(ProjectStatus.CREATED),
                 created_at=now,
                 updated_at=now,
+                organisation_id=organisation_id,
+                created_by=user_id,
             )
             session.add(row)
             await session.commit()
             await session.refresh(row)
             return self._to_response(row, member_count=0)
 
-    async def get(self, project_id: str) -> Optional[ProjectResponse]:
+    async def get(self, project_id: str, organisation_id: str | None = None) -> Optional[ProjectResponse]:
         from db.session import get_session_maker
         from db.models.project import Project, ProjectMember
         from sqlalchemy import select, func
 
         session_maker = get_session_maker()
         async with session_maker() as session:
-            row = (
-                await session.execute(
-                    select(Project).where(Project.project_id == project_id)
-                )
-            ).scalar_one_or_none()
+            stmt = select(Project).where(Project.project_id == project_id)
+            if organisation_id is not None:
+                stmt = stmt.where(Project.organisation_id == organisation_id)
+            row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
                 return None
             count = (
@@ -245,8 +290,8 @@ class PostgresProjectStore:
             ).scalar_one()
             return self._to_response(row, member_count=count)
 
-    async def get_or_404(self, project_id: str) -> ProjectResponse:
-        project = await self.get(project_id)
+    async def get_or_404(self, project_id: str, organisation_id: str | None = None) -> ProjectResponse:
+        project = await self.get(project_id, organisation_id)
         if project is None:
             raise StructuralError(
                 error_code="PROJECT_NOT_FOUND",
@@ -255,19 +300,19 @@ class PostgresProjectStore:
             )
         return project
 
-    async def list_all(self) -> list[ProjectListItem]:
+    async def list_all(self, organisation_id: str | None = None) -> list[ProjectListItem]:
         from db.session import get_session_maker
         from db.models.project import Project
         from sqlalchemy import select
 
         session_maker = get_session_maker()
         async with session_maker() as session:
-            rows = (
-                await session.execute(
-                    select(Project).order_by(Project.updated_at.desc())
-                )
-            ).scalars().all()
-            return [
+            stmt = select(Project)
+            if organisation_id is not None:
+                stmt = stmt.where(Project.organisation_id == organisation_id)
+            stmt = stmt.order_by(Project.updated_at.desc())
+            rows = (await session.execute(stmt)).scalars().all()
+            res = [
                 ProjectListItem(
                     project_id=r.project_id,
                     name=r.name,
@@ -277,19 +322,22 @@ class PostgresProjectStore:
                 )
                 for r in rows
             ]
+            logger.info(f"Found {len(res)} projects")
+            return res
 
-    async def update(self, project_id: str, data: ProjectUpdate) -> Optional[ProjectResponse]:
+    async def update(
+        self, project_id: str, data: ProjectUpdate, organisation_id: str | None = None
+    ) -> Optional[ProjectResponse]:
         from db.session import get_session_maker
         from db.models.project import Project, ProjectMember
         from sqlalchemy import select, func
 
         session_maker = get_session_maker()
         async with session_maker() as session:
-            row = (
-                await session.execute(
-                    select(Project).where(Project.project_id == project_id)
-                )
-            ).scalar_one_or_none()
+            stmt = select(Project).where(Project.project_id == project_id)
+            if organisation_id is not None:
+                stmt = stmt.where(Project.organisation_id == organisation_id)
+            row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
                 return None
             if data.name is not None:
@@ -310,18 +358,17 @@ class PostgresProjectStore:
             ).scalar_one()
             return self._to_response(row, member_count=count)
 
-    async def delete(self, project_id: str) -> bool:
+    async def delete(self, project_id: str, organisation_id: str | None = None) -> bool:
         from db.session import get_session_maker
         from db.models.project import Project
         from sqlalchemy import select
 
         session_maker = get_session_maker()
         async with session_maker() as session:
-            row = (
-                await session.execute(
-                    select(Project).where(Project.project_id == project_id)
-                )
-            ).scalar_one_or_none()
+            stmt = select(Project).where(Project.project_id == project_id)
+            if organisation_id is not None:
+                stmt = stmt.where(Project.organisation_id == organisation_id)
+            row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
                 return False
             await session.delete(row)
@@ -414,6 +461,67 @@ class PostgresProjectStore:
                 )
                 await session.commit()
 
+    async def register_members_batch(self, project_id: str, member_ids: list[str]) -> None:
+        """
+        Register multiple structural member IDs in a single database transaction.
+        Enables bulk verification and eliminates N+1 SQL connections.
+
+        Parameters
+        ----------
+        project_id : str
+            Project identifier.
+        member_ids : list[str]
+            List of member identifiers to register.
+        """
+        if not member_ids:
+            return
+
+        from db.session import get_session_maker
+        from db.models.project import ProjectMember
+        from sqlalchemy import select
+
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            # 1. Fetch all existing member IDs for this project in one query
+            stmt = select(ProjectMember.member_id).where(ProjectMember.project_id == project_id)
+            existing_rows = (await session.execute(stmt)).scalars().all()
+            existing_set = set(existing_rows)
+
+            # 2. Filter new members and prepare batch insert
+            new_members = []
+            added_in_batch = set()
+            for mid in member_ids:
+                if mid not in existing_set and mid not in added_in_batch:
+                    added_in_batch.add(mid)
+                    m_type = "beam"
+                    upper_id = mid.upper()
+                    if upper_id.startswith("C"):
+                        m_type = "column"
+                    elif upper_id.startswith("S"):
+                        m_type = "slab"
+                    elif upper_id.startswith("F"):
+                        m_type = "footing"
+                    elif upper_id.startswith("W"):
+                        m_type = "wall"
+
+                    new_members.append(
+                        ProjectMember(
+                            project_id=project_id,
+                            member_id=mid,
+                            member_type=m_type,
+                        )
+                    )
+
+            # 3. Add and commit all new members in a single transaction
+            if new_members:
+                session.add_all(new_members)
+                await session.commit()
+                logger.info(
+                    "Batch registered %d new members for project %s", 
+                    len(new_members), 
+                    project_id
+                )
+
     async def remove_member(self, project_id: str, member_id: str) -> None:
         from db.session import get_session_maker
         from db.models.project import ProjectMember
@@ -464,6 +572,8 @@ class PostgresProjectStore:
             created_at=row.created_at,  # type: ignore[attr-defined]
             updated_at=row.updated_at,  # type: ignore[attr-defined]
             member_count=member_count,
+            organisation_id=row.organisation_id,  # type: ignore[attr-defined]
+            created_by=row.created_by,  # type: ignore[attr-defined]
         )
 
 

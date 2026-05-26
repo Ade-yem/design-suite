@@ -20,6 +20,7 @@ import uuid
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -60,6 +61,14 @@ class TwoFactorVerifyRequest(BaseModel):
 
     user_id: uuid.UUID = Field(..., description="Unique User identifier.")
     code: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code.")
+
+class GoogleProfileResponse(BaseModel):
+    """
+    Response schema for google profile.
+    """
+    fullname: str | None = Field(..., description="User's full name.")
+    email: str | None = Field(..., description="Email.")
+    image: str | None = Field(..., description="User's image.")
 
 
 @auth_router.post("/login")
@@ -304,6 +313,47 @@ _google_callback_dep = OAuth2AuthorizeCallback(
 google_callback_router = APIRouter()
 
 
+async def fetch_google_profile(access_token: str) -> GoogleProfileResponse | None:
+    """
+    Fetch user profile data from Google People API and transform it.
+    
+    Returns:
+        A dictionary matching {fullname: str, email: str, image: str} or None if the request fails.
+    """
+    url = "https://people.googleapis.com/v1/people/me"
+    # Request names, emailAddresses, and photos in a single API call
+    params = {"personFields": "names,emailAddresses,photos"}
+    headers = {"Authorization": f"Bearer {access_token}"}
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, params=params, headers=headers)
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                
+                # Extract names safely
+                names = data.get("names", [])
+                fullname = names[0].get("displayName") if names else None
+                
+                # Extract email address safely
+                emails = data.get("emailAddresses", [])
+                email = emails[0].get("value") if emails else None
+                
+                # Extract profile image safely
+                photos = data.get("photos", [])
+                image = photos[0].get("url") if photos else None
+                
+                # Transform to target schema
+                return GoogleProfileResponse(fullname=fullname, email=email, image=image)
+                
+            logger.error("Google API responded with status %d: %s", resp.status_code, resp.text)
+    except Exception as e:
+        logger.error("Failed to fetch profile from Google People API: %s", str(e))
+        
+    return None
+
+
 @google_callback_router.get("/callback")
 async def google_oauth_callback(
     request: Request,
@@ -311,6 +361,8 @@ async def google_oauth_callback(
     user_manager: UserManager = Depends(get_user_manager),
     strategy: JWTStrategy = Depends(auth_backend.get_strategy),
 ) -> RedirectResponse:
+    from db.models.organisation import Organisation
+
     oauth_token, _ = access_token_state
     account_id, account_email = await google_client.get_id_email(oauth_token["access_token"])
 
@@ -341,9 +393,68 @@ async def google_oauth_callback(
             status_code=302,
         )
 
+    # 1. Fetch displayName and image from Google People API
+    profile_data = await fetch_google_profile(oauth_token["access_token"])
+    # pyrefly: ignore [missing-attribute]
+    session = user_manager.user_db.session
+
+    needs_commit = False
+    if profile_data:
+        # pyrefly: ignore [missing-attribute]
+        if profile_data.fullname and not user.full_name:
+            # pyrefly: ignore [missing-attribute]
+            user.full_name = profile_data.fullname
+            needs_commit = True
+        # pyrefly: ignore [missing-attribute]
+        if profile_data.image and not user.image:
+            # pyrefly: ignore [missing-attribute]
+            user.image = profile_data.image
+            needs_commit = True
+
+    # 2. Automatically create default Organisation if OAuth user has no tenant ID
+    # pyrefly: ignore [missing-attribute]
+    if user.organisation_id is None:
+        # pyrefly: ignore [missing-attribute]
+        base_name = user.full_name or user.email.split("@")[0]
+        org_name = f"{base_name.title()}'s Organisation"
+        try:
+            unique_slug = await user_manager._generate_unique_slug(session, base_name)
+            org = Organisation(name=org_name, slug=unique_slug)
+            session.add(org)
+            await session.flush()  # Generates org ID
+            
+            # pyrefly: ignore [missing-attribute]
+            user.organisation_id = org.id
+            session.add(user)
+            needs_commit = True
+            logger.info(
+                "Automatically created default Organisation '%s' (slug: %s) for OAuth user %s",
+                org_name,
+                unique_slug,
+                # pyrefly: ignore [missing-attribute]
+                user.email,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to auto-create Organisation for OAuth user %s: %s",
+                # pyrefly: ignore [missing-attribute]
+                user.email,
+                str(e),
+                exc_info=True,
+            )
+            await session.rollback()
+            return RedirectResponse(
+                url=f"{settings.FRONTEND_URL}/login?error=organisation_creation_failed",
+                status_code=302,
+            )
+
+    if needs_commit:
+        await session.commit()
+
     # pyrefly: ignore [bad-argument-type]
     jwt = await strategy.write_token(user)
     return RedirectResponse(
         url=f"{settings.FRONTEND_URL}/auth/callback?token={jwt}",
         status_code=302,
     )
+

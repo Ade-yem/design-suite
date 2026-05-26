@@ -59,7 +59,7 @@ class StructuralDesignState(TypedDict, total=False):
     # ── 1. Project context ────────────────────────────────────────────────────
 
     project_id: str
-    """UUID of the active project (must be created via POST /api/v1/projects/)."""
+    """UUID of the active project (must be created via POST /api/v1/projects)."""
 
     design_code: str
     """Primary design code: ``"BS8110"`` or ``"EC2"``."""

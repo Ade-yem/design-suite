@@ -38,7 +38,8 @@ from fastapi import status as http_status
 
 from middleware.error_handler import StructuralError
 from schemas.jobs import JobStatus
-
+import redis.asyncio as aioredis
+from config import settings
 
 # ── In-memory implementation ──────────────────────────────────────────────────
 
@@ -93,28 +94,57 @@ class MemoryJobStore:
             )
         return job
 
+    def _find_project_id(self, job_id: str) -> Optional[str]:
+        for pid, jids in self._project_index.items():
+            if job_id in jids:
+                return pid
+        return None
+
+    async def _broadcast(self, job: JobStatus) -> None:
+        pid = self._find_project_id(job.job_id)
+        if pid:
+            try:
+                from websocket import manager as ws_manager
+                await ws_manager.broadcast(pid, {
+                    "type": "job_update",
+                    "job_id": job.job_id,
+                    "job_type": job.job_type,
+                    "status": job.status,
+                    "progress_pct": job.progress_pct,
+                    "current_step": job.current_step,
+                    "result_url": job.result_url,
+                    "errors": job.errors,
+                })
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"WebSocket broadcast failed for job {job.job_id}: {e}")
+
     async def mark_running(self, job_id: str, step: str = "Starting…") -> None:
         job = self._jobs.get(job_id)
         if job:
-            self._jobs[job_id] = job.model_copy(
+            updated = job.model_copy(
                 update={
                     "status": "running",
                     "current_step": step,
                     "started_at": datetime.now(timezone.utc),
                 }
             )
+            self._jobs[job_id] = updated
+            await self._broadcast(updated)
 
     async def update_progress(self, job_id: str, pct: float, step: str) -> None:
         job = self._jobs.get(job_id)
         if job:
-            self._jobs[job_id] = job.model_copy(
+            updated = job.model_copy(
                 update={"progress_pct": min(pct, 99.9), "current_step": step}
             )
+            self._jobs[job_id] = updated
+            await self._broadcast(updated)
 
     async def mark_complete(self, job_id: str, result_url: Optional[str] = None) -> None:
         job = self._jobs.get(job_id)
         if job:
-            self._jobs[job_id] = job.model_copy(
+            updated = job.model_copy(
                 update={
                     "status": "complete",
                     "progress_pct": 100.0,
@@ -123,11 +153,13 @@ class MemoryJobStore:
                     "result_url": result_url,
                 }
             )
+            self._jobs[job_id] = updated
+            await self._broadcast(updated)
 
     async def mark_failed(self, job_id: str, errors: list[str]) -> None:
         job = self._jobs.get(job_id)
         if job:
-            self._jobs[job_id] = job.model_copy(
+            updated = job.model_copy(
                 update={
                     "status": "failed",
                     "current_step": "Failed.",
@@ -135,16 +167,20 @@ class MemoryJobStore:
                     "errors": errors,
                 }
             )
+            self._jobs[job_id] = updated
+            await self._broadcast(updated)
 
     async def cancel(self, job_id: str) -> bool:
         job = self._jobs.get(job_id)
         if job and job.status in ("queued", "running"):
-            self._jobs[job_id] = job.model_copy(
+            updated = job.model_copy(
                 update={
                     "status": "cancelled",
                     "completed_at": datetime.now(timezone.utc),
                 }
             )
+            self._jobs[job_id] = updated
+            await self._broadcast(updated)
             return True
         return False
 
@@ -169,20 +205,17 @@ class RedisJobStore:
     The connection is created lazily on first use.
     """
 
-    _redis = None
+    _redis: aioredis.Redis | None = None
 
     def _get_redis(self):
-        if self._redis is None:
-            import redis.asyncio as aioredis
-            from config import settings
-
+        if RedisJobStore._redis is None:
             if not settings.REDIS_URL:
                 raise RuntimeError(
                     "REDIS_URL is not set. "
                     "Set it in your .env file or use the in-memory job store backend."
                 )
-            self.__class__._redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-        return self._redis
+            RedisJobStore._redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        return RedisJobStore._redis
 
     def _job_key(self, job_id: str) -> str:
         return f"structai:job:{job_id}"
@@ -210,8 +243,8 @@ class RedisJobStore:
         ttl = settings.JOB_STORE_TTL_SECONDS
         await r.set(self._job_key(job_id), job.model_dump_json(), ex=ttl)
         if project_id:
-            await r.sadd(self._proj_key(project_id), job_id)
-            await r.expire(self._proj_key(project_id), ttl)
+            await r.sadd(self._proj_key(project_id), job_id)  # type: ignore
+            await r.expire(self._proj_key(project_id), ttl)  # type: ignore
         return job_id
 
     async def get(self, job_id: str) -> Optional[JobStatus]:
@@ -303,11 +336,11 @@ class RedisJobStore:
 
     async def list_for_project(self, project_id: str) -> list[JobStatus]:
         r = self._get_redis()
-        job_ids = await r.smembers(self._proj_key(project_id))
+        job_ids = await r.smembers(self._proj_key(project_id))  # type: ignore
         if not job_ids:
             return []
         keys = [self._job_key(jid) for jid in job_ids]
-        raws = await r.mget(*keys)
+        raws = await r.mget(*keys)  # type: ignore
         jobs = []
         for raw in raws:
             if raw is not None:

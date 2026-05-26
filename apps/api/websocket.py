@@ -18,9 +18,44 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+class ConnectionManager:
+    """
+    Manages active WebSocket connections mapped by project ID.
+    Enables direct real-time broadcasting from async background tasks.
+    """
+    def __init__(self) -> None:
+        self.active_connections: dict[str, set[WebSocket]] = {}
+
+    async def connect(self, project_id: str, websocket: WebSocket) -> None:
+        """Register a new active WebSocket connection for a project."""
+        await websocket.accept()
+        if project_id not in self.active_connections:
+            self.active_connections[project_id] = set()
+        self.active_connections[project_id].add(websocket)
+
+    def disconnect(self, project_id: str, websocket: WebSocket) -> None:
+        """Unregister a closed WebSocket connection."""
+        if project_id in self.active_connections:
+            self.active_connections[project_id].discard(websocket)
+            if not self.active_connections[project_id]:
+                del self.active_connections[project_id]
+
+    async def broadcast(self, project_id: str, message: dict) -> None:
+        """Broadcast a JSON message to all active WebSockets for a project."""
+        if project_id in self.active_connections:
+            sockets = list(self.active_connections[project_id])
+            for websocket in sockets:
+                try:
+                    await websocket.send_json(message)
+                except Exception:
+                    self.disconnect(project_id, websocket)
+
+manager = ConnectionManager()
+
+
 @router.websocket("/ws/{project_id}")
 async def websocket_endpoint(websocket: WebSocket, project_id: str):
-    await websocket.accept()
+    await manager.connect(project_id, websocket)
     logger.info(f"WebSocket connected for project {project_id}")
 
     try:
@@ -35,7 +70,7 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
 
             config = {"configurable": {"thread_id": project_id}}
 
-            stored_status = project_store.get_status(project_id)
+            stored_status = await project_store.get_status(project_id)
             pipeline_status = stored_status.label() if stored_status is not None else "created"
 
             # Send streaming updates back to frontend
@@ -87,8 +122,10 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
                     })
 
     except WebSocketDisconnect:
+        manager.disconnect(project_id, websocket)
         logger.info(f"WebSocket disconnected for project {project_id}")
     except Exception as e:
+        manager.disconnect(project_id, websocket)
         logger.error(f"WebSocket error: {e}")
         try:
              await websocket.send_json({"type": "error", "message": str(e)})

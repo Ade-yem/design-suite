@@ -186,11 +186,9 @@ class FileService:
         _store.set_scale(project_id, scale_dict)
         self._schedule_db_save(self._db_save_geometry(project_id, parsed, scale_dict))
 
-        # Register all detected members with the project store
-        for member in parsed.get("members", []):
-            mid = member.get("member_id")
-            if mid:
-                await project_store.register_member(project_id, mid)
+        # Batch register all detected members with the project store
+        mids = [member.get("member_id") for member in parsed.get("members", []) if member.get("member_id")]
+        await project_store.register_members_batch(project_id, mids)
 
         # Advance pipeline status
         await project_store.advance_status(project_id, ProjectStatus.FILE_UPLOADED)
