@@ -132,6 +132,10 @@ class ProjectResponse(BaseModel):
         UTC timestamp of last update.
     member_count : int
         Number of structural members currently registered to the project.
+    organisation_id : str | None
+        Tenant organization context.
+    created_by : Any | None
+        User who created the project.
     """
 
     project_id: str
@@ -144,6 +148,9 @@ class ProjectResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     member_count: int
+    organisation_id: Optional[str] = None
+    created_by: Optional[Any] = None
+
 
 
 class ProjectListItem(BaseModel):

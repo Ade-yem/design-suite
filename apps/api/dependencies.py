@@ -22,14 +22,16 @@ require_design_complete     : ProjectStatus >= DESIGN_COMPLETE
 
 from __future__ import annotations
 
-from fastapi import status as http_status
+from fastapi import status as http_status, Depends
 
 from middleware.error_handler import StructuralError
 from schemas.project import ProjectResponse, ProjectStatus
 from storage.project_store import project_store
+from auth.dependencies import current_active_user
+from db.models.user import User
 
 
-async def get_project(project_id: str) -> ProjectResponse:
+async def get_project(project_id: str, user: User = Depends(current_active_user)) -> ProjectResponse:
     """
     FastAPI dependency: resolve and return a project entity.
 
@@ -37,6 +39,8 @@ async def get_project(project_id: str) -> ProjectResponse:
     ----------
     project_id : str
         Path parameter injected by FastAPI from the URL.
+    user : User
+        The authenticated current user.
 
     Returns
     -------
@@ -48,10 +52,12 @@ async def get_project(project_id: str) -> ProjectResponse:
     StructuralError
         HTTP 404 ``PROJECT_NOT_FOUND`` if the project does not exist.
     """
-    return await project_store.get_or_404(project_id)
+    return await project_store.get_or_404(project_id, organisation_id=user.organisation_id)
 
 
-async def _require_status(project_id: str, required: ProjectStatus, stage_label: str) -> ProjectResponse:
+async def _require_status(
+    project_id: str, required: ProjectStatus, stage_label: str, user: User
+) -> ProjectResponse:
     """
     Internal helper: assert that a project has reached at least ``required`` status.
 
@@ -63,6 +69,8 @@ async def _require_status(project_id: str, required: ProjectStatus, stage_label:
         Minimum pipeline stage the project must be at.
     stage_label : str
         Human-readable label for use in the error message.
+    user : User
+        Active authenticated user context.
 
     Returns
     -------
@@ -74,7 +82,7 @@ async def _require_status(project_id: str, required: ProjectStatus, stage_label:
     StructuralError
         HTTP 403 ``GATE_NOT_PASSED`` if the project has not yet reached ``required``.
     """
-    project = await project_store.get_or_404(project_id)
+    project = await project_store.get_or_404(project_id, organisation_id=user.organisation_id)
     current = await project_store.get_status(project_id)
     if current is None or current < required:
         raise StructuralError(
@@ -89,7 +97,9 @@ async def _require_status(project_id: str, required: ProjectStatus, stage_label:
     return project
 
 
-async def require_file_uploaded(project_id: str) -> ProjectResponse:
+async def require_file_uploaded(
+    project_id: str, user: User = Depends(current_active_user)
+) -> ProjectResponse:
     """
     FastAPI dependency: project must have a file uploaded.
 
@@ -97,15 +107,19 @@ async def require_file_uploaded(project_id: str) -> ProjectResponse:
     ----------
     project_id : str
         Path parameter.
+    user : User
+        Injected user context.
 
     Returns
     -------
     ProjectResponse
     """
-    return await _require_status(project_id, ProjectStatus.FILE_UPLOADED, "file_upload")
+    return await _require_status(project_id, ProjectStatus.FILE_UPLOADED, "file_upload", user=user)
 
 
-async def require_geometry_verified(project_id: str) -> ProjectResponse:
+async def require_geometry_verified(
+    project_id: str, user: User = Depends(current_active_user)
+) -> ProjectResponse:
     """
     FastAPI dependency: geometry must have been human-verified (Safety Gate 1).
 
@@ -113,15 +127,21 @@ async def require_geometry_verified(project_id: str) -> ProjectResponse:
     ----------
     project_id : str
         Path parameter.
+    user : User
+        Injected user context.
 
     Returns
     -------
     ProjectResponse
     """
-    return await _require_status(project_id, ProjectStatus.GEOMETRY_VERIFIED, "geometry_verification")
+    return await _require_status(
+        project_id, ProjectStatus.GEOMETRY_VERIFIED, "geometry_verification", user=user
+    )
 
 
-async def require_loading_defined(project_id: str) -> ProjectResponse:
+async def require_loading_defined(
+    project_id: str, user: User = Depends(current_active_user)
+) -> ProjectResponse:
     """
     FastAPI dependency: load definitions must have been submitted.
 
@@ -129,15 +149,21 @@ async def require_loading_defined(project_id: str) -> ProjectResponse:
     ----------
     project_id : str
         Path parameter.
+    user : User
+        Injected user context.
 
     Returns
     -------
     ProjectResponse
     """
-    return await _require_status(project_id, ProjectStatus.LOADING_DEFINED, "loading_definition")
+    return await _require_status(
+        project_id, ProjectStatus.LOADING_DEFINED, "loading_definition", user=user
+    )
 
 
-async def require_analysis_complete(project_id: str) -> ProjectResponse:
+async def require_analysis_complete(
+    project_id: str, user: User = Depends(current_active_user)
+) -> ProjectResponse:
     """
     FastAPI dependency: analysis must be complete before design can run.
 
@@ -145,15 +171,19 @@ async def require_analysis_complete(project_id: str) -> ProjectResponse:
     ----------
     project_id : str
         Path parameter.
+    user : User
+        Injected user context.
 
     Returns
     -------
     ProjectResponse
     """
-    return await _require_status(project_id, ProjectStatus.ANALYSIS_COMPLETE, "analysis")
+    return await _require_status(project_id, ProjectStatus.ANALYSIS_COMPLETE, "analysis", user=user)
 
 
-async def require_design_complete(project_id: str) -> ProjectResponse:
+async def require_design_complete(
+    project_id: str, user: User = Depends(current_active_user)
+) -> ProjectResponse:
     """
     FastAPI dependency: design must be complete before reports can be generated.
 
@@ -161,9 +191,12 @@ async def require_design_complete(project_id: str) -> ProjectResponse:
     ----------
     project_id : str
         Path parameter.
+    user : User
+        Injected user context.
 
     Returns
     -------
     ProjectResponse
     """
-    return await _require_status(project_id, ProjectStatus.DESIGN_COMPLETE, "design")
+    return await _require_status(project_id, ProjectStatus.DESIGN_COMPLETE, "design", user=user)
+

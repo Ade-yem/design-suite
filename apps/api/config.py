@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = None
 
     # ── Project / Data store ──────────────────────────────────────────────────
-    PROJECT_STORE_BACKEND: Literal["memory", "postgres"] = "memory" # 
+    PROJECT_STORE_BACKEND: Literal["memory", "postgres"] = "postgres" # 
     DATABASE_URL: str | None = os.getenv("DATABASE_URL")
 
     # ── Logging & meta ────────────────────────────────────────────────────────

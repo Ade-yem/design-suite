@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Upload, X } from "lucide-react";
+import { JSX, useEffect, useRef, useState } from "react";
+import { Upload, X, Loader2, Compass } from "lucide-react";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { ChatSidebar } from "@/components/ChatSidebar";
-import { CanvasViewport, type CanvasViewportHandle } from "@/components/CanvasViewport";
+import {
+  CanvasViewport,
+  type CanvasViewportHandle,
+} from "@/components/canvas/CanvasViewport";
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { ProjectPrompt } from "@/components/ProjectPrompt";
 import { NewProjectModal } from "@/components/NewProjectModal";
@@ -15,15 +18,27 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/project";
 
+/**
+ * UploadNudge component props.
+ */
+interface UploadNudgeProps {
+  projectName: string;
+  onBrowse: () => void;
+  onDismiss: () => void;
+}
+
+/**
+ * Renders a helpful onboarding nudge at the top of the workspace
+ * to guide users to upload their DXF/PDF drawing when a new project is created.
+ *
+ * @param {UploadNudgeProps} props - Component properties.
+ * @returns {JSX.Element} The rendered UploadNudge element.
+ */
 function UploadNudge({
   projectName,
   onBrowse,
   onDismiss,
-}: {
-  projectName: string;
-  onBrowse: () => void;
-  onDismiss: () => void;
-}) {
+}: UploadNudgeProps): JSX.Element {
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/10 border-b border-primary/20 animate-fade-in-up shrink-0">
       <Upload className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -50,9 +65,41 @@ function UploadNudge({
   );
 }
 
-export default function WorkspacePage() {
-  const { activeProject, refreshActiveProject, updateActiveProjectStatus, setActiveProject } =
-    useProjectStore();
+/**
+ * WorkspaceLoadingPlaceholder component.
+ * Renders a high-fidelity, blueprint-themed engineering CAD canvas loader
+ * to display while the application is in a loading state.
+ *
+ * @returns {JSX.Element} The rendered CAD workspace loader placeholder component.
+ */
+function WorkspaceLoadingPlaceholder(): JSX.Element {
+  return (
+    <div className="fixed inset-0 bg-canvas-bg flex items-center justify-center z-100">
+      <div className="flex flex-col items-center space-y-4">
+        <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin glow-blue" />
+        <p className="text-muted-foreground text-sm font-mono tracking-wider">
+          LOADING ENVIRONMENT...
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * WorkspacePage root client component.
+ * Sets up the multi-agent integrated development environment, isolating
+ * custom toolbars, high-fidelity canvas contexts, and side-by-side conversational interfaces.
+ *
+ * @returns {JSX.Element} The rendered WorkspacePage element.
+ */
+export default function WorkspacePage(): JSX.Element {
+  const {
+    activeProject,
+    refreshActiveProject,
+    updateActiveProjectStatus,
+    setActiveProject,
+    isLoading,
+  } = useProjectStore();
   const { chatOpen, setChatOpen } = useUIStore();
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
@@ -97,7 +144,9 @@ export default function WorkspacePage() {
       <ProjectSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {activeProject ? (
+        {isLoading ? (
+          <WorkspaceLoadingPlaceholder />
+        ) : activeProject ? (
           <>
             <WorkspaceHeader currentStage={currentStage} />
 
@@ -126,7 +175,7 @@ export default function WorkspacePage() {
                 className={cn(
                   "shrink-0 overflow-hidden",
                   "transition-[width] duration-200 ease-out",
-                  chatOpen ? "w-80" : "w-0"
+                  chatOpen ? "w-80" : "w-0",
                 )}
               >
                 <div className="w-80 h-full">

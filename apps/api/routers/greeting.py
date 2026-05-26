@@ -97,7 +97,7 @@ class GreetingResponse(BaseModel):
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=GreetingResponse)
+@router.get("", response_model=GreetingResponse)
 async def get_greeting(
     local_hour: int = Query(ge=0, le=23, description="Client's local hour (0–23)."),
     project_count: int = Query(ge=0, default=0, description="Number of the user's projects."),

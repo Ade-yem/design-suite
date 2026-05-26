@@ -5,8 +5,8 @@ Project CRUD router — the top-level entity that all other resources belong to.
 
 Endpoints
 ---------
-POST   /api/v1/projects/                    Create new project
-GET    /api/v1/projects/                    List all projects
+POST   /api/v1/projects                    Create new project
+GET    /api/v1/projects                    List all projects
 GET    /api/v1/projects/{project_id}        Get project details
 PUT    /api/v1/projects/{project_id}        Update project metadata
 DELETE /api/v1/projects/{project_id}        Delete project
@@ -35,9 +35,12 @@ from schemas.project import (
     ProjectUpdate,
 )
 from storage.project_store import project_store
+from auth.dependencies import current_active_user
+from db.models.user import User
+
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(redirect_slashes=False)
 
 
 # ---------------------------------------------------------------------------
@@ -80,8 +83,10 @@ def _build_gates(status_ordinal: int) -> dict[str, bool]:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
-async def create_project(payload: ProjectCreate) -> ProjectResponse:
+@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+async def create_project(
+    payload: ProjectCreate, user: User = Depends(current_active_user)
+) -> ProjectResponse:
     """
     Create a new project entry and initialize the pipeline state machine.
 
@@ -89,28 +94,38 @@ async def create_project(payload: ProjectCreate) -> ProjectResponse:
     ----------
     payload : ProjectCreate
         Project metadata including name, reference, client, and design code.
+    user : User
+        The authenticated current user.
 
     Returns
     -------
     ProjectResponse
         Newly created project with ``pipeline_status = "created"``.
     """
-    project = await project_store.create(payload)
+    project = await project_store.create(
+        payload, organisation_id=user.organisation_id, user_id=user.id
+    )
     logger.info("Project created: %s (%s)", project.project_id, project.name)
     return project
 
 
-@router.get("/", response_model=list[ProjectListItem])
-async def list_projects() -> list[ProjectListItem]:
+@router.get("", response_model=list[ProjectListItem])
+async def list_projects(user: User = Depends(current_active_user)) -> list[ProjectListItem]:
     """
     Return lightweight summaries of all projects, most recently updated first.
+
+    Parameters
+    ----------
+    user : User
+        The authenticated current user.
 
     Returns
     -------
     list[ProjectListItem]
         Summary list of all registered projects.
     """
-    return await project_store.list_all()
+    return await project_store.list_all(organisation_id=user.organisation_id)
+
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
