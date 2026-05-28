@@ -106,7 +106,7 @@ def get_load_definitions(
 
 
 @router.put("/{project_id}/member/{member_id}")
-def update_member_loads(
+async def update_member_loads(
     project_id: str,
     member_id: str,
     payload: MemberLoadUpdate,
@@ -131,7 +131,7 @@ def update_member_loads(
     dict
         Updated override record.
     """
-    return loading_service.update_member_loads(
+    return await loading_service.update_member_loads(
         project_id,
         member_id,
         dead_extra_kNm2=payload.dead_extra_kNm2,
@@ -179,7 +179,7 @@ async def run_combinations(
 
 
 @router.get("/{project_id}/output", response_model=LoadingOutputResponse)
-def get_loading_output(
+async def get_loading_output(
     project_id: str,
     project: ProjectResponse = Depends(require_geometry_verified),
 ) -> LoadingOutputResponse:
@@ -202,6 +202,7 @@ def get_loading_output(
     StructuralError
         HTTP 404 if combinations have not been run yet.
     """
+    await loading_service.ensure_cached(project_id)
     try:
         output = loading_service.get_output(project_id)
     except KeyError as exc:

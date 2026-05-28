@@ -288,7 +288,29 @@ class AnalysisService:
         """
         _store.clear(project_id)
 
-    # ── DB persistence helper ─────────────────────────────────────────────────
+    # ── DB persistence helpers ────────────────────────────────────────────────
+
+    async def ensure_cached(self, project_id: str) -> None:
+        """Load analysis results from DB into cache if missing."""
+        if _store.get(project_id) is not None:
+            return
+        from config import settings
+        if settings.PROJECT_STORE_BACKEND != "postgres":
+            return
+        try:
+            from db.session import get_session_maker
+            from db.models.pipeline import ProjectAnalysis
+            from sqlalchemy import select
+
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                row = (await session.execute(
+                    select(ProjectAnalysis).where(ProjectAnalysis.project_id == project_id)
+                )).scalar_one_or_none()
+                if row and row.output:
+                    _store.set(project_id, json.loads(row.output))
+        except Exception as exc:
+            logger.warning("DB analysis fetch for project %s failed: %s", project_id, exc)
 
     async def _db_save_analysis(self, project_id: str, output: dict) -> None:
         """Upsert analysis output to ProjectAnalysis. Silent no-op if DB unavailable."""

@@ -164,6 +164,7 @@ async def get_parsed_geometry(project_id: str) -> dict:
     dict
         Parsed structural JSON including detected members, scale, and warnings.
     """
+    await file_service.ensure_cached(project_id)
     return file_service.get_parsed(project_id)
 
 
@@ -215,6 +216,7 @@ async def get_detected_scale(project_id: str) -> dict:
     dict
         ``{factor, unit, detected, confirmed}``
     """
+    await file_service.ensure_cached(project_id)
     return file_service.get_scale(project_id)
 
 
@@ -239,7 +241,7 @@ async def confirm_scale(
     dict
         Updated scale record.
     """
-    return file_service.confirm_scale(
+    return await file_service.confirm_scale(
         project_id,
         scale_factor=scale_factor,
         unit_label=unit_label,
@@ -271,7 +273,7 @@ async def define_loads(project_id: str, load_definition: dict) -> dict:
     dict
         ``{project_id, status, design_code, occupancy_category, created_at}``
     """
-    return loading_service.define(project_id, load_definition)
+    return await loading_service.define(project_id, load_definition)
 
 
 @tool
@@ -332,6 +334,7 @@ async def get_loading_output(project_id: str) -> dict:
     dict
         ``LoadingOutputResponse`` including all member factored loads.
     """
+    await loading_service.ensure_cached(project_id)
     return loading_service.get_output(project_id)
 
 
@@ -356,7 +359,7 @@ async def update_member_loads(
     dict
         Updated override record.
     """
-    return loading_service.update_member_loads(
+    return await loading_service.update_member_loads(
         project_id,
         member_id,
         dead_extra_kNm2=update.get("dead_extra_kNm2"),
@@ -479,6 +482,7 @@ async def get_analysis_results(project_id: str) -> dict:
     dict
         ``AnalysisResultsResponse`` including all member results.
     """
+    await analysis_service.ensure_cached(project_id)
     return analysis_service.get_results(project_id)
 
 
@@ -499,6 +503,7 @@ async def get_member_analysis_result(project_id: str, member_id: str) -> dict:
     dict
         Single-member ``MemberAnalysisResult`` dict.
     """
+    await analysis_service.ensure_cached(project_id)
     return analysis_service.get_member_result(project_id, member_id)
 
 
@@ -617,6 +622,7 @@ async def get_design_results(project_id: str) -> dict:
     dict
         ``DesignResultsResponse`` including member reinforcement schedules.
     """
+    await design_service.ensure_cached(project_id)
     return design_service.get_results(project_id)
 
 
@@ -646,7 +652,7 @@ async def override_member_design(
     dict
         ``{result, warning, reanalysis_url}``
     """
-    outcome = design_service.apply_override(project_id, member_id, override=override)
+    outcome = await design_service.apply_override(project_id, member_id, override=override)
     reanalysis_url = f"/api/v1/analysis/{project_id}/run" if outcome.get("reanalysis_needed") else None
     return {
         "result": outcome["result"],
@@ -723,6 +729,7 @@ async def generate_drawings(project_id: str) -> dict:
     job_id = await job_store.create("drawings", project_id=project_id)
     await job_store.mark_running(job_id, "Generating drawing commands…")
     try:
+        await design_service.ensure_cached(project_id)
         design_results = design_service.get_results(project_id)
         members = design_results.get("members", [])
         drawing_commands = []
@@ -791,6 +798,7 @@ async def regenerate_member_drawing(project_id: str, member_id: str) -> dict:
         Updated ``DrawingCommandSet``.
     """
     from routers.drawings import _drawings_store
+    await design_service.ensure_cached(project_id)
     design_results = design_service.get_results(project_id)
     members = design_results.get("members", [])
     member = next((m for m in members if m.get("member_id") == member_id), None)

@@ -19,7 +19,6 @@ loading_service.clear(project_id)                           → None
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -86,7 +85,7 @@ class LoadingService:
     themselves.
     """
 
-    def define(self, project_id: str, definition: dict) -> dict:
+    async def define(self, project_id: str, definition: dict) -> dict:
         """
         Persist a load definition for a project.
 
@@ -104,7 +103,7 @@ class LoadingService:
             ``{project_id, status, design_code, occupancy_category, created_at}``
         """
         _store.set_definition(project_id, definition)
-        self._schedule_db_save(self._db_save_loads(project_id, definition, None))
+        await self._db_save_loads(project_id, definition, None)
         logger.info(
             "Load definition stored for project %s. Code: %s, Occupancy: %s.",
             project_id,
@@ -205,7 +204,7 @@ class LoadingService:
         output = self._run_engine(project_id, definition)
         _store.set_output(project_id, output)
         await project_store.advance_status(project_id, ProjectStatus.LOADING_DEFINED)
-        self._schedule_db_save(self._db_save_loads(project_id, definition, output))
+        await self._db_save_loads(project_id, definition, output)
 
         logger.info(
             "Load combinations computed for project %s: %d member(s), code=%s.",
@@ -241,7 +240,7 @@ class LoadingService:
             )
         return output
 
-    def update_member_loads(
+    async def update_member_loads(
         self,
         project_id: str,
         member_id: str,
@@ -286,6 +285,8 @@ class LoadingService:
             result = entry
 
         _store.set_definition(project_id, definition)
+        output = _store.get_output(project_id)
+        await self._db_save_loads(project_id, definition, output)
         logger.info("Load override applied to member %s in project %s.", member_id, project_id)
         return result
 
@@ -336,14 +337,30 @@ class LoadingService:
         except Exception as exc:
             logger.warning("DB load save failed for project %s: %s", project_id, exc)
 
-    def _schedule_db_save(self, coro) -> None:
-        """Schedule a DB-write coroutine on the running event loop (fire-and-forget)."""
+    async def ensure_cached(self, project_id: str) -> None:
+        """Load load definitions and output from DB into cache if missing."""
+        if _store.get_output(project_id) is not None:
+            return
+        from config import settings
+        if settings.PROJECT_STORE_BACKEND != "postgres":
+            return
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(coro)
-        except RuntimeError:
-            pass
+            from db.session import get_session_maker
+            from db.models.project import ProjectLoad
+            from sqlalchemy import select
+
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                row = (await session.execute(
+                    select(ProjectLoad).where(ProjectLoad.project_id == project_id)
+                )).scalar_one_or_none()
+                if row:
+                    if row.definition:
+                        _store.set_definition(project_id, json.loads(row.definition))
+                    if row.output:
+                        _store.set_output(project_id, json.loads(row.output))
+        except Exception as exc:
+            logger.warning("DB load fetch for project %s failed: %s", project_id, exc)
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
