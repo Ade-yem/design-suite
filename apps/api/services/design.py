@@ -230,7 +230,7 @@ class DesignService:
             )
         return data
 
-    def apply_override(
+    async def apply_override(
         self,
         project_id: str,
         member_id: str,
@@ -302,6 +302,7 @@ class DesignService:
             reanalysis_needed = True
 
         _store.set(project_id, store)
+        await self._db_save_design(project_id, store)
         logger.info(
             "Design override applied to %s in project %s. Reason: %s",
             member_id,
@@ -341,7 +342,29 @@ class DesignService:
         """
         _store.clear(project_id)
 
-    # ── DB persistence helper ─────────────────────────────────────────────────
+    # ── DB persistence helpers ────────────────────────────────────────────────
+
+    async def ensure_cached(self, project_id: str) -> None:
+        """Load design results from DB into cache if missing."""
+        if _store.get(project_id) is not None:
+            return
+        from config import settings
+        if settings.PROJECT_STORE_BACKEND != "postgres":
+            return
+        try:
+            from db.session import get_session_maker
+            from db.models.pipeline import ProjectDesign
+            from sqlalchemy import select
+
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                row = (await session.execute(
+                    select(ProjectDesign).where(ProjectDesign.project_id == project_id)
+                )).scalar_one_or_none()
+                if row and row.output:
+                    _store.set(project_id, json.loads(row.output))
+        except Exception as exc:
+            logger.warning("DB design fetch for project %s failed: %s", project_id, exc)
 
     async def _db_save_design(self, project_id: str, output: dict) -> None:
         """Upsert design output to ProjectDesign. Silent no-op if DB unavailable."""

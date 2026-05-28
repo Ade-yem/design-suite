@@ -277,7 +277,7 @@ async def get_parse_status(project_id: str, job_id: str) -> dict:
 
 
 @router.get("/{project_id}/parsed")
-def get_parsed_geometry(
+async def get_parsed_geometry(
     project_id: str,
     project: ProjectResponse = Depends(require_file_uploaded),
 ) -> dict:
@@ -301,6 +301,7 @@ def get_parsed_geometry(
     StructuralError
         HTTP 404 if parsing has not completed yet.
     """
+    await file_service.ensure_cached(project_id)
     try:
         return file_service.get_parsed(project_id)
     except KeyError as exc:
@@ -366,7 +367,7 @@ async def verify_geometry(
 
 
 @router.get("/{project_id}/scale")
-def get_scale(
+async def get_scale(
     project_id: str,
     project: ProjectResponse = Depends(require_file_uploaded),
 ) -> dict:
@@ -385,6 +386,7 @@ def get_scale(
     dict
         ``{factor, unit, detected, confirmed}``
     """
+    await file_service.ensure_cached(project_id)
     try:
         return file_service.get_scale(project_id)
     except KeyError as exc:
@@ -397,7 +399,7 @@ def get_scale(
 
 
 @router.put("/{project_id}/scale")
-def confirm_scale(
+async def confirm_scale(
     project_id: str,
     payload: ScaleCorrectionRequest,
     project: ProjectResponse = Depends(require_file_uploaded),
@@ -419,7 +421,7 @@ def confirm_scale(
     dict
         Updated scale record.
     """
-    return file_service.confirm_scale(
+    return await file_service.confirm_scale(
         project_id,
         scale_factor=payload.scale_factor,
         unit_label=payload.unit_label,

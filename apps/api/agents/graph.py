@@ -2,7 +2,21 @@
 services/agents/graph.py
 ========================
 LangGraph definition and compilation.
+
+The compiled graph is exposed as ``app`` (MemorySaver checkpointer, suitable
+for development / single-instance deployments).  For production use
+``build_app(checkpointer)`` with a ``PostgreSaver`` or ``RedisSaver`` so that
+pipeline state survives server restarts and horizontal scaling.
+
+  from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+  async with AsyncPostgresSaver.from_conn_string(settings.DATABASE_URL) as cp:
+      await cp.setup()
+      app = build_app(cp)
 """
+from __future__ import annotations
+
+from typing import Any
+
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -100,13 +114,25 @@ workflow.add_conditional_edges(
     }
 )
 
-memory = MemorySaver()
-app = workflow.compile(
-    checkpointer=memory,
-    interrupt_before=[
-        "geometry_gate",
-        "loading_gate",
-        "design_gate",
-        "drawing_gate"
-    ]
-)
+_INTERRUPT_BEFORE = [
+    "geometry_gate",
+    "loading_gate",
+    "design_gate",
+    "drawing_gate",
+]
+
+
+def build_app(checkpointer: Any = None):
+    """Compile the workflow with the given checkpointer.
+
+    Pass a ``PostgreSaver`` or ``RedisSaver`` in production so pipeline state
+    survives restarts.  Defaults to ``MemorySaver`` (dev / single-instance only).
+    """
+    if checkpointer is None:
+        checkpointer = MemorySaver()
+    return workflow.compile(checkpointer=checkpointer, interrupt_before=_INTERRUPT_BEFORE)
+
+
+# Default compiled app — MemorySaver is fine for development.
+# Replace with build_app(PostgreSaver(...)) via the FastAPI lifespan for production.
+app = build_app()

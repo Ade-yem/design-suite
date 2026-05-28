@@ -184,7 +184,7 @@ class FileService:
 
         _store.set_parsed(project_id, parsed)
         _store.set_scale(project_id, scale_dict)
-        self._schedule_db_save(self._db_save_geometry(project_id, parsed, scale_dict))
+        await self._db_save_geometry(project_id, parsed, scale_dict)
 
         # Batch register all detected members with the project store
         mids = [member.get("member_id") for member in parsed.get("members", []) if member.get("member_id")]
@@ -252,7 +252,7 @@ class FileService:
             )
         return scale
 
-    def confirm_scale(
+    async def confirm_scale(
         self,
         project_id: str,
         scale_factor: float,
@@ -288,7 +288,7 @@ class FileService:
         }
         _store.set_scale(project_id, new_scale)
         parsed_after = _store.get_parsed(project_id) or {}
-        self._schedule_db_save(self._db_save_geometry(project_id, parsed_after, new_scale))
+        await self._db_save_geometry(project_id, parsed_after, new_scale)
 
         # Rescale spans_m in cached geometry
         parsed = _store.get_parsed(project_id)
@@ -351,7 +351,7 @@ class FileService:
 
         await project_store.advance_status(project_id, ProjectStatus.GEOMETRY_VERIFIED)
         scale = _store.get_scale(project_id) or {}
-        self._schedule_db_save(self._db_save_geometry(project_id, parsed, scale))
+        await self._db_save_geometry(project_id, parsed, scale)
         member_count = len(parsed.get("members", []))
 
         logger.info(
@@ -428,14 +428,34 @@ class FileService:
         except Exception as exc:
             logger.warning("DB geometry save failed for project %s: %s", project_id, exc)
 
-    def _schedule_db_save(self, coro) -> None:
-        """Schedule a DB-write coroutine on the running event loop (fire-and-forget)."""
+    async def ensure_cached(self, project_id: str) -> None:
+        """Load geometry from DB into the in-memory cache if it is missing.
+
+        Called by routers and agent tools before any sync cache read so that
+        data survives server restarts and load-balanced deployments.
+        """
+        if _store.get_parsed(project_id) is not None:
+            return
+        from config import settings
+        if settings.PROJECT_STORE_BACKEND != "postgres":
+            return
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(coro)
-        except RuntimeError:
-            pass
+            from db.session import get_session_maker
+            from db.models.project import ProjectGeometry
+            from sqlalchemy import select
+
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                row = (await session.execute(
+                    select(ProjectGeometry).where(ProjectGeometry.project_id == project_id)
+                )).scalar_one_or_none()
+                if row:
+                    geometry = json.loads(row.geometry)
+                    _store.set_parsed(project_id, geometry)
+                    if row.scale_json:
+                        _store.set_scale(project_id, json.loads(row.scale_json))
+        except Exception as exc:
+            logger.warning("DB geometry load for project %s failed: %s", project_id, exc)
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

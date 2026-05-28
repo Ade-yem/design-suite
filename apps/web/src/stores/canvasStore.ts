@@ -28,6 +28,7 @@
 import { create } from "zustand";
 import type {
   GeometricMember,
+  MemberType,
   ScaleInfo,
   BoundingBox,
   Point,
@@ -35,6 +36,25 @@ import type {
   VerificationStatus,
   ParsedGeometry,
 } from "@/types/canvas";
+
+/**
+ * Normalize a raw backend member to the frontend GeometricMember shape.
+ *
+ * The Vision Agent returns `start_point`/`end_point`/`center_point` while the
+ * canvas renderer expects `start`/`end`.  Columns use `center_point` for both.
+ */
+function normalizeBackendMember(raw: unknown): GeometricMember {
+  const m = raw as Record<string, unknown>;
+  const startRaw = (m.start ?? m.start_point ?? m.center_point ?? { x: 0, y: 0 }) as Point;
+  const endRaw = (m.end ?? m.end_point ?? m.center_point ?? startRaw) as Point;
+  return {
+    member_id: m.member_id as string,
+    member_type: m.member_type as MemberType,
+    start: startRaw,
+    end: endRaw,
+    meta: (m.meta ?? { b_mm: 300, h_mm: 500 }) as GeometricMember["meta"],
+  };
+}
 
 // ── Bounding Box Computation ────────────────────────────────────────────────
 
@@ -305,7 +325,7 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
   ...INITIAL_STATE,
 
   loadGeometry: (data) => {
-    const members = data.members ?? [];
+    const members = (data.members ?? []).map(normalizeBackendMember);
     const bounds = computeBounds(members);
     set({
       members,

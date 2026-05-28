@@ -358,7 +358,7 @@ async def get_analysis_status(
 
 
 @router.get("/{project_id}/results", response_model=AnalysisResultsResponse)
-def get_analysis_results(
+async def get_analysis_results(
     project_id: str,
     project: ProjectResponse = Depends(require_loading_defined),
 ) -> AnalysisResultsResponse:
@@ -380,6 +380,7 @@ def get_analysis_results(
     StructuralError
         HTTP 404 if analysis has not been run yet.
     """
+    await analysis_service.ensure_cached(project_id)
     try:
         result = analysis_service.get_results(project_id)
     except KeyError as exc:
@@ -400,7 +401,7 @@ def get_analysis_results(
 
 
 @router.get("/{project_id}/results/{member_id}")
-def get_member_analysis_result(
+async def get_member_analysis_result(
     project_id: str,
     member_id: str,
     project: ProjectResponse = Depends(require_loading_defined),
@@ -423,6 +424,7 @@ def get_member_analysis_result(
     StructuralError
         ``MEMBER_NOT_FOUND`` if no result exists for this member.
     """
+    await analysis_service.ensure_cached(project_id)
     try:
         return analysis_service.get_member_result(project_id, member_id)
     except KeyError as exc:
