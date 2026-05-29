@@ -1,0 +1,108 @@
+WHERE projects.project_id = $1::VARCHAR AND projects.organisation_id = $2::VARCHAR
+2026-05-26 23:51:57,761 INFO sqlalchemy.engine.Engine [cached since 39.02s ago] ('PRJ-BCD1A535', 'fe9b11c7-0866-420f-9919-9f7344f5bc2e')
+2026-05-26 23:51:57,761  INFO      sqlalchemy.engine.Engine — [cached since 39.02s ago] ('PRJ-BCD1A535', 'fe9b11c7-0866-420f-9919-9f7344f5bc2e')
+2026-05-26 23:51:58,580 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM project_members 
+WHERE project_members.project_id = $1::VARCHAR
+2026-05-26 23:51:58,580  INFO      sqlalchemy.engine.Engine — SELECT count(*) AS count_1 
+FROM project_members 
+WHERE project_members.project_id = $1::VARCHAR
+2026-05-26 23:51:58,580 INFO sqlalchemy.engine.Engine [cached since 38.71s ago] ('PRJ-BCD1A535',)
+2026-05-26 23:51:58,580  INFO      sqlalchemy.engine.Engine — [cached since 38.71s ago] ('PRJ-BCD1A535',)
+2026-05-26 23:51:59,403 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-05-26 23:51:59,403  INFO      sqlalchemy.engine.Engine — ROLLBACK
+2026-05-26 23:52:02,062  INFO      routers.files — File 'Floor-beam.dxf' (PDF ref: 'Floor-beam.pdf') uploaded for project PRJ-BCD1A535. Parse job: JOB-F7E92925.
+2026-05-26 23:52:02,062  INFO      api.request — [POST] /api/v1/files/upload/PRJ-BCD1A535  →  202  (7342.4ms)
+INFO:     127.0.0.1:54698 - "POST /api/v1/files/upload/PRJ-BCD1A535 HTTP/1.1" 202 Accepted
+2026-05-26 23:52:02,676  INFO      services.files — Parsing file 'uploads/PRJ-BCD1A535/1779835919604_Floor-beam.dxf' for project PRJ-BCD1A535.
+2026-05-26 23:52:02,676  INFO      core.parsing.dxf_parser — Opening DXF file: uploads/PRJ-BCD1A535/1779835919604_Floor-beam.dxf
+2026-05-26 23:52:02,852  WARNING   core.parsing.dxf_parser — Scale override triggered: $INSUNITS=1 (Inches) implies an absurd implied building width of 593.96 meters. Overriding scale factor to 1.0 (millimeters).
+2026-05-26 23:52:02,853  WARNING   core.parsing.dxf_parser — $INSUNITS=1 (Inches) implies an implausible implied width of 594.0 m. Overriding scale factor to 1.0 (mm).
+2026-05-26 23:52:02,853  INFO      core.parsing.dxf_parser — Processing layouts: ['Model']
+2026-05-26 23:52:02,853  INFO      core.parsing.dxf_parser —   → Extracting from layout: Model
+2026-05-26 23:52:02,886  INFO      core.parsing.dxf_parser — Extraction complete. 678 entities across 10 layers.
+2026-05-26 23:52:03,802 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-26 23:52:03,802  INFO      sqlalchemy.engine.Engine — BEGIN (implicit)
+2026-05-26 23:52:03,804 INFO sqlalchemy.engine.Engine SELECT projects.project_id, projects.name, projects.reference, projects.client, projects.design_code, projects.pipeline_status, projects.created_at, projects.updated_at, projects.organisation_id, projects.created_by 
+FROM projects 
+WHERE projects.project_id = $1::VARCHAR
+2026-05-26 23:52:03,804  INFO      sqlalchemy.engine.Engine — SELECT projects.project_id, projects.name, projects.reference, projects.client, projects.design_code, projects.pipeline_status, projects.created_at, projects.updated_at, projects.organisation_id, projects.created_by 
+FROM projects 
+WHERE projects.project_id = $1::VARCHAR
+2026-05-26 23:52:03,804 INFO sqlalchemy.engine.Engine [generated in 0.00064s] ('PRJ-BCD1A535',)
+2026-05-26 23:52:03,804  INFO      sqlalchemy.engine.Engine — [generated in 0.00064s] ('PRJ-BCD1A535',)
+2026-05-26 23:52:03,805 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-26 23:52:03,805  INFO      sqlalchemy.engine.Engine — BEGIN (implicit)
+2026-05-26 23:52:03,807 INFO sqlalchemy.engine.Engine SELECT project_geometry.id, project_geometry.project_id, project_geometry.geometry, project_geometry.scale_json, project_geometry.verified_at, project_geometry.updated_at 
+FROM project_geometry 
+WHERE project_geometry.project_id = $1::VARCHAR
+2026-05-26 23:52:03,807  INFO      sqlalchemy.engine.Engine — SELECT project_geometry.id, project_geometry.project_id, project_geometry.geometry, project_geometry.scale_json, project_geometry.verified_at, project_geometry.updated_at 
+FROM project_geometry 
+WHERE project_geometry.project_id = $1::VARCHAR
+2026-05-26 23:52:03,807 INFO sqlalchemy.engine.Engine [generated in 0.00037s] ('PRJ-BCD1A535',)
+2026-05-26 23:52:03,807  INFO      sqlalchemy.engine.Engine — [generated in 0.00037s] ('PRJ-BCD1A535',)
+2026-05-26 23:52:04,728 INFO sqlalchemy.engine.Engine UPDATE projects SET updated_at=$1::TIMESTAMP WITH TIME ZONE WHERE projects.project_id = $2::VARCHAR
+2026-05-26 23:52:04,728  INFO      sqlalchemy.engine.Engine — UPDATE projects SET updated_at=$1::TIMESTAMP WITH TIME ZONE WHERE projects.project_id = $2::VARCHAR
+2026-05-26 23:52:04,728 INFO sqlalchemy.engine.Engine [generated in 0.00034s] (datetime.datetime(2026, 5, 26, 22, 52, 4, 726392, tzinfo=datetime.timezone.utc), 'PRJ-BCD1A535')
+2026-05-26 23:52:04,728  INFO      sqlalchemy.engine.Engine — [generated in 0.00034s] (datetime.datetime(2026, 5, 26, 22, 52, 4, 726392, tzinfo=datetime.timezone.utc), 'PRJ-BCD1A535')
+2026-05-26 23:52:05,217 INFO sqlalchemy.engine.Engine COMMIT
+2026-05-26 23:52:05,217  INFO      sqlalchemy.engine.Engine — COMMIT
+2026-05-26 23:52:06,036 INFO sqlalchemy.engine.Engine UPDATE project_geometry SET geometry=$1::VARCHAR, updated_at=$2::TIMESTAMP WITH TIME ZONE WHERE project_geometry.id = $3::INTEGER
+2026-05-26 23:52:06,036  INFO      sqlalchemy.engine.Engine — UPDATE project_geometry SET geometry=$1::VARCHAR, updated_at=$2::TIMESTAMP WITH TIME ZONE WHERE project_geometry.id = $3::INTEGER
+2026-05-26 23:52:06,037 INFO sqlalchemy.engine.Engine [generated in 0.00041s] ('{"metadata": {"source_file": "uploads/PRJ-BCD1A535/1779835919604_Floor-beam.dxf", "units_raw": 1, "units_label": "millimetres (overridden)", "convers ... (419986 characters truncated) ... : "29:21", "flags": [], "source_handle": "965"}], "scale": {"factor": 1.0, "unit": "millimetres (overridden)", "detected": true, "confirmed": false}}', datetime.datetime(2026, 5, 26, 22, 52, 6, 34879, tzinfo=datetime.timezone.utc), 2)
+2026-05-26 23:52:06,037  INFO      sqlalchemy.engine.Engine — [generated in 0.00041s] ('{"metadata": {"source_file": "uploads/PRJ-BCD1A535/1779835919604_Floor-beam.dxf", "units_raw": 1, "units_label": "millimetres (overridden)", "convers ... (419986 characters truncated) ... : "29:21", "flags": [], "source_handle": "965"}], "scale": {"factor": 1.0, "unit": "millimetres (overridden)", "detected": true, "confirmed": false}}', datetime.datetime(2026, 5, 26, 22, 52, 6, 34879, tzinfo=datetime.timezone.utc), 2)
+2026-05-26 23:52:06,042 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-26 23:52:06,042  INFO      sqlalchemy.engine.Engine — BEGIN (implicit)
+2026-05-26 23:52:06,045 INFO sqlalchemy.engine.Engine SELECT projects.project_id, projects.name, projects.reference, projects.client, projects.design_code, projects.pipeline_status, projects.created_at, projects.updated_at, projects.organisation_id, projects.created_by 
+FROM projects 
+WHERE projects.project_id = $1::VARCHAR
+2026-05-26 23:52:06,045  INFO      sqlalchemy.engine.Engine — SELECT projects.project_id, projects.name, projects.reference, projects.client, projects.design_code, projects.pipeline_status, projects.created_at, projects.updated_at, projects.organisation_id, projects.created_by 
+FROM projects 
+WHERE projects.project_id = $1::VARCHAR
+2026-05-26 23:52:06,045 INFO sqlalchemy.engine.Engine [generated in 0.00038s] ('PRJ-BCD1A535',)
+2026-05-26 23:52:06,045  INFO      sqlalchemy.engine.Engine — [generated in 0.00038s] ('PRJ-BCD1A535',)
+2026-05-26 23:52:06,770 INFO sqlalchemy.engine.Engine SELECT count(*) AS count_1 
+FROM project_members 
+WHERE project_members.project_id = $1::VARCHAR
+2026-05-26 23:52:06,770  INFO      sqlalchemy.engine.Engine — SELECT count(*) AS count_1 
+FROM project_members 
+WHERE project_members.project_id = $1::VARCHAR
+2026-05-26 23:52:06,770 INFO sqlalchemy.engine.Engine [cached since 46.9s ago] ('PRJ-BCD1A535',)
+2026-05-26 23:52:06,770  INFO      sqlalchemy.engine.Engine — [cached since 46.9s ago] ('PRJ-BCD1A535',)
+2026-05-26 23:52:07,175 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-05-26 23:52:07,175  INFO      sqlalchemy.engine.Engine — ROLLBACK
+2026-05-26 23:52:07,405  INFO      services.files — Parse complete for project PRJ-BCD1A535: 0 member(s) detected.
+2026-05-26 23:52:08,147  INFO      agents.parser — Deterministic beam extraction: 82 beams for project PRJ-BCD1A535
+2026-05-26 23:52:08,244  INFO      agents.parser — PDF attached for column extraction, project PRJ-BCD1A535
+2026-05-26 23:52:08,250  INFO      google_genai.models — AFC is enabled with max remote calls: 10.
+2026-05-26 23:52:08,256 INFO sqlalchemy.engine.Engine COMMIT
+2026-05-26 23:52:08,256  INFO      sqlalchemy.engine.Engine — COMMIT
+2026-05-26 23:52:38,723  INFO      httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-05-26 23:52:38,729  INFO      agents.parser — LLM column extraction: 76 columns for project PRJ-BCD1A535
+2026-05-26 23:52:38,827  INFO      google_genai.models — AFC is enabled with max remote calls: 10.
+2026-05-26 23:52:58,385  INFO      httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 503 Service Unavailable"
+2026-05-26 23:52:58,386  INFO      google_genai._api_client — Retrying google.genai._api_client.BaseApiClient._async_request_once in 1.43 seconds as it raised ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}.
+2026-05-26 23:53:12,015  INFO      httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-05-26 23:53:12,020  INFO      agents.parser — Slab/void extraction: 19 members for project PRJ-BCD1A535
+2026-05-26 23:53:12,951 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-26 23:53:12,951  INFO      sqlalchemy.engine.Engine — BEGIN (implicit)
+2026-05-26 23:53:12,952 INFO sqlalchemy.engine.Engine SELECT project_members.member_id 
+FROM project_members 
+WHERE project_members.project_id = $1::VARCHAR
+2026-05-26 23:53:12,952  INFO      sqlalchemy.engine.Engine — SELECT project_members.member_id 
+FROM project_members 
+WHERE project_members.project_id = $1::VARCHAR
+2026-05-26 23:53:12,952 INFO sqlalchemy.engine.Engine [generated in 0.00031s] ('PRJ-BCD1A535',)
+2026-05-26 23:53:12,952  INFO      sqlalchemy.engine.Engine — [generated in 0.00031s] ('PRJ-BCD1A535',)
+2026-05-26 23:53:13,758 INFO sqlalchemy.engine.Engine INSERT INTO project_members (project_id, member_id, member_type) SELECT p0::VARCHAR, p1::VARCHAR, p2::VARCHAR FROM (VALUES ($1::VARCHAR, $2::VARCHAR, $3::VARCHAR, 0), ($4::VARCHAR, $5::VARCHAR, $6::VARCHAR, 1), ($7::VARCHAR, $8::VARCHAR, $9::VARCHAR, ... 3441 characters truncated ...  p1, p2, sen_counter) ORDER BY sen_counter RETURNING project_members.id, project_members.id AS id__1
+2026-05-26 23:53:13,758  INFO      sqlalchemy.engine.Engine — INSERT INTO project_members (project_id, member_id, member_type) SELECT p0::VARCHAR, p1::VARCHAR, p2::VARCHAR FROM (VALUES ($1::VARCHAR, $2::VARCHAR, $3::VARCHAR, 0), ($4::VARCHAR, $5::VARCHAR, $6::VARCHAR, 1), ($7::VARCHAR, $8::VARCHAR, $9::VARCHAR, ... 3441 characters truncated ...  p1, p2, sen_counter) ORDER BY sen_counter RETURNING project_members.id, project_members.id AS id__1
+2026-05-26 23:53:13,758 INFO sqlalchemy.engine.Engine [generated in 0.00040s (insertmanyvalues) 1/1 (ordered)] ('PRJ-BCD1A535', '1B34', 'beam', 'PRJ-BCD1A535', '1B35', 'beam', 'PRJ-BCD1A535', '1B36', 'beam', 'PRJ-BCD1A535', '1B37', 'beam', 'PRJ-BCD1A535', '1B38', 'beam', 'PRJ-BCD1A535', '1B39', 'beam', 'PRJ-BCD1A535', '1B40', 'beam', 'PRJ-BCD1A535', '1B41', 'beam', 'PRJ-BCD1A535', '1B42', 'beam', 'PRJ-BCD1A535', '1B43', 'beam', 'PRJ-BCD1A535', '1B44', 'beam', 'PRJ-BCD1A535', '1B45', 'beam', 'PRJ-BCD1A535', '1B46', 'beam', 'PRJ-BCD1A535', '1B47', 'beam', 'PRJ-BCD1A535', '1B48', 'beam', 'PRJ-BCD1A535', '1B49', 'beam', 'PRJ-BCD1A535', '1B50' ... 116 parameters truncated ... 'S3', 'slab', 'PRJ-BCD1A535', 'S4', 'slab', 'PRJ-BCD1A535', 'S5', 'slab', 'PRJ-BCD1A535', 'S6', 'slab', 'PRJ-BCD1A535', 'S7', 'slab', 'PRJ-BCD1A535', 'S8', 'slab', 'PRJ-BCD1A535', 'S9', 'slab', 'PRJ-BCD1A535', 'S10', 'slab', 'PRJ-BCD1A535', 'S11', 'slab', 'PRJ-BCD1A535', 'S12', 'slab', 'PRJ-BCD1A535', 'S13', 'slab', 'PRJ-BCD1A535', 'S14', 'slab', 'PRJ-BCD1A535', 'S15', 'slab', 'PRJ-BCD1A535', 'S16', 'slab', 'PRJ-BCD1A535', 'S17', 'slab', 'PRJ-BCD1A535', 'S18', 'slab', 'PRJ-BCD1A535', 'S19', 'slab')
+2026-05-26 23:53:13,758  INFO      sqlalchemy.engine.Engine — [generated in 0.00040s (insertmanyvalues) 1/1 (ordered)] ('PRJ-BCD1A535', '1B34', 'beam', 'PRJ-BCD1A535', '1B35', 'beam', 'PRJ-BCD1A535', '1B36', 'beam', 'PRJ-BCD1A535', '1B37', 'beam', 'PRJ-BCD1A535', '1B38', 'beam', 'PRJ-BCD1A535', '1B39', 'beam', 'PRJ-BCD1A535', '1B40', 'beam', 'PRJ-BCD1A535', '1B41', 'beam', 'PRJ-BCD1A535', '1B42', 'beam', 'PRJ-BCD1A535', '1B43', 'beam', 'PRJ-BCD1A535', '1B44', 'beam', 'PRJ-BCD1A535', '1B45', 'beam', 'PRJ-BCD1A535', '1B46', 'beam', 'PRJ-BCD1A535', '1B47', 'beam', 'PRJ-BCD1A535', '1B48', 'beam', 'PRJ-BCD1A535', '1B49', 'beam', 'PRJ-BCD1A535', '1B50' ... 116 parameters truncated ... 'S3', 'slab', 'PRJ-BCD1A535', 'S4', 'slab', 'PRJ-BCD1A535', 'S5', 'slab', 'PRJ-BCD1A535', 'S6', 'slab', 'PRJ-BCD1A535', 'S7', 'slab', 'PRJ-BCD1A535', 'S8', 'slab', 'PRJ-BCD1A535', 'S9', 'slab', 'PRJ-BCD1A535', 'S10', 'slab', 'PRJ-BCD1A535', 'S11', 'slab', 'PRJ-BCD1A535', 'S12', 'slab', 'PRJ-BCD1A535', 'S13', 'slab', 'PRJ-BCD1A535', 'S14', 'slab', 'PRJ-BCD1A535', 'S15', 'slab', 'PRJ-BCD1A535', 'S16', 'slab', 'PRJ-BCD1A535', 'S17', 'slab', 'PRJ-BCD1A535', 'S18', 'slab', 'PRJ-BCD1A535', 'S19', 'slab')
+2026-05-26 23:53:14,280 INFO sqlalchemy.engine.Engine COMMIT
+2026-05-26 23:53:14,280  INFO      sqlalchemy.engine.Engine — COMMIT
+2026-05-26 23:53:14,564  INFO      storage.project_store — Batch registered 72 new members for project PRJ-BCD1A535
+2026-05-26 23:53:15,140  INFO      routers.files — Parsing complete for project PRJ-BCD1A535.
+2026-05-26 23:53:15,140 INFO sqlalchemy.engine.Engine COMMIT
+2026-05-26 23:53:15,140  INFO      sqlalchemy.engine.Engine — COMMIT
+
+

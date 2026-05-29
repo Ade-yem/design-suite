@@ -122,7 +122,7 @@ class AnalysisService:
 
         from services.files import file_service
         try:
-            parsed = file_service.get_parsed(project_id)
+            parsed = await file_service.get_parsed(project_id)
             parsed_members: dict[str, dict] = {
                 m["member_id"]: m for m in parsed.get("members", [])
             }

@@ -40,6 +40,9 @@ from middleware.error_handler import StructuralError
 from schemas.jobs import JobStatus
 import redis.asyncio as aioredis
 from config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ── In-memory implementation ──────────────────────────────────────────────────
 
@@ -223,6 +226,13 @@ class RedisJobStore:
     def _proj_key(self, project_id: str) -> str:
         return f"structai:proj_jobs:{project_id}"
 
+    def _job_proj_key(self, job_id: str) -> str:
+        return f"structai:job_proj:{job_id}"
+
+    async def _find_project_id(self, job_id: str) -> Optional[str]:
+        r = self._get_redis()
+        return await r.get(self._job_proj_key(job_id))  # type: ignore
+
     async def create(
         self,
         job_type: Literal["parsing", "analysis", "design", "reporting", "drawings"],
@@ -245,6 +255,7 @@ class RedisJobStore:
         if project_id:
             await r.sadd(self._proj_key(project_id), job_id)  # type: ignore
             await r.expire(self._proj_key(project_id), ttl)  # type: ignore
+            await r.set(self._job_proj_key(job_id), project_id, ex=ttl)  # type: ignore
         return job_id
 
     async def get(self, job_id: str) -> Optional[JobStatus]:
@@ -279,6 +290,23 @@ class RedisJobStore:
             updated.model_dump_json(),
             ex=settings.JOB_STORE_TTL_SECONDS,
         )
+
+        pid = await self._find_project_id(job_id)
+        if pid:
+            try:
+                from websocket import manager as ws_manager
+                await ws_manager.broadcast(pid, {
+                    "type": "job_update",
+                    "job_id": updated.job_id,
+                    "job_type": updated.job_type,
+                    "status": updated.status,
+                    "progress_pct": updated.progress_pct,
+                    "current_step": updated.current_step,
+                    "result_url": updated.result_url,
+                    "errors": updated.errors,
+                })
+            except Exception as e:
+                logger.error(f"WebSocket broadcast failed for job {updated.job_id}: {e}")
 
     async def mark_running(self, job_id: str, step: str = "Starting…") -> None:
         await self._update_job(
