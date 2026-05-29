@@ -1,8 +1,12 @@
+import os
+os.environ["PROJECT_STORE_BACKEND"] = "memory"
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from main import app
 from storage.project_store import project_store
 from schemas.project import ProjectCreate, ProjectStatus
+
 
 @pytest.fixture(autouse=True)
 async def clear_stores():

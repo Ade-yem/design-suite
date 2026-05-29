@@ -68,7 +68,6 @@ export const CanvasUploader = forwardRef<CanvasUploaderHandle, CanvasUploaderPro
     // Input triggers refs
     const dxfInputRef = useRef<HTMLInputElement>(null);
     const pdfInputRef = useRef<HTMLInputElement>(null);
-    const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Establish dynamic WebSocket connection for live progress updates
     useProjectSocket(projectId, {

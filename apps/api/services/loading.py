@@ -202,7 +202,7 @@ class LoadingService:
                 "Submit a load definition first."
             )
 
-        output = self._run_engine(project_id, definition)
+        output = await self._run_engine(project_id, definition)
         _store.set_output(project_id, output)
         await project_store.advance_status(project_id, ProjectStatus.LOADING_DEFINED)
         self._schedule_db_save(self._db_save_loads(project_id, definition, output))
@@ -347,7 +347,7 @@ class LoadingService:
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
-    def _run_engine(self, project_id: str, definition: dict) -> dict:
+    async def _run_engine(self, project_id: str, definition: dict) -> dict:
         """
         Orchestrate the core loading engine for all project members.
 
@@ -394,7 +394,7 @@ class LoadingService:
 
         # Pull geometry from the files service
         try:
-            parsed = file_service.get_parsed(project_id)
+            parsed = await file_service.get_parsed(project_id)
             parsed_members: dict[str, dict] = {
                 m["member_id"]: m for m in parsed.get("members", [])
             }

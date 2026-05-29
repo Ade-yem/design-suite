@@ -13,7 +13,7 @@ Usage
 """
 
 from __future__ import annotations
-from typing import Literal
+from typing import Literal, cast
 import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -110,7 +110,8 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = None
 
     # ── Project / Data store ──────────────────────────────────────────────────
-    PROJECT_STORE_BACKEND: Literal["memory", "postgres"] = "postgres" # 
+    PROJECT_STORE_BACKEND: Literal["memory", "postgres"] = cast(
+    Literal["memory", "postgres"], os.getenv("PROJECT_STORE_BACKEND"))
     DATABASE_URL: str | None = os.getenv("DATABASE_URL")
 
     # ── Logging & meta ────────────────────────────────────────────────────────

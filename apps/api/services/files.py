@@ -29,6 +29,7 @@ from typing import Any, Optional
 from core.parsing import parse_file
 from storage.project_store import project_store
 from schemas.project import ProjectStatus
+from db.models.project import ProjectGeometry
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +201,7 @@ class FileService:
         )
         return parsed
 
-    def get_parsed(self, project_id: str) -> dict:
+    async def get_parsed(self, project_id: str) -> dict:
         """
         Return the cached structural JSON for a project.
 
@@ -220,13 +221,39 @@ class FileService:
         """
         data = _store.get_parsed(project_id)
         if data is None:
-            raise KeyError(
-                f"No parsed geometry for project '{project_id}'. "
-                "Parse a file first via file_service.parse()."
-            )
+            db_row = await self._db_get_geometry(project_id)
+            if db_row is None:
+                raise KeyError(
+                    f"No parsed geometry for project '{project_id}'. "
+                    "Parse a file first via file_service.parse()."
+                )
+            try:
+                if isinstance(db_row.geometry, str):
+                    data = json.loads(db_row.geometry)
+                else:
+                    data = db_row.geometry
+
+                _store.set_parsed(project_id, data)
+
+                if db_row.scale_json:
+                    if isinstance(db_row.scale_json, str):
+                        scale = json.loads(db_row.scale_json)
+                    else:
+                        scale = db_row.scale_json
+                    _store.set_scale(project_id, scale)
+            except Exception as exc:
+                logger.error(
+                    "Failed to deserialize geometry from database for project %s: %s",
+                    project_id,
+                    exc,
+                )
+                raise KeyError(
+                    f"Parsed geometry in database for project '{project_id}' is malformed."
+                ) from exc
+
         return data
 
-    def get_scale(self, project_id: str) -> dict:
+    async def get_scale(self, project_id: str) -> dict:
         """
         Return the scale / unit info detected during parsing.
 
@@ -246,13 +273,18 @@ class FileService:
         """
         scale = _store.get_scale(project_id)
         if scale is None:
+            # Try to load geometry from database which will populate the scale cache
+            await self.get_parsed(project_id)
+            scale = _store.get_scale(project_id)
+
+        if scale is None:
             raise KeyError(
                 f"No scale data for project '{project_id}'. "
                 "Parse a file first via file_service.parse()."
             )
         return scale
 
-    def confirm_scale(
+    async def confirm_scale(
         self,
         project_id: str,
         scale_factor: float,
@@ -276,6 +308,9 @@ class FileService:
         dict
             Updated scale record.
         """
+        # Ensure geometry is loaded from memory or DB first
+        parsed = await self.get_parsed(project_id)
+
         existing = _store.get_scale(project_id) or {}
         old_factor = existing.get("factor", scale_factor)
 
@@ -287,11 +322,8 @@ class FileService:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         _store.set_scale(project_id, new_scale)
-        parsed_after = _store.get_parsed(project_id) or {}
-        self._schedule_db_save(self._db_save_geometry(project_id, parsed_after, new_scale))
 
-        # Rescale spans_m in cached geometry
-        parsed = _store.get_parsed(project_id)
+        # Rescale spans_m in geometry
         if parsed and old_factor and old_factor != scale_factor:
             ratio = scale_factor / old_factor
             for member in parsed.get("members", []):
@@ -299,6 +331,8 @@ class FileService:
                 for span in member.get("spans", []):
                     span["length_m"] = round(span["length_m"] * ratio, 3)
             _store.set_parsed(project_id, parsed)
+
+        await self._db_save_geometry(project_id, parsed, new_scale)
 
         logger.info(
             "Scale confirmed for project %s: factor=%.6f unit=%s.",
@@ -338,20 +372,21 @@ class FileService:
         ValueError
             If no parsed geometry exists for this project.
         """
-        parsed = _store.get_parsed(project_id)
-        if parsed is None:
+        try:
+            parsed = await self.get_parsed(project_id)
+        except KeyError as exc:
             raise ValueError(
                 f"Cannot verify geometry for project '{project_id}': "
                 "no parsed data found."
-            )
+            ) from exc
 
         if corrections:
             parsed["user_corrections"] = corrections
             _store.set_parsed(project_id, parsed)
 
         await project_store.advance_status(project_id, ProjectStatus.GEOMETRY_VERIFIED)
-        scale = _store.get_scale(project_id) or {}
-        self._schedule_db_save(self._db_save_geometry(project_id, parsed, scale))
+        scale = await self.get_scale(project_id)
+        await self._db_save_geometry(project_id, parsed, scale)
         member_count = len(parsed.get("members", []))
 
         logger.info(
@@ -377,8 +412,9 @@ class FileService:
             Structural JSON to store.
         """
         _store.set_parsed(project_id, data)
-        if "scale" in data:
-            _store.set_scale(project_id, data["scale"])
+        scale = data.get("scale") or {}
+        _store.set_scale(project_id, scale)
+        self._schedule_db_save(self._db_save_geometry(project_id, data, scale))
 
     def clear(self, project_id: str) -> None:
         """
@@ -427,7 +463,27 @@ class FileService:
             pass  # DATABASE_URL not configured
         except Exception as exc:
             logger.warning("DB geometry save failed for project %s: %s", project_id, exc)
+    
+    
+    async def _db_get_geometry(self, project_id: str) -> ProjectGeometry | None:
+        """Obtains parsed geometry and scale from ProjectGeometry. Silent no-op if DB unavailable."""
+        from config import settings
+        if settings.PROJECT_STORE_BACKEND != "postgres":
+            return
+        try:
+            from db.session import get_session_maker
+            from sqlalchemy import select
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                return (await session.execute(
+                    select(ProjectGeometry).where(ProjectGeometry.project_id == project_id)
+                )).scalar_one_or_none()
 
+        except RuntimeError:
+            pass  # DATABASE_URL not configured
+        except Exception as exc:
+            logger.warning("DB geometry save failed for project %s: %s", project_id, exc)
+    
     def _schedule_db_save(self, coro) -> None:
         """Schedule a DB-write coroutine on the running event loop (fire-and-forget)."""
         try:

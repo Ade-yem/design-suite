@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 # ─── HELPER FUNCTIONS ─────────────────────────────────────────────────────────
 
-def _build_members_payload(project_id: str, member_ids: Any) -> list[dict]:
+async def _build_members_payload(project_id: str, member_ids: Any) -> list[dict]:
     """
     Construct member payloads containing loading, analysis, and design data for report generation.
 
@@ -88,7 +88,7 @@ def _build_members_payload(project_id: str, member_ids: Any) -> list[dict]:
 
     # Fetch parsed geometry (for floor level, etc.)
     try:
-        parsed_geom = file_service.get_parsed(project_id)
+        parsed_geom = await file_service.get_parsed(project_id)
         geom_map = {m["member_id"]: m for m in parsed_geom.get("members", [])}
     except Exception:
         geom_map = {}
@@ -164,7 +164,7 @@ async def get_parsed_geometry(project_id: str) -> dict:
     dict
         Parsed structural JSON including detected members, scale, and warnings.
     """
-    return file_service.get_parsed(project_id)
+    return await file_service.get_parsed(project_id)
 
 
 @tool
@@ -215,7 +215,7 @@ async def get_detected_scale(project_id: str) -> dict:
     dict
         ``{factor, unit, detected, confirmed}``
     """
-    return file_service.get_scale(project_id)
+    return await file_service.get_scale(project_id)
 
 
 @tool
@@ -239,7 +239,7 @@ async def confirm_scale(
     dict
         Updated scale record.
     """
-    return file_service.confirm_scale(
+    return await file_service.confirm_scale(
         project_id,
         scale_factor=scale_factor,
         unit_label=unit_label,
@@ -901,7 +901,7 @@ async def generate_report(
         design_code_edition=design_code_edition
     )
 
-    members_payload = _build_members_payload(project_id, member_ids)
+    members_payload = await _build_members_payload(project_id, member_ids)
 
     req = GenerateReportRequest(
         project_id=project_id,
