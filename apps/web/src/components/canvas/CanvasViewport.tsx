@@ -25,6 +25,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { apiClient } from "@/lib/api";
@@ -97,6 +98,9 @@ export const CanvasViewport = forwardRef<
   // ── Component State ──────────────────────────────────────────────────────
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [tooltipPos, setTooltipPos] = useState<Point | null>(null);
+  const [scaleUnit, setScaleUnit] = useState<string>("mm");
+  const [scaleFactor, setScaleFactor] = useState<number>(1);
+  const [isConfirmingScale, setIsConfirmingScale] = useState(false);
 
   // Refs
   const uploaderRef = useRef<CanvasUploaderHandle>(null);
@@ -140,6 +144,31 @@ export const CanvasViewport = forwardRef<
   useEffect(() => {
     fetchExistingGeometry();
   }, [projectId, fetchExistingGeometry]);
+
+  // Sync local scale form state when scale is loaded from backend
+  useEffect(() => {
+    if (scale) {
+      setScaleUnit(scale.unit ?? "mm");
+      setScaleFactor(scale.factor ?? 1);
+    }
+  }, [scale]);
+
+  const handleConfirmScale = useCallback(async () => {
+    setIsConfirmingScale(true);
+    try {
+      await apiClient.put(`/api/v1/files/${projectId}/scale`, {
+        scale_factor: scaleFactor,
+        unit_label: scaleUnit,
+        confirmed: true,
+      });
+      // Reload geometry so scale.confirmed flips to true in the store
+      await fetchExistingGeometry();
+    } catch {
+      // Non-fatal — engineer can retry; geometry is still displayed
+    } finally {
+      setIsConfirmingScale(false);
+    }
+  }, [projectId, scaleFactor, scaleUnit, fetchExistingGeometry]);
 
   // ── Drawing loop using requestAnimationFrame ─────────────────────────────
   const draw = useCallback(() => {
@@ -365,6 +394,40 @@ export const CanvasViewport = forwardRef<
       {/* Absolute floating UI elements */}
       {uploadState === "done" && (
         <>
+          {/* Scale confirmation banner — shown when scale was auto-detected but not yet confirmed */}
+          {scale?.detected && !scale?.confirmed && (
+            <div className="absolute top-0 inset-x-0 z-20 flex items-center gap-3 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 backdrop-blur-md">
+              <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+              <span className="text-xs text-amber-200 font-medium flex-1">
+                Scale auto-detected — please confirm before proceeding.
+              </span>
+              <span className="text-xs text-amber-300/70 font-mono">
+                factor: {scaleFactor}
+              </span>
+              <select
+                value={scaleUnit}
+                onChange={(e) => setScaleUnit(e.target.value)}
+                className="bg-muted/60 border border-border text-xs rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 text-foreground"
+              >
+                <option value="mm">mm</option>
+                <option value="m">m</option>
+                <option value="cm">cm</option>
+              </select>
+              <button
+                onClick={handleConfirmScale}
+                disabled={isConfirmingScale}
+                className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 text-amber-950 text-xs font-semibold rounded hover:bg-amber-400 transition-all disabled:opacity-50 shrink-0"
+              >
+                {isConfirmingScale ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Check className="h-3 w-3" />
+                )}
+                Confirm Scale
+              </button>
+            </div>
+          )}
+
           <CanvasToolbar
             activeTool={activeTool}
             setTool={setTool}

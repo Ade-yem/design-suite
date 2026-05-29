@@ -43,7 +43,7 @@ class ProjectAnalysis(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[str] = mapped_column(
-        String, ForeignKey("projects.project_id"), unique=True, nullable=False
+        String, ForeignKey("projects.project_id", ondelete="CASCADE"), unique=True, nullable=False
     )
     analysis_id: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     design_code: Mapped[str] = mapped_column(String(20), nullable=False, default="BS8110")
@@ -88,7 +88,7 @@ class ProjectDesign(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[str] = mapped_column(
-        String, ForeignKey("projects.project_id"), unique=True, nullable=False
+        String, ForeignKey("projects.project_id", ondelete="CASCADE"), unique=True, nullable=False
     )
     design_id: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     design_code: Mapped[str] = mapped_column(String(20), nullable=False, default="BS8110")
@@ -131,7 +131,7 @@ class ProjectDrawing(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[str] = mapped_column(
-        String, ForeignKey("projects.project_id"), unique=True, nullable=False
+        String, ForeignKey("projects.project_id", ondelete="CASCADE"), unique=True, nullable=False
     )
     commands: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     gate4_confirmed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

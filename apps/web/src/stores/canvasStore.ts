@@ -41,17 +41,35 @@ import type {
  * Normalize a raw backend member to the frontend GeometricMember shape.
  *
  * The Vision Agent returns `start_point`/`end_point`/`center_point` while the
- * canvas renderer expects `start`/`end`.  Columns use `center_point` for both.
+ * canvas renderer expects `start`/`end`.  Slabs and voids arrive with a
+ * `boundary_polygon` array; their `start`/`end` are derived as AABB corners so
+ * that bounding-box logic (fit-to-view, hit test fallback) still works.
  */
 function normalizeBackendMember(raw: unknown): GeometricMember {
   const m = raw as Record<string, unknown>;
-  const startRaw = (m.start ?? m.start_point ?? m.center_point ?? { x: 0, y: 0 }) as Point;
-  const endRaw = (m.end ?? m.end_point ?? m.center_point ?? startRaw) as Point;
+  const polygon = Array.isArray(m.boundary_polygon)
+    ? (m.boundary_polygon as Point[])
+    : undefined;
+
+  let startRaw: Point;
+  let endRaw: Point;
+
+  if (polygon && polygon.length >= 2) {
+    const xs = polygon.map((p) => p.x);
+    const ys = polygon.map((p) => p.y);
+    startRaw = { x: Math.min(...xs), y: Math.min(...ys) };
+    endRaw = { x: Math.max(...xs), y: Math.max(...ys) };
+  } else {
+    startRaw = (m.start ?? m.start_point ?? m.center_point ?? { x: 0, y: 0 }) as Point;
+    endRaw = (m.end ?? m.end_point ?? m.center_point ?? startRaw) as Point;
+  }
+
   return {
     member_id: m.member_id as string,
     member_type: m.member_type as MemberType,
     start: startRaw,
     end: endRaw,
+    boundary_polygon: polygon,
     meta: (m.meta ?? { b_mm: 300, h_mm: 500 }) as GeometricMember["meta"],
   };
 }
