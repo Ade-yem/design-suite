@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Literal
 import os
 from pathlib import Path
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
@@ -108,6 +109,13 @@ class Settings(BaseSettings):
     JOB_STORE_TTL_SECONDS: int = 3600
     JOB_STORE_BACKEND: Literal["memory", "redis"] = "memory"    # "memory" | "redis"
     REDIS_URL: str | None = None
+
+    @model_validator(mode="after")
+    def _auto_select_redis(self) -> "Settings":
+        """Promote JOB_STORE_BACKEND to 'redis' when REDIS_URL is present."""
+        if self.REDIS_URL and self.JOB_STORE_BACKEND == "memory":
+            self.JOB_STORE_BACKEND = "redis"  # type: ignore[assignment]
+        return self
 
     # ── Project / Data store ──────────────────────────────────────────────────
     PROJECT_STORE_BACKEND: Literal["memory", "postgres"] = "postgres" # 

@@ -25,6 +25,8 @@ Startup
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 from dotenv import load_dotenv
 
@@ -72,8 +74,43 @@ logging.basicConfig(
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
 )
 
+_log = logging.getLogger(__name__)
+
+# ── LangGraph Lifespan ─────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
+    """
+    Wire a PostgreSaver-backed LangGraph checkpointer when DATABASE_URL is set.
+    Falls back to the default MemorySaver (already compiled in agents.graph) if
+    Postgres is unavailable or the package is not installed.
+    """
+    import agents.graph as _agent_graph
+
+    _postgres_saver = None
+
+    if settings.PROJECT_STORE_BACKEND == "postgres" and settings.DATABASE_URL:
+        try:
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+            _postgres_saver = await AsyncPostgresSaver.from_conn_string(settings.DATABASE_URL).__aenter__()
+            await _postgres_saver.setup()
+            _agent_graph.app = _agent_graph.build_app(_postgres_saver)
+            _log.info("LangGraph checkpointer: AsyncPostgresSaver (postgres).")
+        except Exception as exc:  # package not installed or DB not reachable
+            _log.warning("LangGraph PostgreSaver unavailable (%s) — falling back to MemorySaver.", exc)
+
+    yield  # ── application runs ──────────────────────────────────────────────
+
+    if _postgres_saver is not None:
+        try:
+            await _postgres_saver.__aexit__(None, None, None)
+        except Exception:
+            pass
+
+
 # ── Application ────────────────────────────────────────────────────────────────
 app = FastAPI(
+    lifespan=lifespan,
     title="Structural Design Copilot API",
     version=settings.API_VERSION,
     description=(

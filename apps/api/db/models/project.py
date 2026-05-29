@@ -80,7 +80,7 @@ class Project(Base):
 
     # ── Tenancy / Ownership ───────────────────────────────────────────────────
     organisation_id: Mapped[str | None] = mapped_column(
-        String, ForeignKey("organisations.id"), nullable=True
+        String, ForeignKey("organisations.id"), nullable=True, index=True
     )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
@@ -132,7 +132,9 @@ class ProjectMember(Base):
     __tablename__ = "project_members"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.project_id"), nullable=False)
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False, index=True
+    )
     member_id: Mapped[str] = mapped_column(String(100), nullable=False)
     member_type: Mapped[str] = mapped_column(String(50), default="beam")
 
@@ -166,7 +168,7 @@ class ProjectLoad(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[str] = mapped_column(
-        String, ForeignKey("projects.project_id"), unique=True, nullable=False
+        String, ForeignKey("projects.project_id", ondelete="CASCADE"), unique=True, nullable=False
     )
     definition: Mapped[dict | None] = mapped_column(Text, nullable=True)   # stored as JSON string
     output: Mapped[dict | None] = mapped_column(Text, nullable=True)       # stored as JSON string
@@ -208,7 +210,7 @@ class ProjectGeometry(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[str] = mapped_column(
-        String, ForeignKey("projects.project_id"), unique=True, nullable=False
+        String, ForeignKey("projects.project_id", ondelete="CASCADE"), unique=True, nullable=False
     )
     geometry: Mapped[str] = mapped_column(Text, nullable=False)
     scale_json: Mapped[str | None] = mapped_column(Text, nullable=True)
