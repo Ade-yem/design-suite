@@ -116,7 +116,7 @@ async def handle_canvas_edit(state: StructuralDesignState, member_id: str, edit_
     try:
         from services.design import design_service
         override = {edit_type: new_value, "reason": "canvas edit"}
-        result = design_service.apply_override(
+        result = await design_service.apply_override(
             project_id,
             member_id,
             override=override,
