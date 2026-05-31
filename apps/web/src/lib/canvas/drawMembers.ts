@@ -214,29 +214,46 @@ export function drawSlab(
   isSelected: boolean,
   isHovered: boolean
 ): void {
-  const s = worldToScreen(member.start, zoom, pan, canvasHeight);
-  const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+  let x: number, y: number, w: number, h: number;
 
-  const x = Math.min(s.x, e.x);
-  const y = Math.min(s.y, e.y);
-  const w = Math.abs(e.x - s.x);
-  const h = Math.abs(e.y - s.y);
+  if (member.boundary_polygon && member.boundary_polygon.length >= 3) {
+    const pts = member.boundary_polygon.map((p) => worldToScreen(p, zoom, pan, canvasHeight));
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
 
-  if (w < 2 && h < 2) return;
+    ctx.fillStyle = isHovered ? SLAB_FILL_HOVER : SLAB_FILL;
+    ctx.fill();
+    ctx.strokeStyle = SLAB_STROKE;
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
-  ctx.fillStyle = isHovered ? SLAB_FILL_HOVER : SLAB_FILL;
-  ctx.fillRect(x, y, w, h);
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    x = Math.min(...xs); y = Math.min(...ys);
+    w = Math.max(...xs) - x; h = Math.max(...ys) - y;
+  } else {
+    const s = worldToScreen(member.start, zoom, pan, canvasHeight);
+    const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+    x = Math.min(s.x, e.x); y = Math.min(s.y, e.y);
+    w = Math.abs(e.x - s.x); h = Math.abs(e.y - s.y);
+    if (w < 2 && h < 2) return;
 
-  ctx.strokeStyle = SLAB_STROKE;
-  ctx.lineWidth = isSelected ? 2 : 1;
-  ctx.setLineDash([6, 4]);
-  ctx.strokeRect(x, y, w, h);
-  ctx.setLineDash([]);
+    ctx.fillStyle = isHovered ? SLAB_FILL_HOVER : SLAB_FILL;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = SLAB_STROKE;
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+  }
 
   if (w > 30 && h > 30) {
     drawSpanningArrows(ctx, x, y, w, h, member);
   }
-
   if (isSelected) {
     drawSelectionGlow(ctx, x, y, w, h);
   }
@@ -251,30 +268,45 @@ export function drawVoid(
   isSelected: boolean,
   isHovered: boolean
 ): void {
-  const s = worldToScreen(member.start, zoom, pan, canvasHeight);
-  const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+  let x: number, y: number, w: number, h: number;
+  let path: Path2D | null = null;
 
-  const x = Math.min(s.x, e.x);
-  const y = Math.min(s.y, e.y);
-  const w = Math.abs(e.x - s.x);
-  const h = Math.abs(e.y - s.y);
+  if (member.boundary_polygon && member.boundary_polygon.length >= 3) {
+    const pts = member.boundary_polygon.map((p) => worldToScreen(p, zoom, pan, canvasHeight));
+    path = new Path2D();
+    path.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) path.lineTo(pts[i].x, pts[i].y);
+    path.closePath();
 
-  if (w < 2 && h < 2) return;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    x = Math.min(...xs); y = Math.min(...ys);
+    w = Math.max(...xs) - x; h = Math.max(...ys) - y;
+  } else {
+    const s = worldToScreen(member.start, zoom, pan, canvasHeight);
+    const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+    x = Math.min(s.x, e.x); y = Math.min(s.y, e.y);
+    w = Math.abs(e.x - s.x); h = Math.abs(e.y - s.y);
+    if (w < 2 && h < 2) return;
+  }
 
   ctx.fillStyle = isHovered ? "rgba(239, 68, 68, 0.12)" : VOID_FILL;
-  ctx.fillRect(x, y, w, h);
+  if (path) ctx.fill(path); else ctx.fillRect(x, y, w, h);
 
+  // X-hatch diagonal lines clipped to shape
+  ctx.save();
+  if (path) ctx.clip(path); else { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); }
   ctx.strokeStyle = VOID_STROKE;
   ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + w, y + h);
-  ctx.moveTo(x + w, y);
-  ctx.lineTo(x, y + h);
+  ctx.moveTo(x, y); ctx.lineTo(x + w, y + h);
+  ctx.moveTo(x + w, y); ctx.lineTo(x, y + h);
   ctx.stroke();
+  ctx.restore();
 
+  ctx.strokeStyle = VOID_STROKE;
   ctx.lineWidth = isSelected ? 2 : 1;
-  ctx.strokeRect(x, y, w, h);
+  if (path) ctx.stroke(path); else ctx.strokeRect(x, y, w, h);
 
   if (isSelected) {
     drawSelectionGlow(ctx, x, y, w, h);

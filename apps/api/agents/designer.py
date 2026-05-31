@@ -158,6 +158,7 @@ async def designer_node(state: StructuralDesignState) -> dict:
 
     # ── Fetch results ─────────────────────────────────────────────────────────
     try:
+        await design_service.ensure_cached(project_id)
         results = design_service.get_results(project_id)
     except Exception as exc:
         return {
@@ -308,7 +309,7 @@ async def handle_design_override(
 
     try:
         from services.design import design_service
-        result = design_service.apply_override(
+        result = await design_service.apply_override(
             project_id,
             member_id,
             override=override_data,

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
-from agents.graph import app as agent_app
+import agents.graph as _agent_graph
 import base64
 import json
 
@@ -29,7 +29,7 @@ async def chat_endpoint(
         # Invoke Parser
         # We target the 'parser' node specifically or let the graph decide
         # For now, the graph entry point is parser
-        result = agent_app.invoke(inputs)
+        result = _agent_graph.app.invoke(inputs)
         
         if result.get("error"):
             raise HTTPException(status_code=500, detail=result["error"])

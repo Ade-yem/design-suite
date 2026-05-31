@@ -25,6 +25,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { apiClient } from "@/lib/api";
@@ -33,7 +34,7 @@ import { drawDotGrid } from "@/lib/canvas/drawGrid";
 import { drawMember } from "@/lib/canvas/drawMembers";
 import { drawAllLabels } from "@/lib/canvas/drawLabels";
 import { hitTestMembers } from "@/lib/canvas/hitTest";
-import type { GeometricMember, Point, ParsedGeometry } from "@/types/canvas";
+import type { Point, ParsedGeometry } from "@/types/canvas";
 
 // Imported split-out subcomponents
 import { CanvasToolbar } from "./CanvasToolbar";
@@ -97,6 +98,9 @@ export const CanvasViewport = forwardRef<
   // ── Component State ──────────────────────────────────────────────────────
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [tooltipPos, setTooltipPos] = useState<Point | null>(null);
+  const [scaleUnit, setScaleUnit] = useState<string>("mm");
+  const [scaleFactor, setScaleFactor] = useState<number>(1);
+  const [isConfirmingScale, setIsConfirmingScale] = useState(false);
 
   // Refs
   const uploaderRef = useRef<CanvasUploaderHandle>(null);
@@ -105,6 +109,12 @@ export const CanvasViewport = forwardRef<
   const isPanningRef = useRef(false);
   const startPanRef = useRef<Point>({ x: 0, y: 0 });
 
+  // Keep a mutable ref of the callback to prevent recreation of fetchExistingGeometry
+  const onParsedRef = useRef(onParsed);
+  useEffect(() => {
+    onParsedRef.current = onParsed;
+  }, [onParsed]);
+
   // Expose DXF browse trigger to parent component hooks
   useImperativeHandle(ref, () => ({
     triggerFilePicker: () => {
@@ -112,10 +122,13 @@ export const CanvasViewport = forwardRef<
     },
   }));
 
+  // Scope activeProject dependency to pipeline status primitive to break rendering loop
+  const pipelineStatus = activeProject?.pipeline_status;
+
   // ── Fetch existing parsed geometry on mount or project switch ──────────
   const fetchExistingGeometry = useCallback(async () => {
     try {
-      if (!activeProject || activeProject.pipeline_status === "created") {
+      if (!projectId || pipelineStatus === "created") {
         setUploadState("idle");
         return;
       }
@@ -125,8 +138,8 @@ export const CanvasViewport = forwardRef<
       );
       loadGeometry(data);
       setUploadState("done");
-      if (onParsed) {
-        onParsed({
+      if (onParsedRef.current) {
+        onParsedRef.current({
           memberCount: data.members?.length ?? 0,
           scale: data.scale ?? { factor: 1, unit: "mm" },
         });
@@ -135,11 +148,36 @@ export const CanvasViewport = forwardRef<
       // No parsed geometry exists yet (404) — show idle upload screen
       setUploadState("idle");
     }
-  }, [projectId, loadGeometry, onParsed, activeProject]);
+  }, [projectId, loadGeometry, pipelineStatus]);
 
   useEffect(() => {
     fetchExistingGeometry();
   }, [projectId, fetchExistingGeometry]);
+
+  // Sync local scale form state when scale is loaded from backend
+  useEffect(() => {
+    if (scale) {
+      setScaleUnit(scale.unit ?? "mm");
+      setScaleFactor(scale.factor ?? 1);
+    }
+  }, [scale]);
+
+  const handleConfirmScale = useCallback(async () => {
+    setIsConfirmingScale(true);
+    try {
+      await apiClient.put(`/api/v1/files/${projectId}/scale`, {
+        scale_factor: scaleFactor,
+        unit_label: scaleUnit,
+        confirmed: true,
+      });
+      // Reload geometry so scale.confirmed flips to true in the store
+      await fetchExistingGeometry();
+    } catch {
+      // Non-fatal — engineer can retry; geometry is still displayed
+    } finally {
+      setIsConfirmingScale(false);
+    }
+  }, [projectId, scaleFactor, scaleUnit, fetchExistingGeometry]);
 
   // ── Drawing loop using requestAnimationFrame ─────────────────────────────
   const draw = useCallback(() => {
@@ -274,24 +312,36 @@ export const CanvasViewport = forwardRef<
     isPanningRef.current = false;
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
+  // ── Passive Event Listeners for Zoom ────────────────────────────────────
+  useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || uploadState !== "done") return;
 
-    e.preventDefault();
+    /**
+     * Natively handles scroll-to-zoom centered around the mouse cursor position.
+     * Prevents default browser scroll behaviors (e.g. page zooming or viewport panning).
+     *
+     * @param {WheelEvent} e - Native browser WheelEvent.
+     */
+    const handleNativeWheel = (e: WheelEvent) => {
+      e.preventDefault(); // Allowed because passive is false
 
-    const rect = canvas.getBoundingClientRect();
-    const mouseScreen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const rect = canvas.getBoundingClientRect();
+      const mouseScreen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
 
-    const zoomFactor = 1.1;
-    const nextZoom = e.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor;
+      const zoomFactor = 1.1;
+      const nextZoom = e.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor;
+      const nextPan = zoomTowardPoint(mouseScreen, zoom, nextZoom, pan);
 
-    // Adjust pan coordinates so zoom is centered on the cursor
-    const nextPan = zoomTowardPoint(mouseScreen, zoom, nextZoom, pan);
+      setZoom(nextZoom);
+      setPan(nextPan);
+    };
 
-    setZoom(nextZoom);
-    setPan(nextPan);
-  };
+    canvas.addEventListener("wheel", handleNativeWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", handleNativeWheel);
+    };
+  }, [uploadState, zoom, pan, setZoom, setPan]);
 
   // ── Property update actions ───────────────────────────────────────────────
 
@@ -338,8 +388,8 @@ export const CanvasViewport = forwardRef<
       });
 
       setVerificationStatus("verified");
-      if (onParsed) {
-        onParsed({
+      if (onParsedRef.current) {
+        onParsedRef.current({
           memberCount: members.length,
           scale: scale ?? { factor: 1, unit: "mm" },
         });
@@ -365,6 +415,40 @@ export const CanvasViewport = forwardRef<
       {/* Absolute floating UI elements */}
       {uploadState === "done" && (
         <>
+          {/* Scale confirmation banner — shown when scale was auto-detected but not yet confirmed */}
+          {scale?.detected && !scale?.confirmed && (
+            <div className="absolute top-0 inset-x-0 z-20 flex items-center gap-3 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 backdrop-blur-md">
+              <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+              <span className="text-xs text-amber-200 font-medium flex-1">
+                Scale auto-detected — please confirm before proceeding.
+              </span>
+              <span className="text-xs text-amber-300/70 font-mono">
+                factor: {scaleFactor}
+              </span>
+              <select
+                value={scaleUnit}
+                onChange={(e) => setScaleUnit(e.target.value)}
+                className="bg-muted/60 border border-border text-xs rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 text-foreground"
+              >
+                <option value="mm">mm</option>
+                <option value="m">m</option>
+                <option value="cm">cm</option>
+              </select>
+              <button
+                onClick={handleConfirmScale}
+                disabled={isConfirmingScale}
+                className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 text-amber-950 text-xs font-semibold rounded hover:bg-amber-400 transition-all disabled:opacity-50 shrink-0"
+              >
+                {isConfirmingScale ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Check className="h-3 w-3" />
+                )}
+                Confirm Scale
+              </button>
+            </div>
+          )}
+
           <CanvasToolbar
             activeTool={activeTool}
             setTool={setTool}
@@ -415,7 +499,6 @@ export const CanvasViewport = forwardRef<
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            onWheel={handleWheel}
           />
         ) : (
           <CanvasUploader

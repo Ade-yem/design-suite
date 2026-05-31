@@ -328,7 +328,7 @@ async def get_design_status(
 
 
 @router.get("/{project_id}/results", response_model=DesignResultsResponse)
-def get_design_results(
+async def get_design_results(
     project_id: str,
     project: ProjectResponse = Depends(require_analysis_complete),
 ) -> DesignResultsResponse:
@@ -349,6 +349,7 @@ def get_design_results(
     StructuralError
         HTTP 404 if design has not been run yet.
     """
+    await design_service.ensure_cached(project_id)
     try:
         result = design_service.get_results(project_id)
     except KeyError as exc:
@@ -406,7 +407,7 @@ async def override_member_design(
         ``MEMBER_NOT_FOUND`` if the member is not in the design store.
     """
     try:
-        outcome = design_service.apply_override(
+        outcome = await design_service.apply_override(
             project_id,
             member_id,
             override=override.model_dump(),

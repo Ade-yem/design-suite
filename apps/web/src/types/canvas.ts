@@ -87,15 +87,21 @@ export interface MemberMeta {
  *
  * @property member_id   - Unique label (e.g. "B1", "C3", "S-A1").
  * @property member_type - Structural classification.
- * @property start       - Start point in DXF coordinate space (mm).
- * @property end         - End point in DXF coordinate space (mm).
- * @property meta        - Cross-section and dimensional metadata.
+ * @property start            - Start point in DXF coordinate space (mm). For slabs/voids
+ *                              this is the AABB min corner derived from boundary_polygon.
+ * @property end              - End point in DXF coordinate space (mm). For slabs/voids
+ *                              this is the AABB max corner derived from boundary_polygon.
+ * @property boundary_polygon - Optional explicit polygon vertices (slabs, voids). When
+ *                              present the renderer draws the true shape rather than a
+ *                              bounding rectangle.
+ * @property meta             - Cross-section and dimensional metadata.
  */
 export interface GeometricMember {
   member_id: string;
   member_type: MemberType;
   start: Point;
   end: Point;
+  boundary_polygon?: Point[];
   meta: MemberMeta;
 }
 

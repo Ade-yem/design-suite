@@ -301,6 +301,7 @@ async def get_parsed_geometry(
     StructuralError
         HTTP 404 if parsing has not completed yet.
     """
+    await file_service.ensure_cached(project_id)
     try:
         return await file_service.get_parsed(project_id)
     except KeyError as exc:
@@ -385,6 +386,7 @@ async def get_scale(
     dict
         ``{factor, unit, detected, confirmed}``
     """
+    await file_service.ensure_cached(project_id)
     try:
         return await file_service.get_scale(project_id)
     except KeyError as exc:

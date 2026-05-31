@@ -219,6 +219,7 @@ async def analyst_node(state: StructuralDesignState) -> dict:
 
     # ── Fetch results ─────────────────────────────────────────────────────────
     try:
+        await analysis_service.ensure_cached(project_id)
         results = analysis_service.get_results(project_id)
     except Exception as exc:
         return {
@@ -331,7 +332,7 @@ async def _collect_load_inputs(
         pass  # Validation failure is non-blocking if the API is unavailable
 
     # Submit definition
-    loading_service.define(project_id, load_data)
+    await loading_service.define(project_id, load_data)
 
     return {
         "load_definition": load_data,
@@ -383,6 +384,7 @@ async def _handle_reanalysis(
             member_ids=failed,
             options={"self_weight_iteration": True},
         )
+        await analysis_service.ensure_cached(project_id)
         new_results = analysis_service.get_results(project_id)
     except Exception as exc:
         return {

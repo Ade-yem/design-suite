@@ -185,7 +185,7 @@ class FileService:
 
         _store.set_parsed(project_id, parsed)
         _store.set_scale(project_id, scale_dict)
-        self._schedule_db_save(self._db_save_geometry(project_id, parsed, scale_dict))
+        await self._db_save_geometry(project_id, parsed, scale_dict)
 
         # Batch register all detected members with the project store
         mids = [member.get("member_id") for member in parsed.get("members", []) if member.get("member_id")]
@@ -322,6 +322,8 @@ class FileService:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         _store.set_scale(project_id, new_scale)
+        parsed_after = _store.get_parsed(project_id) or {}
+        await self._db_save_geometry(project_id, parsed_after, new_scale)
 
         # Rescale spans_m in geometry
         if parsed and old_factor and old_factor != scale_factor:
@@ -385,7 +387,7 @@ class FileService:
             _store.set_parsed(project_id, parsed)
 
         await project_store.advance_status(project_id, ProjectStatus.GEOMETRY_VERIFIED)
-        scale = await self.get_scale(project_id)
+        scale = _store.get_scale(project_id) or {}
         await self._db_save_geometry(project_id, parsed, scale)
         member_count = len(parsed.get("members", []))
 
@@ -401,7 +403,7 @@ class FileService:
             "verified_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    def register_geometry(self, project_id: str, data: dict) -> None:
+    async def register_geometry(self, project_id: str, data: dict) -> None:
         """
         Directly inject parsed geometry (for testing or manual entry).
 
@@ -414,7 +416,7 @@ class FileService:
         _store.set_parsed(project_id, data)
         scale = data.get("scale") or {}
         _store.set_scale(project_id, scale)
-        self._schedule_db_save(self._db_save_geometry(project_id, data, scale))
+        await self._db_save_geometry(project_id, data, scale)
 
     def clear(self, project_id: str) -> None:
         """
@@ -483,15 +485,35 @@ class FileService:
             pass  # DATABASE_URL not configured
         except Exception as exc:
             logger.warning("DB geometry save failed for project %s: %s", project_id, exc)
-    
-    def _schedule_db_save(self, coro) -> None:
-        """Schedule a DB-write coroutine on the running event loop (fire-and-forget)."""
+
+    async def ensure_cached(self, project_id: str) -> None:
+        """Load geometry from DB into the in-memory cache if it is missing.
+
+        Called by routers and agent tools before any sync cache read so that
+        data survives server restarts and load-balanced deployments.
+        """
+        if _store.get_parsed(project_id) is not None:
+            return
+        from config import settings
+        if settings.PROJECT_STORE_BACKEND != "postgres":
+            return
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(coro)
-        except RuntimeError:
-            pass
+            from db.session import get_session_maker
+            from db.models.project import ProjectGeometry
+            from sqlalchemy import select
+
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                row = (await session.execute(
+                    select(ProjectGeometry).where(ProjectGeometry.project_id == project_id)
+                )).scalar_one_or_none()
+                if row:
+                    geometry = json.loads(row.geometry)
+                    _store.set_parsed(project_id, geometry)
+                    if row.scale_json:
+                        _store.set_scale(project_id, json.loads(row.scale_json))
+        except Exception as exc:
+            logger.warning("DB geometry load for project %s failed: %s", project_id, exc)
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
