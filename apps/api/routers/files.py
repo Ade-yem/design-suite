@@ -170,7 +170,7 @@ async def _parse_file_background(
             from storage.project_store import project_store as _pstore
             members = await _run_llm_member_extraction(project_id, parsed, pdf_path=pdf_path)
             parsed["members"] = members
-            file_service.register_geometry(project_id, parsed)
+            await file_service.register_geometry(project_id, parsed)
             mids = [member.get("member_id") for member in members if member.get("member_id")]
             await _pstore.register_members_batch(project_id, mids)
 

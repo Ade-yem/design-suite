@@ -36,6 +36,7 @@ import type {
   VerificationStatus,
   ParsedGeometry,
 } from "@/types/canvas";
+import { computeBounds, computeFitTransform } from "@/lib/canvas/transform";
 
 /**
  * Normalize a raw backend member to the frontend GeometricMember shape.
@@ -64,107 +65,23 @@ function normalizeBackendMember(raw: unknown): GeometricMember {
     endRaw = (m.end ?? m.end_point ?? m.center_point ?? startRaw) as Point;
   }
 
+  // Columns arrive with section dims under `b`/`h`; beams/walls use `b_mm`/`h_mm`.
+  // Normalise to `b_mm`/`h_mm` so the renderer, bounds, and hit-test stay uniform.
+  const rawMeta = (m.meta ?? {}) as Record<string, unknown>;
+  const meta = {
+    ...rawMeta,
+    b_mm: (rawMeta.b_mm ?? rawMeta.b ?? 300) as number,
+    h_mm: (rawMeta.h_mm ?? rawMeta.h ?? 500) as number,
+  } as GeometricMember["meta"];
+
   return {
     member_id: m.member_id as string,
     member_type: m.member_type as MemberType,
     start: startRaw,
     end: endRaw,
     boundary_polygon: polygon,
-    meta: (m.meta ?? { b_mm: 300, h_mm: 500 }) as GeometricMember["meta"],
+    meta,
   };
-}
-
-// ── Bounding Box Computation ────────────────────────────────────────────────
-
-/**
- * Compute the axis-aligned bounding box of all parsed members.
- *
- * Iterates over every member's start and end coordinates plus any
- * slab dimensions (Lx, Ly) to ensure the bounding box fully
- * contains all rendered geometry.
- *
- * @param members - Array of parsed structural members.
- * @returns The computed bounding box, or null if no members exist.
- */
-function computeBounds(members: GeometricMember[]): BoundingBox | null {
-  if (members.length === 0) return null;
-
-  let xMin = Infinity;
-  let yMin = Infinity;
-  let xMax = -Infinity;
-  let yMax = -Infinity;
-
-  for (const m of members) {
-    // Core start/end points
-    const points: Point[] = [m.start, m.end];
-
-    // For slabs, consider the full rectangular extent
-    if (m.member_type === "slab" && m.meta.Lx && m.meta.Ly) {
-      const cx = (m.start.x + m.end.x) / 2;
-      const cy = (m.start.y + m.end.y) / 2;
-      const halfLx = m.meta.Lx / 2;
-      const halfLy = m.meta.Ly / 2;
-      points.push(
-        { x: cx - halfLx, y: cy - halfLy },
-        { x: cx + halfLx, y: cy + halfLy }
-      );
-    }
-
-    // For columns, consider the section size
-    if (m.member_type === "column" && m.meta.b_mm && m.meta.h_mm) {
-      const halfB = m.meta.b_mm / 2;
-      const halfH = m.meta.h_mm / 2;
-      points.push(
-        { x: m.start.x - halfB, y: m.start.y - halfH },
-        { x: m.start.x + halfB, y: m.start.y + halfH }
-      );
-    }
-
-    for (const p of points) {
-      if (p.x < xMin) xMin = p.x;
-      if (p.y < yMin) yMin = p.y;
-      if (p.x > xMax) xMax = p.x;
-      if (p.y > yMax) yMax = p.y;
-    }
-  }
-
-  return { xMin, yMin, xMax, yMax };
-}
-
-/**
- * Compute the zoom level and pan offset that centers all members
- * within the canvas viewport with padding.
- *
- * @param bounds   - Bounding box of all members in DXF space.
- * @param canvasW  - Canvas width in pixels.
- * @param canvasH  - Canvas height in pixels.
- * @param padding  - Fraction of viewport to use as padding (default 0.1 = 10%).
- * @returns Object with computed zoom and pan values.
- */
-function computeFitTransform(
-  bounds: BoundingBox,
-  canvasW: number,
-  canvasH: number,
-  padding = 0.1
-): { zoom: number; pan: Point } {
-  const dxfW = bounds.xMax - bounds.xMin;
-  const dxfH = bounds.yMax - bounds.yMin;
-
-  // Prevent division by zero for degenerate bounding boxes
-  if (dxfW <= 0 || dxfH <= 0) {
-    return { zoom: 1, pan: { x: canvasW / 2, y: canvasH / 2 } };
-  }
-
-  const usableW = canvasW * (1 - 2 * padding);
-  const usableH = canvasH * (1 - 2 * padding);
-
-  const zoom = Math.min(usableW / dxfW, usableH / dxfH);
-
-  // Center the geometry: pan so the bounding-box center maps to canvas center
-  const panX = canvasW / 2 - (bounds.xMin + dxfW / 2) * zoom;
-  const panY = canvasH / 2 + (bounds.yMin + dxfH / 2) * zoom;
-
-  return { zoom, pan: { x: panX, y: panY } };
 }
 
 // ── Store Interface ─────────────────────────────────────────────────────────
