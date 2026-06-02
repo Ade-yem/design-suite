@@ -1072,7 +1072,7 @@ async def parser_node(state: StructuralDesignState) -> dict:
         parsed["members"] = members
         
         # Save structural JSON back to files service and project store
-        file_service.register_geometry(project_id, parsed)
+        await file_service.register_geometry(project_id, parsed)
         
         mids = [member.get("member_id") for member in members if member.get("member_id")]
         await project_store.register_members_batch(project_id, mids)

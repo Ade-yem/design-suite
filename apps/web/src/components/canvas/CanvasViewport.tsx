@@ -27,7 +27,6 @@ import {
 } from "react";
 import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { useProjectStore } from "@/stores/projectStore";
 import { apiClient } from "@/lib/api";
 import { screenToWorld, zoomTowardPoint } from "@/lib/canvas/transform";
 import { drawDotGrid } from "@/lib/canvas/drawGrid";
@@ -93,7 +92,6 @@ export const CanvasViewport = forwardRef<
     setVerificationStatus,
     resetGeometry,
   } = useCanvasStore();
-  const { activeProject } = useProjectStore();
 
   // ── Component State ──────────────────────────────────────────────────────
   const [uploadState, setUploadState] = useState<UploadState>("idle");
@@ -122,13 +120,10 @@ export const CanvasViewport = forwardRef<
     },
   }));
 
-  // Scope activeProject dependency to pipeline status primitive to break rendering loop
-  const pipelineStatus = activeProject?.pipeline_status;
-
   // ── Fetch existing parsed geometry on mount or project switch ──────────
   const fetchExistingGeometry = useCallback(async () => {
     try {
-      if (!projectId || pipelineStatus === "created") {
+      if (!projectId) {
         setUploadState("idle");
         return;
       }
@@ -148,7 +143,7 @@ export const CanvasViewport = forwardRef<
       // No parsed geometry exists yet (404) — show idle upload screen
       setUploadState("idle");
     }
-  }, [projectId, loadGeometry, pipelineStatus]);
+  }, [projectId, loadGeometry]);
 
   useEffect(() => {
     fetchExistingGeometry();
@@ -218,30 +213,35 @@ export const CanvasViewport = forwardRef<
     };
   }, [uploadState, draw]);
 
-  // Resize canvas handler
+  // Resize canvas handler — intentionally stable (empty deps). The rAF loop
+  // redraws every frame, so this only needs to update the backing-store size.
+  // It must NOT depend on `draw` (which changes on every zoom/pan), or the
+  // fit-to-view effect below would re-run on every zoom and snap the view back.
   const handleResize = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
     canvas.width = container.clientWidth;
     canvas.height = container.clientHeight;
-    draw();
-  }, [draw]);
+  }, []);
 
+  // Size the canvas and fit geometry to the viewport ONCE per geometry load.
+  // Depends only on `uploadState` (handleResize/fitToView are stable), so
+  // user zoom/pan is preserved instead of being reset on every interaction.
   useEffect(() => {
-    if (uploadState === "done") {
-      handleResize();
-      window.addEventListener("resize", handleResize);
-      // Delay fit to view slightly to allow container sizing to settle
-      setTimeout(() => {
-        fitToView(
-          canvasRef.current?.width ?? 800,
-          canvasRef.current?.height ?? 600,
-        );
-      }, 100);
-    }
+    if (uploadState !== "done") return;
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    // Delay fit to view slightly to allow container sizing to settle
+    const fitTimer = setTimeout(() => {
+      fitToView(
+        canvasRef.current?.width ?? 800,
+        canvasRef.current?.height ?? 600,
+      );
+    }, 100);
     return () => {
       window.removeEventListener("resize", handleResize);
+      clearTimeout(fitTimer);
     };
   }, [uploadState, handleResize, fitToView]);
 

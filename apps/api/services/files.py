@@ -322,6 +322,14 @@ class FileService:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         _store.set_scale(project_id, new_scale)
+
+        # Keep the scale embedded in the geometry payload in sync. The canvas
+        # reads scale from GET /parsed, so leaving the embedded copy at
+        # confirmed=False would keep the "confirm scale" banner up forever.
+        if parsed is not None:
+            parsed["scale"] = new_scale
+            _store.set_parsed(project_id, parsed)
+
         parsed_after = _store.get_parsed(project_id) or {}
         await self._db_save_geometry(project_id, parsed_after, new_scale)
 
