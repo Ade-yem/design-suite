@@ -6,6 +6,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import { apiClient } from "@/lib/api";
+import { getPipelineStatus } from "@/lib/pipelineStatus";
 import { NewProjectModal } from "./NewProjectModal";
 import type { Project, ProjectListItem } from "@/types/project";
 
@@ -94,16 +95,8 @@ function relativeTime(iso: string): string {
 }
 
 function statusMeta(status: string): { label: string; dot: string } {
-  const map: Record<string, { label: string; dot: string }> = {
-    created:           { label: "Created",          dot: "bg-muted-foreground" },
-    file_uploaded:     { label: "File uploaded",    dot: "bg-blue-400" },
-    geometry_verified: { label: "Geometry OK",      dot: "bg-blue-500" },
-    loading_defined:   { label: "Loads defined",    dot: "bg-violet-500" },
-    analysis_complete: { label: "Analysis done",    dot: "bg-amber-500" },
-    design_complete:   { label: "Design complete",  dot: "bg-orange-500" },
-    report_generated:  { label: "Report ready",     dot: "bg-green-500" },
-  };
-  return map[status] ?? { label: status.replace(/_/g, " "), dot: "bg-muted-foreground" };
+  const meta = getPipelineStatus(status);
+  return { label: meta.label, dot: meta.dotClass };
 }
 
 // ── Project card ──────────────────────────────────────────────────────────────

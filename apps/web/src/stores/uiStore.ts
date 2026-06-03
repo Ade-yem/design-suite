@@ -5,6 +5,8 @@ interface UIState {
   sidebarExpanded: boolean;
   chatOpen: boolean;
   chatUnread: number;
+  /** True while a safety gate is awaiting the engineer's approval. */
+  gatePending: boolean;
 }
 
 interface UIActions {
@@ -14,6 +16,7 @@ interface UIActions {
   setChatOpen: (v: boolean) => void;
   incrementUnread: () => void;
   clearUnread: () => void;
+  setGatePending: (v: boolean) => void;
 }
 
 export type UIStore = UIState & UIActions;
@@ -24,6 +27,7 @@ export const useUIStore = create<UIStore>()(
       sidebarExpanded: true,
       chatOpen: true,
       chatUnread: 0,
+      gatePending: false,
 
       toggleSidebar: () => set((s) => ({ sidebarExpanded: !s.sidebarExpanded })),
       setSidebarExpanded: (v) => set({ sidebarExpanded: v }),
@@ -41,6 +45,7 @@ export const useUIStore = create<UIStore>()(
 
       incrementUnread: () => set((s) => ({ chatUnread: s.chatUnread + 1 })),
       clearUnread: () => set({ chatUnread: 0 }),
+      setGatePending: (v) => set({ gatePending: v }),
     }),
     {
       name: "structai-ui-state",

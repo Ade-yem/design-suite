@@ -27,6 +27,7 @@ import {
 } from "react";
 import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { screenToWorld, zoomTowardPoint } from "@/lib/canvas/transform";
 import { drawDotGrid } from "@/lib/canvas/drawGrid";
@@ -89,6 +90,7 @@ export const CanvasViewport = forwardRef<
     setMouseWorldPos,
     updateMember,
     deleteMember,
+    restoreLastDeleted,
     setVerificationStatus,
     resetGeometry,
   } = useCanvasStore();
@@ -365,6 +367,13 @@ export const CanvasViewport = forwardRef<
   const handleDeleteMember = () => {
     if (selectedMemberId) {
       deleteMember(selectedMemberId);
+      toast("Member deleted", {
+        description: "Removed from the staged layout. Not saved until you confirm geometry.",
+        action: {
+          label: "Undo",
+          onClick: () => restoreLastDeleted(),
+        },
+      });
     }
   };
 

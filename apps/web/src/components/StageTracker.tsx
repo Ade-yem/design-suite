@@ -1,7 +1,12 @@
 import { FileSearch, CheckCircle2, Calculator, PenTool } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Stage } from "@/lib/pipelineStatus";
 
-export type Stage = "parsing" | "verification" | "calculation" | "drafting";
+// Stage→stage mapping lives in the shared pipelineStatus module so every surface
+// (sidebar, dashboard, tracker) reads one vocabulary. Re-exported here for the
+// existing import sites.
+export type { Stage } from "@/lib/pipelineStatus";
+export { pipelineStatusToStage } from "@/lib/pipelineStatus";
 
 const stages: { id: Stage; label: string; icon: React.ElementType }[] = [
   { id: "parsing", label: "Parsing", icon: FileSearch },
@@ -9,21 +14,6 @@ const stages: { id: Stage; label: string; icon: React.ElementType }[] = [
   { id: "calculation", label: "Calculation", icon: Calculator },
   { id: "drafting", label: "Final Drafting", icon: PenTool },
 ];
-
-// Maps backend pipeline_status labels to the frontend Stage type.
-const STATUS_TO_STAGE: Record<string, Stage> = {
-  created: "parsing",
-  file_uploaded: "parsing",
-  geometry_verified: "verification",
-  loading_defined: "calculation",
-  analysis_complete: "calculation",
-  design_complete: "drafting",
-  report_generated: "drafting",
-};
-
-export function pipelineStatusToStage(status: string): Stage {
-  return STATUS_TO_STAGE[status] ?? "parsing";
-}
 
 interface StageTrackerProps {
   currentStage: Stage;

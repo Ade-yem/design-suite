@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 import { AuthGuard } from "@/components/AuthGuard";
+import { PRODUCT_NAME } from "@/lib/brand";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Structural Design Copilot",
+  title: PRODUCT_NAME,
   description: "Next-generation multi-agent AI system for structural engineering details and calculations.",
 };
 
@@ -29,6 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthGuard>{children}</AuthGuard>
+        <Toaster theme="dark" position="bottom-right" closeButton richColors />
       </body>
     </html>
   );

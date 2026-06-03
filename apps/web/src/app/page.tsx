@@ -100,7 +100,7 @@ export default function WorkspacePage(): JSX.Element {
     setActiveProject,
     isLoading,
   } = useProjectStore();
-  const { chatOpen, setChatOpen } = useUIStore();
+  const { chatOpen, setChatOpen, setGatePending } = useUIStore();
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showUploadNudge, setShowUploadNudge] = useState(false);
@@ -131,6 +131,13 @@ export default function WorkspacePage(): JSX.Element {
     };
     const next = gateStatusMap[gate];
     if (next) updateActiveProjectStatus(next.status, next.ordinal);
+
+    // A reached gate blocks the pipeline on the engineer's approval — the single
+    // most important action in the product. Force the chat (which hosts the
+    // approval) open and flag the gate so the header can draw attention to it,
+    // so the action can't stay hidden behind a closed panel.
+    setChatOpen(true);
+    setGatePending(true);
   };
 
   const handleCreated = (project: Project) => {
