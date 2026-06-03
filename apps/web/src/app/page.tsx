@@ -11,7 +11,8 @@ import {
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { ProjectPrompt } from "@/components/ProjectPrompt";
 import { NewProjectModal } from "@/components/NewProjectModal";
-import { pipelineStatusToStage } from "@/components/StageTracker";
+import { PipelineRail } from "@/components/PipelineRail";
+import { pipelineStatusToStage } from "@/lib/pipelineStatus";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -100,7 +101,7 @@ export default function WorkspacePage(): JSX.Element {
     setActiveProject,
     isLoading,
   } = useProjectStore();
-  const { chatOpen, setChatOpen, setGatePending } = useUIStore();
+  const { chatOpen, setChatOpen } = useUIStore();
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showUploadNudge, setShowUploadNudge] = useState(false);
@@ -132,12 +133,9 @@ export default function WorkspacePage(): JSX.Element {
     const next = gateStatusMap[gate];
     if (next) updateActiveProjectStatus(next.status, next.ordinal);
 
-    // A reached gate blocks the pipeline on the engineer's approval — the single
-    // most important action in the product. Force the chat (which hosts the
-    // approval) open and flag the gate so the header can draw attention to it,
-    // so the action can't stay hidden behind a closed panel.
-    setChatOpen(true);
-    setGatePending(true);
+    // The reached gate's approval is hosted by the always-visible pipeline rail
+    // (the pending-gate identity is written to the UI store by the chat socket
+    // handler). No need to force the chat panel open any more.
   };
 
   const handleCreated = (project: Project) => {
@@ -155,7 +153,7 @@ export default function WorkspacePage(): JSX.Element {
           <WorkspaceLoadingPlaceholder />
         ) : activeProject ? (
           <>
-            <WorkspaceHeader currentStage={currentStage} />
+            <WorkspaceHeader />
 
             {/* Upload nudge — shown immediately after project creation */}
             {showUploadNudge && (
@@ -170,6 +168,11 @@ export default function WorkspacePage(): JSX.Element {
             )}
 
             <div className="flex-1 flex min-h-0 overflow-hidden">
+              <PipelineRail
+                projectId={activeProject.project_id}
+                currentStage={currentStage}
+                pipelineStatus={activeProject.pipeline_status}
+              />
               <div className="flex-1 min-w-0 overflow-hidden">
                 <CanvasViewport
                   ref={canvasRef}

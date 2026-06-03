@@ -396,6 +396,11 @@ export const CanvasViewport = forwardRef<
         notes,
       });
 
+      // Geometry is its own safety gate (Gate 1). Confirming it advances the
+      // pipeline automatically — no hand-off to the chat — so the engineer's
+      // single confirm action both locks the layout and unblocks load analysis.
+      await apiClient.post(`/api/v1/pipeline/${projectId}/resume`);
+
       setVerificationStatus("verified");
       if (onParsedRef.current) {
         onParsedRef.current({

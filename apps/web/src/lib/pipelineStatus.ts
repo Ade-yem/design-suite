@@ -106,3 +106,22 @@ export function getPipelineStatus(status: string): PipelineStatusMeta {
 export function pipelineStatusToStage(status: string): Stage {
   return getPipelineStatus(status).stage;
 }
+
+/**
+ * Human-facing description of each safety gate, shared by the pipeline rail
+ * (which hosts the approval) and the chat (which points the engineer to it).
+ */
+export const GATE_LABELS: Record<string, string> = {
+  geometry_gate: "Confirm parsed geometry to proceed to loading",
+  loading_gate: "Confirm load combinations to proceed to analysis",
+  design_gate: "Confirm reinforcement schedule to proceed to drafting",
+  drawing_gate: "Confirm final drawing set",
+};
+
+/** The coarse stage that owns each safety gate's approval. */
+export const GATE_STAGE: Record<string, Stage> = {
+  geometry_gate: "verification",
+  loading_gate: "calculation",
+  design_gate: "drafting",
+  drawing_gate: "drafting",
+};
