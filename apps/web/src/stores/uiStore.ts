@@ -1,12 +1,22 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
+/** Identity of a safety gate awaiting the engineer's approval. */
+export interface PendingGate {
+  gate: string;
+  label: string;
+}
+
 interface UIState {
   sidebarExpanded: boolean;
   chatOpen: boolean;
   chatUnread: number;
-  /** True while a safety gate is awaiting the engineer's approval. */
-  gatePending: boolean;
+  /**
+   * The safety gate currently awaiting the engineer's approval, or null.
+   * This is the single source of truth shared by the pipeline rail (which owns
+   * the approve action) and the chat (which points the engineer to the rail).
+   */
+  pendingGate: PendingGate | null;
 }
 
 interface UIActions {
@@ -16,7 +26,7 @@ interface UIActions {
   setChatOpen: (v: boolean) => void;
   incrementUnread: () => void;
   clearUnread: () => void;
-  setGatePending: (v: boolean) => void;
+  setPendingGate: (g: PendingGate | null) => void;
 }
 
 export type UIStore = UIState & UIActions;
@@ -27,7 +37,7 @@ export const useUIStore = create<UIStore>()(
       sidebarExpanded: true,
       chatOpen: true,
       chatUnread: 0,
-      gatePending: false,
+      pendingGate: null,
 
       toggleSidebar: () => set((s) => ({ sidebarExpanded: !s.sidebarExpanded })),
       setSidebarExpanded: (v) => set({ sidebarExpanded: v }),
@@ -45,7 +55,7 @@ export const useUIStore = create<UIStore>()(
 
       incrementUnread: () => set((s) => ({ chatUnread: s.chatUnread + 1 })),
       clearUnread: () => set({ chatUnread: 0 }),
-      setGatePending: (v) => set({ gatePending: v }),
+      setPendingGate: (g) => set({ pendingGate: g }),
     }),
     {
       name: "structai-ui-state",

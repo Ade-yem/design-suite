@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, CheckCircle2, Loader2, X } from "lucide-react";
+import { Send, Bot, User, CheckCircle2, X } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { cn } from "@/lib/utils";
 import { useProjectSocket } from "@/hooks/useProjectSocket";
-import { apiClient } from "@/lib/api";
+import { GATE_LABELS } from "@/lib/pipelineStatus";
 import { PRODUCT_NAME } from "@/lib/brand";
 
 interface Message {
@@ -14,18 +14,6 @@ interface Message {
   content: string;
   timestamp: Date;
 }
-
-interface GateBanner {
-  gate: string;
-  label: string;
-}
-
-const GATE_LABELS: Record<string, string> = {
-  geometry_gate: "Confirm parsed geometry to proceed to loading",
-  loading_gate: "Confirm load combinations to proceed to analysis",
-  design_gate: "Confirm reinforcement schedule to proceed to drafting",
-  drawing_gate: "Confirm final drawing set",
-};
 
 interface ChatSidebarProps {
   projectId: string;
@@ -57,13 +45,11 @@ const WELCOME: Message = {
 };
 
 export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarProps) {
-  const { chatOpen, incrementUnread, setGatePending } = useUIStore();
+  const { chatOpen, incrementUnread, pendingGate, setPendingGate } =
+    useUIStore();
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [pendingGate, setPendingGate] = useState<GateBanner | null>(null);
-  const [approvingGate, setApprovingGate] = useState(false);
-  const [gateError, setGateError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Accumulate streaming chunks into a single assistant message
   const streamingIdRef = useRef<string | null>(null);
@@ -116,7 +102,10 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
     },
     onGateReached: ({ gate }) => {
       streamingIdRef.current = null;
+      // The gate identity is shared via the UI store so the always-visible
+      // pipeline rail can host the approval; the chat only points to it.
       setPendingGate({ gate, label: GATE_LABELS[gate] ?? `Gate: ${gate}` });
+      if (!chatOpen) incrementUnread();
       onGateReached?.(gate);
     },
     onError: ({ message }) => {
@@ -168,31 +157,6 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
           timestamp: new Date(),
         },
       ]);
-    }
-  };
-
-  const handleApproveGate = async () => {
-    if (!pendingGate) return;
-    setApprovingGate(true);
-    setGateError(null);
-    try {
-      await apiClient.post(`/api/v1/pipeline/${projectId}/resume`);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `approved-${Date.now()}`,
-          role: "assistant",
-          content: `Gate approved. Continuing pipeline…`,
-          timestamp: new Date(),
-        },
-      ]);
-      setPendingGate(null);
-      setGatePending(false);
-    } catch (err: unknown) {
-      const detail = (err as { detail?: string }).detail ?? "Failed to resume pipeline.";
-      setGateError(detail);
-    } finally {
-      setApprovingGate(false);
     }
   };
 
@@ -252,7 +216,7 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
         ))}
         {isTyping && <TypingIndicator />}
 
-        {/* Gate confirmation banner */}
+        {/* Gate pointer — the approval itself lives in the pipeline rail. */}
         {pendingGate && (
           <div className="rounded-lg border border-primary/40 bg-primary/5 px-3 py-3 space-y-2 animate-fade-in-up">
             <div className="flex items-center gap-2">
@@ -260,17 +224,11 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
               <p className="text-xs font-medium text-primary">Review Required</p>
             </div>
             <p className="text-xs text-muted-foreground">{pendingGate.label}</p>
-            {gateError && (
-              <p className="text-xs text-destructive">{gateError}</p>
-            )}
-            <button
-              onClick={handleApproveGate}
-              disabled={approvingGate}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
-            >
-              {approvingGate && <Loader2 className="h-3 w-3 animate-spin" />}
-              Approve &amp; Continue
-            </button>
+            <p className="text-xs text-muted-foreground">
+              Approve this step in the{" "}
+              <span className="font-medium text-primary">pipeline rail</span> to
+              continue.
+            </p>
           </div>
         )}
       </div>
