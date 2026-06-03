@@ -8,7 +8,11 @@ interface WorkspaceHeaderProps {
 }
 
 export function WorkspaceHeader({ currentStage }: WorkspaceHeaderProps) {
-  const { chatOpen, chatUnread, toggleChat } = useUIStore();
+  const { chatOpen, chatUnread, gatePending, toggleChat } = useUIStore();
+
+  // Draw attention to the chat toggle when a safety gate is waiting on approval
+  // and the panel that hosts it is closed.
+  const gateNeedsAttention = gatePending && !chatOpen;
 
   return (
     <header className="h-12 flex items-center justify-between px-4 border-b border-border bg-card shrink-0">
@@ -21,17 +25,32 @@ export function WorkspaceHeader({ currentStage }: WorkspaceHeaderProps) {
           onClick={toggleChat}
           className={cn(
             "relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-colors",
-            chatOpen
-              ? "text-primary bg-primary/10"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            gateNeedsAttention
+              ? "text-warning bg-warning/10 ring-1 ring-warning/40 animate-pulse"
+              : chatOpen
+                ? "text-primary bg-primary/10"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
           )}
           aria-label={chatOpen ? "Hide chat" : "Show chat"}
-          title={chatOpen ? "Hide chat (⌘\\)" : "Show chat (⌘\\)"}
+          title={
+            gateNeedsAttention
+              ? "Action needed — approve the safety gate (⌘\\)"
+              : chatOpen
+                ? "Hide chat (⌘\\)"
+                : "Show chat (⌘\\)"
+          }
         >
           <MessageSquare className="h-4 w-4" />
-          {!chatOpen && chatUnread > 0 && (
-            <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-primary text-primary-foreground text-[9px] font-semibold flex items-center justify-center">
-              {chatUnread > 9 ? "9+" : chatUnread}
+          {!chatOpen && (chatUnread > 0 || gateNeedsAttention) && (
+            <span
+              className={cn(
+                "absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full text-[9px] font-semibold flex items-center justify-center",
+                gateNeedsAttention
+                  ? "bg-warning text-warning-foreground"
+                  : "bg-primary text-primary-foreground"
+              )}
+            >
+              {gateNeedsAttention ? "!" : chatUnread > 9 ? "9+" : chatUnread}
             </span>
           )}
         </button>

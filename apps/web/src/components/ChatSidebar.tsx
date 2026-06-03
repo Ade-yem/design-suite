@@ -6,6 +6,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { cn } from "@/lib/utils";
 import { useProjectSocket } from "@/hooks/useProjectSocket";
 import { apiClient } from "@/lib/api";
+import { PRODUCT_NAME } from "@/lib/brand";
 
 interface Message {
   id: string;
@@ -51,12 +52,12 @@ const WELCOME: Message = {
   id: "welcome",
   role: "assistant",
   content:
-    "Welcome to StructAI Copilot. Upload a DXF or PDF file to begin structural analysis. I'll parse the geometry, identify members, and guide you through each stage.",
+    `Welcome to ${PRODUCT_NAME}. Upload a DXF or PDF file to begin structural analysis. I'll parse the geometry, identify members, and guide you through each stage.`,
   timestamp: new Date(),
 };
 
 export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarProps) {
-  const { chatOpen, incrementUnread } = useUIStore();
+  const { chatOpen, incrementUnread, setGatePending } = useUIStore();
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -186,6 +187,7 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
         },
       ]);
       setPendingGate(null);
+      setGatePending(false);
     } catch (err: unknown) {
       const detail = (err as { detail?: string }).detail ?? "Failed to resume pipeline.";
       setGateError(detail);
