@@ -34,12 +34,14 @@ export function PropertyInspector({
   onDelete,
   onSave,
 }: PropertyInspectorProps): React.ReactElement {
-  const [width, setWidth] = useState("");
-  const [depth, setDepth] = useState("");
-  const [span, setSpan] = useState("");
+  const [width, setWidth] = useState(String(selectedMember.meta.b_mm ?? ""));
+  const [depth, setDepth] = useState(String(selectedMember.meta.h_mm ?? ""));
+  const [span, setSpan] = useState(String(selectedMember.meta.L_clear ?? ""));
 
-  // Synchronize internal input values when the selected member changes
   useEffect(() => {
+    // Sync form state with selected member. Safe to setState here as this is synchronizing
+    // external prop state to internal form state, not causing cascading renders.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setWidth(String(selectedMember.meta.b_mm ?? ""));
     setDepth(String(selectedMember.meta.h_mm ?? ""));
     setSpan(String(selectedMember.meta.L_clear ?? ""));

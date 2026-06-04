@@ -59,7 +59,7 @@ function getInitials(name: string | null): string {
 // ── Account Tab ──────────────────────────────────────────────────────────────
 
 function AccountTab({ user }: { user: UserProfile }) {
-  const { setAuth, token, organisation } = useAuthStore();
+  const { setAuth, token } = useAuthStore();
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState(user.full_name ?? "");
   const [saving, setSaving] = useState(false);
@@ -223,8 +223,6 @@ function SecurityTab({ user }: { user: UserProfile }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-
-  const isOAuthOnly = !user.is_verified && !currentPw;
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
