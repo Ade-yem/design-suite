@@ -184,6 +184,7 @@ ERROR_CODES: dict[str, str] = {
     "CONVERGENCE_FAILED": "Self-weight iteration did not converge within the iteration limit.",
     "REPORT_NOT_READY":   "Design must be complete before report generation can begin.",
     "JOB_NOT_FOUND":      "Job ID does not exist.",
+    "ARTIFACT_NOT_FOUND": "Artifact ID does not exist.",
     "UNSUPPORTED_FILE":   "File type not supported — only DXF and PDF are accepted.",
     "FILE_TOO_LARGE":     f"File exceeds {50} MB limit.",
 }

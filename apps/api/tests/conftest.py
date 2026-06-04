@@ -5,6 +5,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from main import app
 from storage.project_store import project_store
+from storage.artifact_store import artifact_store
 from schemas.project import ProjectCreate, ProjectStatus
 
 
@@ -15,6 +16,8 @@ async def clear_stores():
         project_store._projects.clear()
     if hasattr(project_store, "_members"):
         project_store._members.clear()
+    if hasattr(artifact_store, "clear"):
+        artifact_store.clear()
 
 @pytest.fixture
 async def async_client():

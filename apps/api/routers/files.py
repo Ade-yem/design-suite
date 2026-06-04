@@ -32,12 +32,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, statu
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from dependencies import get_project, require_file_uploaded, get_session, get_current_user
+from auth.dependencies import current_active_user
+from db.models.user import User
+from dependencies import get_project, require_file_uploaded
 from middleware.error_handler import StructuralError
 from schemas.project import ProjectResponse
 from services.files import file_service
+from storage.artifact_store import artifact_store
 from storage.file_handler import file_handler
 from storage.job_store import job_store
 
@@ -320,8 +321,7 @@ async def verify_geometry(
     project_id: str,
     payload: GeometryVerificationRequest,
     project: ProjectResponse = Depends(require_file_uploaded),
-    session: AsyncSession = Depends(get_session),
-    current_user = Depends(get_current_user),
+    user: User = Depends(current_active_user),
 ) -> dict:
     """
     Human-in-the-loop Safety Gate 1: engineer confirms parsed geometry.
@@ -329,7 +329,8 @@ async def verify_geometry(
     Until this endpoint is called with ``confirmed: true``, no loading or
     analysis endpoints will accept requests for this project.
 
-    On confirmation, creates an immutable snapshot (artifact) for audit trail.
+    On confirmation, freezes an immutable snapshot (artifact) of the verified
+    geometry for the audit trail.
 
     Parameters
     ----------
@@ -339,10 +340,8 @@ async def verify_geometry(
         Must contain ``confirmed = True``.
     project : ProjectResponse
         Gate dependency — project must have a file uploaded.
-    session : AsyncSession
-        Database session for artifact creation.
-    current_user : User
-        Current authenticated user (author of the snapshot).
+    user : User
+        Authenticated user — recorded as the snapshot author.
 
     Returns
     -------
@@ -368,23 +367,19 @@ async def verify_geometry(
             notes=payload.notes,
         )
 
-        # Create immutable snapshot on successful verification
-        from services.artifacts import artifact_service
+        # Freeze an immutable snapshot of the verified geometry (audit trail).
         from db.models.artifact import ArtifactStage
 
-        # Get the parsed geometry to snapshot
-        parsed_geometry = file_service.get_parsed(project_id)
-
+        parsed_geometry = await file_service.get_parsed(project_id)
         if parsed_geometry:
-            snapshot = await artifact_service.create_snapshot(
-                session,
+            snapshot = await artifact_store.create_snapshot(
                 project_id,
-                stage=ArtifactStage.VERIFICATION,
+                ArtifactStage.VERIFICATION,
                 content=parsed_geometry,
-                author_id=current_user.id,
+                author_id=user.id,
+                author_email=user.email,
                 preview_url=None,  # TODO: generate geometry diagram on approval
             )
-            await session.commit()
             result["artifact_id"] = snapshot.artifact_id
 
         return result
