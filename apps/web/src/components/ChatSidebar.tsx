@@ -45,7 +45,7 @@ const WELCOME: Message = {
 };
 
 export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarProps) {
-  const { chatOpen, incrementUnread, pendingGate, setPendingGate } =
+  const { chatOpen, setChatOpen, incrementUnread, pendingGate, setPendingGate } =
     useUIStore();
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
@@ -81,10 +81,17 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
   };
 
   const { sendMessage } = useProjectSocket(projectId, {
-    onAgentMessage: ({ content }) => {
-      if (!streamingIdRef.current) {
+    onAgentMessage: ({ content, requires_input, final }) => {
+      // A decision-required message must surface the chat even when it is
+      // collapsed — every chat-based engineer decision lives in this column.
+      if (requires_input) setChatOpen(true);
+
+      // `final` messages are complete, discrete node messages — render each as
+      // its own bubble. Chunks (no `final`) accumulate into the streaming one.
+      if (final || !streamingIdRef.current) {
         setIsTyping(false);
         appendAssistantAndNotify(content);
+        if (final) streamingIdRef.current = null;
       } else {
         appendChunk(content);
       }
@@ -102,10 +109,11 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
     },
     onGateReached: ({ gate }) => {
       streamingIdRef.current = null;
+      // A gate is a decision point — surface the chat even when collapsed.
+      setChatOpen(true);
       // The gate identity is shared via the UI store so the always-visible
       // pipeline rail can host the approval; the chat only points to it.
       setPendingGate({ gate, label: GATE_LABELS[gate] ?? `Gate: ${gate}` });
-      if (!chatOpen) incrementUnread();
       onGateReached?.(gate);
     },
     onError: ({ message }) => {

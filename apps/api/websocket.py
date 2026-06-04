@@ -66,6 +66,63 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+# Graph nodes that speak to the engineer.  Their appended ``messages`` are the
+# canonical chat channel — broadcast on node completion (``on_chain_end``).
+_AGENT_NODE_NAMES: frozenset[str] = frozenset({
+    "supervisor_agent", "vision_agent", "analyst_agent",
+    "designer_agent", "drafting_agent",
+    "geometry_gate", "loading_gate", "design_gate", "drawing_gate",
+})
+
+# Agent-log statuses that mean the node is now waiting on an engineer decision.
+# Any message carried alongside one of these must surface the chat panel.
+_DECISION_STATUSES: frozenset[str] = frozenset({
+    "awaiting_unit_confirmation", "awaiting_verification",
+    "awaiting_design_considerations", "design_considerations_incomplete",
+    "design_considerations_complete",  # parameters summary → confirm loads
+    "awaiting_custom_qk", "validation_failed", "failures_detected",
+})
+
+
+def _node_requires_input(output: Any) -> bool:
+    """
+    Decide whether a node's output represents a point where the engineer must act.
+
+    Reads the ``agent_logs`` the node appended this turn and matches their
+    ``status`` against the known decision statuses (plus a couple of permissive
+    patterns) so new "awaiting_*"/"*_incomplete" statuses are covered too.
+    """
+    if not isinstance(output, dict):
+        return False
+    for entry in output.get("agent_logs", []) or []:
+        status_val = str((entry or {}).get("status", ""))
+        if (
+            status_val in _DECISION_STATUSES
+            or status_val.startswith("awaiting")
+            or status_val.endswith("incomplete")
+        ):
+            return True
+    return False
+
+
+def _extract_agent_texts(output: Any) -> list[str]:
+    """Return the human-facing text of any AI messages a node appended this turn."""
+    if not isinstance(output, dict):
+        return []
+    texts: list[str] = []
+    for msg in output.get("messages", []) or []:
+        # LangChain message objects expose ``.type == "ai"`` and ``.content``.
+        if getattr(msg, "type", None) == "ai":
+            content = getattr(msg, "content", "")
+        elif isinstance(msg, dict) and msg.get("role") == "assistant":
+            content = msg.get("content", "")
+        else:
+            continue
+        if isinstance(content, str) and content.strip():
+            texts.append(content)
+    return texts
+
+
 async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | None) -> None:
     """
     Run or resume the LangGraph agent pipeline for the project,
@@ -102,6 +159,24 @@ async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | Non
                     await manager.broadcast(project_id, {
                         "type": "agent_message",
                         "content": chunk.content
+                    })
+
+            # Broadcast the messages a node appended to state when it finishes.
+            # These static AIMessages (questions, summaries, narratives) are the
+            # real chat channel — and ``requires_input`` tells the UI to surface
+            # the chat panel whenever the engineer must make a decision.
+            if (
+                event["event"] == "on_chain_end"
+                and event.get("name") in _AGENT_NODE_NAMES
+            ):
+                output = event.get("data", {}).get("output")
+                requires_input = _node_requires_input(output)
+                for text in _extract_agent_texts(output):
+                    await manager.broadcast(project_id, {
+                        "type": "agent_message",
+                        "content": text,
+                        "requires_input": requires_input,
+                        "final": True,
                     })
 
             # Stream status log updates

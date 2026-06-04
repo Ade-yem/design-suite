@@ -514,6 +514,28 @@ def _build_analysis_narrative(results: dict) -> str:
     return "\n".join(lines)
 
 
+# ─── Routing ──────────────────────────────────────────────────────────────────
+
+
+def analyst_router(state: StructuralDesignState) -> str:
+    """
+    Route the analyst node's outgoing edge.
+
+    While the analyst is still gathering the design brief / load inputs it has
+    not completed analysis, so the run should **end** — the next engineer chat
+    message then re-enters the analyst from the graph entry point.  (LangGraph
+    resumes a *completed* thread from the start, but would resume an
+    *interrupted* one straight into the downstream gate, swallowing the reply.)
+    Once analysis is complete it proceeds to the loading-confirmation gate.
+
+    Returns
+    -------
+    str
+        ``"analysis_done"`` once analysis has run, else ``"awaiting_input"``.
+    """
+    return "analysis_done" if state.get("analysis_complete") else "awaiting_input"
+
+
 # ─── Node ─────────────────────────────────────────────────────────────────────
 
 
