@@ -142,12 +142,13 @@ Delegates to `_handle_reanalysis`:
 - Re-runs `analysis_service.run(project_id, member_ids=failed, options={self_weight_iteration: True})` for the failed members only, then **merges** the new member results into the cached set (`existing_map` keyed by `member_id`).
 - Increments `iteration_count`, clears `reanalysis_triggered`, and lets the graph fall back through to the Designer.
 
-### 4.2 Branch B — Load collection (`load_definition` missing)
-Delegates to `_collect_load_inputs`:
-- Reads the **last `HumanMessage`** in `state["messages"]`.
-- Uses the LLM (`gemini-1.5-pro`, `temperature=0`) **only to extract** structured values from natural language into a load dict. Explicit instruction: *set anything not stated to `null`; never invent.*
-- Required fields (`_REQUIRED_LOAD_FIELDS`): `design_code`, `occupancy_category`, `imposed_loads.floor_qk_kNm2`. Missing fields trigger a **targeted follow-up question** (`_build_missing_field_question`) rather than a default — the agent blocks until satisfied.
-- Validates via `loading_service.validate(...)` (non-blocking if the API is down), then `loading_service.define(project_id, load_data)` persists the definition and returns. `load_definition` is now set, so the **next** entry into the node proceeds to Branch C.
+### 4.2 Branch B — Design considerations + load collection (`load_definition` missing)
+Delegates to `_collect_design_considerations`. Rather than asking the engineer for a raw `Qk`, the Analyst first **profiles the project**, then *reasons* to the load parameters (mirrors `docs/conversational_project_setup_proposal.md`):
+- **Opens the dialogue** (when the last message isn't a fresh `HumanMessage`) with `_build_considerations_prompt`: building **type / purpose**, whether it is **multi-storey** and **how many storeys**, **storey height**, and optional dead loads / soil / material context.
+- **LLM extraction** (`gemini-1.5-pro`, `temperature=0`, extract-only/never-invent) maps the free-text reply to a project profile — crucially classifying building usage into an `occupancy_category` — and **merges** it onto anything gathered on earlier turns (`project_parameters` in state; `dead_loads` merged deep).
+- **Required fields** (`_REQUIRED_CONSIDERATION_FIELDS`): `occupancy_category`, `num_storeys` (auto-defaulted to 1 when `is_multistorey` is false). Missing → targeted follow-up (`_build_missing_consideration_question`); the agent blocks until satisfied.
+- **Derives `Qk`** from occupancy via `loading_service.imposed_load_for(occupancy, design_code)` (wraps `OccupancyLoadTable`) instead of asking for it. A `custom` occupancy with no stated value triggers an explicit `Qk` request.
+- Builds the load definition (`_build_load_definition_from_parameters`), validates (non-blocking), and `loading_service.define(...)` persists it; posts a **derived-parameters summary card** (`_build_parameters_summary`). `load_definition` is now set, so the **next** entry into the node proceeds to Branch C. The captured `project_parameters` (storey count etc.) are retained in state for downstream column load take-down.
 
 ### 4.3 Branch C — Combinations + analysis (`load_definition` present)
 1. `loading_service.run_combinations(project_id)` — assembles factored member loads (see §5).

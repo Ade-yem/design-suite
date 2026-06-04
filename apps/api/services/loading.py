@@ -133,6 +133,40 @@ class LoadingService:
         """
         return _store.get_definition(project_id) or {}
 
+    def imposed_load_for(
+        self, occupancy_category: str, design_code: str
+    ) -> Optional[float]:
+        """
+        Derive the characteristic imposed floor load Qk (kN/m²) from occupancy.
+
+        Wraps the ``core.loading`` occupancy table so the Analyst Agent can map a
+        building's usage (e.g. "office") to a code-compliant Qk without performing
+        the lookup itself.  Returns ``None`` for the ``custom`` category (or any
+        unknown value), signalling that an explicit Qk must be supplied.
+
+        Parameters
+        ----------
+        occupancy_category : str
+            One of the ``OccupancyCategory`` values.
+        design_code : str
+            ``"BS8110"`` or ``"EC2"``.
+
+        Returns
+        -------
+        float | None
+            Characteristic imposed load in kN/m², or ``None`` if it cannot be
+            derived from the table.
+        """
+        from core.loading.tables import OccupancyLoadTable
+        from models.loading.schema import OccupancyCategory, DesignCode
+
+        try:
+            occ = OccupancyCategory(occupancy_category)
+            code = DesignCode(design_code)
+            return OccupancyLoadTable.get_load(occ, code)
+        except (ValueError, KeyError):
+            return None
+
     def validate(self, definition: dict) -> LoadValidationResult:
         """
         Validate a load definition without persisting it.
