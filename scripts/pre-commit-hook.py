@@ -17,10 +17,15 @@ YELLOW = "\033[1;33m"
 BLUE = "\033[0;34m"
 NC = "\033[0m"  # No Color
 
-PROJECT_ROOT = Path(__file__).parent.parent
+_file_path = Path(__file__).resolve()
+if ".git" in _file_path.parts:
+    git_idx = _file_path.parts.index(".git")
+    PROJECT_ROOT = Path(*_file_path.parts[:git_idx])
+else:
+    PROJECT_ROOT = _file_path.parent.parent
 
 
-def run_command(cmd: List[str], cwd: Path = None, check: bool = False) -> Tuple[bool, str]:
+def run_command(cmd: List[str], cwd: Path | None = None, check: bool = False) -> Tuple[bool, str]:
     """
     Run a shell command and return (success, output).
     """
@@ -62,7 +67,9 @@ def check_backend() -> bool:
 
     # Run pytest
     print("  → Running pytest... ", end="", flush=True)
-    success, output = run_command(["pytest", "-q", "--tb=short"], cwd=api_dir)
+    venv_pytest = PROJECT_ROOT / "venv" / "bin" / "pytest"
+    pytest_cmd = str(venv_pytest) if venv_pytest.exists() else "pytest"
+    success, output = run_command([pytest_cmd, "-q", "--tb=short"], cwd=api_dir)
     if success:
         print(f"{GREEN}✓{NC}")
     else:
