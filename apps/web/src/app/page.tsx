@@ -12,6 +12,7 @@ import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { ProjectPrompt } from "@/components/ProjectPrompt";
 import { NewProjectModal } from "@/components/NewProjectModal";
 import { PipelineRail } from "@/components/PipelineRail";
+import { ArtifactsDrawer } from "@/components/ArtifactsDrawer";
 import { pipelineStatusToStage } from "@/lib/pipelineStatus";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -181,19 +182,23 @@ export default function WorkspacePage(): JSX.Element {
                   onUploadStart={() => setShowUploadNudge(false)}
                 />
               </div>
-              <div
-                className={cn(
-                  "shrink-0 overflow-hidden",
-                  "transition-[width] duration-200 ease-out",
-                  chatOpen ? "w-80" : "w-0",
-                )}
-              >
-                <div className="w-80 h-full">
-                  <ChatSidebar
-                    projectId={activeProject.project_id}
-                    onGateReached={handleGateReached}
-                    onClose={() => setChatOpen(false)}
-                  />
+              {/* Right side: Artifacts drawer + Chat sidebar */}
+              <div className="flex shrink-0 overflow-hidden">
+                <ArtifactsDrawer />
+                <div
+                  className={cn(
+                    "shrink-0 overflow-hidden",
+                    "transition-[width] duration-200 ease-out",
+                    chatOpen ? "w-80" : "w-0",
+                  )}
+                >
+                  <div className="w-80 h-full">
+                    <ChatSidebar
+                      projectId={activeProject.project_id}
+                      onGateReached={handleGateReached}
+                      onClose={() => setChatOpen(false)}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
