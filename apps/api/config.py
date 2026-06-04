@@ -119,7 +119,8 @@ class Settings(BaseSettings):
 
     # ── Project / Data store ──────────────────────────────────────────────────
     PROJECT_STORE_BACKEND: Literal["memory", "postgres"] = cast(
-    Literal["memory", "postgres"], os.getenv("PROJECT_STORE_BACKEND"))
+        Literal["memory", "postgres"], os.getenv("PROJECT_STORE_BACKEND") or "memory"
+    )
     DATABASE_URL: str | None = os.getenv("DATABASE_URL")
 
     # ── Logging & meta ────────────────────────────────────────────────────────

@@ -192,6 +192,11 @@ class MemoryJobStore:
         jobs = [self._jobs[jid] for jid in job_ids if jid in self._jobs]
         return sorted(jobs, key=lambda j: (j.started_at or datetime.min), reverse=True)
 
+    async def clear(self) -> None:
+        """Clear all jobs from the store (used in testing)."""
+        self._jobs.clear()
+        self._project_index.clear()
+
 
 # ── Redis implementation ──────────────────────────────────────────────────────
 
@@ -374,6 +379,20 @@ class RedisJobStore:
             if raw is not None:
                 jobs.append(JobStatus.model_validate_json(raw))
         return sorted(jobs, key=lambda j: (j.started_at or datetime.min), reverse=True)
+
+    async def clear(self) -> None:
+        """Clear all jobs from Redis (used in testing)."""
+        r = self._get_redis()
+        cursor = 0
+        try:
+            while True:
+                cursor, keys = await r.scan(cursor, match="structai:*", count=100)  # type: ignore
+                if keys:
+                    await r.delete(*keys)  # type: ignore
+                if cursor == 0:
+                    break
+        except Exception as e:
+            logger.warning(f"Failed to clear Redis jobs store: {e}")
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
