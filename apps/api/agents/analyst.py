@@ -46,12 +46,61 @@ def _get_llm():
         google_api_key=settings.GEMINI_API_KEY,
     )
 
-# Design-consideration fields required before loads can be assembled.
-# (Building occupancy governs Qk; storey count governs load take-down.)
-_REQUIRED_CONSIDERATION_FIELDS: list[str] = [
-    "occupancy_category",
-    "num_storeys",
+# Required design considerations, gathered before loads are assembled.
+# Nothing here is assumed — every field is asked of the engineer.  Each entry is
+# (dotted_path, domain, question).  ``num_storeys`` is auto-set to 1 only when the
+# engineer explicitly states the building is single-storey.
+_REQUIRED_FIELDS: list[tuple[str, str, str]] = [
+    # ── Design basis ──
+    ("design_working_life_years", "Design basis",
+     "Design working life in years (e.g. 50 for ordinary buildings)"),
+    # ── Geometry / structural form ──
+    ("num_storeys", "Geometry",
+     "Is it multi-storey, and how many storeys / floor levels?"),
+    ("storey_height_m", "Geometry",
+     "Typical clear storey height (m)"),
+    ("is_braced", "Geometry",
+     "Is the frame braced (stability from cores/shear walls) or unbraced/sway?"),
+    # ── Materials ──
+    ("materials.concrete_grade", "Materials",
+     "Concrete grade — e.g. C30/37 (EC2) or grade 30 (BS 8110)"),
+    ("materials.fy_main_MPa", "Materials",
+     "Main reinforcement characteristic yield strength fy / fyk (MPa), e.g. 500"),
+    ("materials.fy_link_MPa", "Materials",
+     "Shear-link characteristic yield strength fyv / fywk (MPa), e.g. 500"),
+    ("materials.unit_weight_kNm3", "Materials",
+     "Reinforced-concrete unit weight (kN/m³), e.g. 25"),
+    # ── Durability & fire ──
+    ("durability.exposure_class", "Durability & fire",
+     "Exposure class — e.g. XC1 (dry/internal), XC3/XC4, XD, XS; "
+     "or BS 8110 condition (mild / moderate / severe)"),
+    ("durability.fire_resistance_min", "Durability & fire",
+     "Required fire resistance period in minutes, e.g. 60 / 90 / 120"),
+    ("durability.nominal_cover_mm", "Durability & fire",
+     "Nominal cover to reinforcement c_nom (mm)"),
+    # ── Loading ──
+    ("occupancy_category", "Loading",
+     "Building use / occupancy (residential, office, retail, car park, roof, …) "
+     "— this sets the imposed load Qk"),
+    ("dead_loads.finishes_kNm2", "Loading",
+     "Floor finishes (kN/m²) — enter 0 if none"),
+    ("dead_loads.screed_kNm2", "Loading",
+     "Screed (kN/m²) — enter 0 if none"),
+    ("dead_loads.services_kNm2", "Loading",
+     "M&E services (kN/m²) — enter 0 if none"),
+    ("dead_loads.partitions_kNm2", "Loading",
+     "Partition allowance (kN/m²) — enter 0 if none"),
 ]
+
+# Conditional requirement: soil bearing capacity is only required when the parsed
+# geometry actually contains foundation members.
+_GEOTECH_FIELD = (
+    "geotech.bearing_capacity_kPa", "Geotechnical",
+    "Allowable / safe soil bearing capacity (kN/m²)",
+)
+
+# Nested dict keys that are deep-merged across dialogue turns.
+_NESTED_GROUPS: tuple[str, ...] = ("materials", "durability", "dead_loads", "geotech")
 
 # Dead-load component keys carried from the discovery dialogue into the
 # load definition (the loading engine supplies its own defaults for any absent).
@@ -66,12 +115,43 @@ _MAX_ITERATIONS = 5
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
+def _get_path(data: dict, dotted: str) -> Any:
+    """Return the value at a dotted path, or ``None`` if any segment is absent."""
+    val: Any = data
+    for key in dotted.split("."):
+        if not isinstance(val, dict):
+            return None
+        val = val.get(key)
+    return val
+
+
+def _deep_merge_parameters(base: dict, incoming: dict) -> dict:
+    """
+    Merge freshly-extracted values onto the running profile.
+
+    Only non-null values overwrite; the recognised nested groups (materials,
+    durability, dead_loads, geotech) are merged one level deep so the engineer
+    can supply them across multiple turns.
+    """
+    for key, value in incoming.items():
+        if value is None:
+            continue
+        if key in _NESTED_GROUPS and isinstance(value, dict):
+            merged = dict(base.get(key) or {})
+            merged.update({k: v for k, v in value.items() if v is not None})
+            base[key] = merged
+        else:
+            base[key] = value
+    return base
+
+
 def _build_considerations_prompt(design_code: str) -> str:
     """
-    Opening question that kicks off the design-considerations dialogue.
+    Opening questionnaire that kicks off the design-considerations dialogue.
 
     Asked once, immediately after geometry is confirmed, before any loads are
-    assembled.
+    assembled.  Covers every input the downstream loading, analysis and design
+    suites need — none are assumed.
 
     Parameters
     ----------
@@ -81,19 +161,32 @@ def _build_considerations_prompt(design_code: str) -> str:
     Returns
     -------
     str
-        Markdown question for the IDE chat panel.
+        Markdown questionnaire for the IDE chat panel.
     """
     return (
-        "✅ **Geometry confirmed.** Before I assemble the loads, tell me about the "
-        f"project so I can select the right design parameters under **{design_code}**:\n\n"
-        "1. **Building type / purpose** — what is it used for? "
-        "(e.g. residential, office, retail, school, hospital, car park, warehouse)\n"
-        "2. **Is it a multi-storey building?** If so, **how many storeys / floors**?\n"
-        "3. **Typical clear storey height** (m)?\n"
-        "4. *(Optional)* any known **finishes / superimposed dead loads**, "
-        "**soil bearing capacity**, or **concrete grade**.\n\n"
-        "Answer in plain English — e.g. "
-        "*\"It's a 4-storey office building, 3.2 m clear per floor.\"*"
+        "✅ **Geometry confirmed.** Before I assemble the loads I need the full "
+        f"design brief so nothing is assumed on your behalf (basis: **{design_code}**).\n\n"
+        "**1 · Building & use**\n"
+        "- Building type / purpose (residential, office, retail, school, car park, …)\n"
+        "- Multi-storey? How many storeys / floor levels?\n"
+        "- Typical clear storey height (m)\n"
+        "- Braced (cores/shear walls) or unbraced/sway frame?\n"
+        "- Design working life (years)\n\n"
+        "**2 · Materials**\n"
+        "- Concrete grade (e.g. C30/37 or grade 30)\n"
+        "- Main bar yield fy / fyk (MPa)\n"
+        "- Link yield fyv / fywk (MPa)\n"
+        "- Reinforced-concrete unit weight (kN/m³)\n\n"
+        "**3 · Durability & fire**\n"
+        "- Exposure class (e.g. XC1, XC3/4, XD, XS) or BS 8110 condition\n"
+        "- Fire resistance period (minutes)\n"
+        "- Nominal cover c_nom (mm)\n\n"
+        "**4 · Loading**\n"
+        "- Superimposed dead loads: finishes, screed, services, partitions (kN/m²)\n"
+        "- Soil bearing capacity (kN/m²) — if foundations are in scope\n\n"
+        "Answer in plain English — e.g. *\"4-storey braced office, 3.2 m clear, 50-yr "
+        "life, C30/37, 500 MPa bars & links, 25 kN/m³, exposure XC1, 90 min fire, "
+        "30 mm cover, finishes 1.5 / screed 1.2 / services 0.5 / partitions 1.0.\"*"
     )
 
 
@@ -114,96 +207,111 @@ def _considerations_extraction_prompt(message: str, design_code: str) -> str:
         Extraction prompt instructing the model to extract, never invent.
     """
     return (
-        "You are a junior structural engineer extracting a project profile from "
-        f"the senior engineer's description. The design code is {design_code}.\n"
+        "You are a junior structural engineer extracting a project brief from the "
+        f"senior engineer's description. The design code is {design_code}.\n"
         "Return ONLY a valid JSON object. Set any value not explicitly stated or "
-        "clearly implied to null — do NOT invent or assume.\n\n"
+        "clearly implied to null — do NOT invent, default or assume.\n\n"
         "Map the building usage to the closest occupancy_category from this set:\n"
         "  residential | office | retail | roof_accessible | "
         "roof_non_accessible | stairs | custom\n"
         "Guidance: flats/apartments/houses→residential; offices→office; "
-        "shops/malls/showrooms→retail; warehouses/storage→custom; "
-        "schools/classrooms→office; car parks→custom. Use 'custom' only when "
-        "nothing fits, and then also fill imposed_qk_kNm2 if a value is stated.\n\n"
-        "Schema fields:\n"
-        "  building_type (str, the literal usage e.g. 'office')\n"
-        "  building_purpose (str, short description)\n"
+        "shops/malls/showrooms→retail; schools/classrooms→office; "
+        "warehouses/storage/car parks→custom. Use 'custom' only when nothing fits, "
+        "and then also fill imposed_qk_kNm2 if a value is stated.\n\n"
+        "Concrete grade: for 'C30/37' set materials.fck_MPa=30 and materials.fcu_MPa=37. "
+        "For BS 8110 'grade 30' / 'C30' set materials.fcu_MPa=30. Only convert between "
+        "cube and cylinder strength using the standard C{fck}/{fcu} class pairs; "
+        "otherwise leave the counterpart null. Always echo the raw grade string in "
+        "materials.concrete_grade.\n\n"
+        "Schema (use null for anything not stated):\n"
+        "  building_type (str), building_purpose (str)\n"
         "  occupancy_category (one of the set above)\n"
-        "  is_multistorey (bool)\n"
-        "  num_storeys (int, number of floor levels)\n"
-        "  storey_height_m (float, clear storey height in metres)\n"
-        "  is_braced (bool, true unless explicitly an unbraced/sway frame)\n"
-        "  imposed_qk_kNm2 (float, only if an explicit imposed load is stated)\n"
-        "  bearing_capacity_kPa (float, soil safe bearing capacity if stated)\n"
-        "  dead_loads.finishes_kNm2 (float, optional)\n"
-        "  dead_loads.screed_kNm2 (float, optional)\n"
-        "  dead_loads.services_kNm2 (float, optional)\n"
-        "  dead_loads.partitions_kNm2 (float, optional)\n\n"
+        "  is_multistorey (bool), num_storeys (int), storey_height_m (float)\n"
+        "  is_braced (bool, true=braced, false=unbraced/sway)\n"
+        "  design_working_life_years (int)\n"
+        "  materials: {concrete_grade (str), fck_MPa (float), fcu_MPa (float), "
+        "fy_main_MPa (float), fy_link_MPa (float), unit_weight_kNm3 (float)}\n"
+        "  durability: {exposure_class (str), fire_resistance_min (int, minutes), "
+        "nominal_cover_mm (float)}\n"
+        "  dead_loads: {finishes_kNm2 (float), screed_kNm2 (float), "
+        "services_kNm2 (float), partitions_kNm2 (float), cladding_kNm (float)}\n"
+        "  imposed_qk_kNm2 (float, only if explicitly stated — otherwise null, "
+        "it will be derived from occupancy)\n"
+        "  roof_qk_kNm2 (float, optional)\n"
+        "  geotech: {bearing_capacity_kPa (float)}\n\n"
         f"Description: {message}"
     )
 
 
-def _extract_missing_consideration_fields(params: dict) -> list[str]:
+def _has_footings(parsed_json: dict) -> bool:
+    """True when the parsed geometry contains any foundation member."""
+    return any(
+        m.get("member_type") == "footing"
+        for m in (parsed_json or {}).get("members", [])
+    )
+
+
+def _extract_missing_consideration_fields(
+    params: dict, parsed_json: Optional[dict] = None
+) -> list[str]:
     """
     Identify required design-consideration fields that are still unknown.
 
     Single-storey buildings default ``num_storeys`` to 1 (mutating ``params``)
-    so the engineer is not asked a storey count that is implied.
+    so the engineer is not asked a storey count that is implied.  ``0`` and
+    ``False`` count as *provided*; only ``None``/absent counts as missing.
 
     Parameters
     ----------
     params : dict
         Project parameters accumulated so far across dialogue turns.
+    parsed_json : dict | None
+        Parsed geometry, used to decide whether geotechnical input is required.
 
     Returns
     -------
     list[str]
-        Names of the still-missing required fields.
+        Dotted paths of the still-missing required fields, in ask order.
     """
-    missing: list[str] = []
+    # Imply single-storey count rather than asking for it.
+    if params.get("num_storeys") is None and params.get("is_multistorey") is False:
+        params["num_storeys"] = 1
 
-    if not params.get("occupancy_category"):
-        missing.append("occupancy_category")
+    missing = [path for path, _, _ in _REQUIRED_FIELDS if _get_path(params, path) is None]
 
-    if not params.get("num_storeys"):
-        if params.get("is_multistorey") is False:
-            params["num_storeys"] = 1
-        else:
-            missing.append("num_storeys")
+    if _has_footings(parsed_json or {}) and _get_path(params, _GEOTECH_FIELD[0]) is None:
+        missing.append(_GEOTECH_FIELD[0])
 
     return missing
 
 
 def _build_missing_consideration_question(missing: list[str]) -> str:
     """
-    Build a targeted chat message asking for missing design considerations.
+    Build a targeted, domain-grouped chat message asking for missing inputs.
 
     Parameters
     ----------
     missing : list[str]
-        List of missing field names.
+        Dotted paths of missing fields.
 
     Returns
     -------
     str
-        Natural-language follow-up question.
+        Natural-language follow-up question grouped by domain.
     """
-    questions = {
-        "occupancy_category": (
-            "What is the building used for? "
-            "(residential / office / retail / car park / roof, etc.) — "
-            "this sets the imposed load."
-        ),
-        "num_storeys": (
-            "Is this a multi-storey building, and if so how many storeys / "
-            "floor levels does it have?"
-        ),
-    }
-    asked = [f"- {questions.get(f, f)}" for f in missing]
-    return (
-        "Thanks — a couple more details before I can assemble the loads:\n\n"
-        + "\n".join(asked)
-    )
+    lookup = {path: (domain, q) for path, domain, q in (*_REQUIRED_FIELDS, _GEOTECH_FIELD)}
+
+    grouped: dict[str, list[str]] = {}
+    for path in missing:
+        domain, question = lookup.get(path, ("Other", path))
+        grouped.setdefault(domain, []).append(question)
+
+    lines = ["I still need the following before I can assemble the loads:\n"]
+    for domain, questions in grouped.items():
+        lines.append(f"**{domain}**")
+        lines.extend(f"- {q}" for q in questions)
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def _build_load_definition_from_parameters(
@@ -211,9 +319,6 @@ def _build_load_definition_from_parameters(
 ) -> dict:
     """
     Assemble a load definition from gathered considerations and the derived Qk.
-
-    Only dead-load components the engineer actually provided are passed through;
-    the loading engine applies its own defaults for anything absent.
 
     Parameters
     ----------
@@ -232,19 +337,85 @@ def _build_load_definition_from_parameters(
     dead = params.get("dead_loads") or {}
     dead_loads = {k: dead[k] for k in _DEAD_LOAD_KEYS if dead.get(k) is not None}
 
+    imposed: dict[str, Any] = {"floor_qk_kNm2": float(qk)}
+    if params.get("roof_qk_kNm2") is not None:
+        imposed["roof_qk_kNm2"] = float(params["roof_qk_kNm2"])
+
     load_def: dict[str, Any] = {
         "design_code": design_code,
         "occupancy_category": params.get("occupancy_category", "office"),
-        "imposed_loads": {"floor_qk_kNm2": float(qk)},
+        "imposed_loads": imposed,
     }
     if dead_loads:
         load_def["dead_loads"] = dead_loads
     return load_def
 
 
+def _material_meta_from_parameters(params: dict) -> dict:
+    """
+    Map gathered materials / durability into per-member geometry ``meta`` keys.
+
+    These are the keys the design suite and self-weight calculation read off each
+    member (``cover_mm``, ``fcu_MPa``/``fck_MPa``, ``fy_MPa``, ``fyv_MPa``,
+    ``gamma_conc_kNm3``, plus exposure/fire context).
+    """
+    mats = params.get("materials") or {}
+    dur = params.get("durability") or {}
+    meta: dict[str, Any] = {}
+
+    if dur.get("nominal_cover_mm") is not None:
+        meta["cover_mm"] = float(dur["nominal_cover_mm"])
+    if mats.get("fcu_MPa") is not None:
+        meta["fcu_MPa"] = float(mats["fcu_MPa"])
+    if mats.get("fck_MPa") is not None:
+        meta["fck_MPa"] = float(mats["fck_MPa"])
+    if mats.get("fy_main_MPa") is not None:
+        meta["fy_MPa"] = meta["fyk_MPa"] = float(mats["fy_main_MPa"])
+    if mats.get("fy_link_MPa") is not None:
+        meta["fyv_MPa"] = float(mats["fy_link_MPa"])
+    if mats.get("unit_weight_kNm3") is not None:
+        meta["gamma_conc_kNm3"] = float(mats["unit_weight_kNm3"])
+    if dur.get("exposure_class"):
+        meta["exposure_class"] = dur["exposure_class"]
+    if dur.get("fire_resistance_min") is not None:
+        meta["fire_resistance_min"] = int(dur["fire_resistance_min"])
+
+    return meta
+
+
+async def _propagate_material_meta(project_id: str, params: dict) -> None:
+    """
+    Write the project-level materials/durability into every member's ``meta``.
+
+    Uses ``setdefault`` so any pre-existing per-member value is preserved.  This
+    is what makes the gathered materials actually reach the design suite and the
+    self-weight calculation rather than being collected and ignored.
+    """
+    meta_updates = _material_meta_from_parameters(params)
+    if not meta_updates:
+        return
+    try:
+        from services.files import file_service
+        parsed = await file_service.get_parsed(project_id)
+    except Exception as exc:
+        logger.warning("Could not load geometry to apply materials for %s: %s", project_id, exc)
+        return
+
+    for member in parsed.get("members", []):
+        meta = member.setdefault("meta", {})
+        for key, value in meta_updates.items():
+            meta.setdefault(key, value)
+
+    try:
+        from services.files import file_service
+        await file_service.register_geometry(project_id, parsed)
+    except Exception as exc:
+        logger.warning("Could not persist materials into geometry for %s: %s", project_id, exc)
+
+
 def _build_parameters_summary(params: dict, design_code: str, qk: float) -> str:
     """
-    Build the human-readable derived-parameters card for engineer confirmation.
+    Build the human-readable parameters card for engineer confirmation.
 
     Parameters
     ----------
@@ -260,37 +431,51 @@ def _build_parameters_summary(params: dict, design_code: str, qk: float) -> str:
     str
         Markdown summary for the IDE chat panel.
     """
-    occupancy = params.get("occupancy_category", "office")
     num_storeys = params.get("num_storeys", 1)
     multistorey = "Yes" if (params.get("is_multistorey") or num_storeys > 1) else "No"
-    height = params.get("storey_height_m")
     building = params.get("building_type") or params.get("building_purpose") or "—"
+    braced = "braced" if params.get("is_braced", True) else "unbraced / sway"
+    mats = params.get("materials") or {}
+    dur = params.get("durability") or {}
+    dead = params.get("dead_loads") or {}
 
     lines = [
-        "### 📋 Derived Project Parameters",
+        "### 📋 Confirmed Project Parameters",
         "",
         f"- **Design code:** {design_code}",
-        f"- **Building type / purpose:** {building}",
-        f"- **Multi-storey:** {multistorey}  (**{num_storeys}** storey(s))",
+        f"- **Building:** {building} — {multistorey} multi-storey "
+        f"(**{num_storeys}** storey(s)), {braced}",
     ]
-    if height:
-        lines.append(f"- **Clear storey height:** {height} m")
-    lines.append(
-        f"- **Occupancy:** {occupancy} → **Imposed load Qk = {qk:g} kN/m²** "
-        "(standard occupancy table)"
-    )
+    if params.get("storey_height_m"):
+        lines.append(f"- **Clear storey height:** {params['storey_height_m']} m")
+    if params.get("design_working_life_years"):
+        lines.append(f"- **Design working life:** {params['design_working_life_years']} years")
 
-    dead = params.get("dead_loads") or {}
+    grade = mats.get("concrete_grade") or "—"
+    lines.append(
+        f"- **Materials:** concrete {grade}, main steel {mats.get('fy_main_MPa', '—')} MPa, "
+        f"links {mats.get('fy_link_MPa', '—')} MPa, "
+        f"γ_conc {mats.get('unit_weight_kNm3', '—')} kN/m³"
+    )
+    lines.append(
+        f"- **Durability & fire:** exposure {dur.get('exposure_class', '—')}, "
+        f"fire {dur.get('fire_resistance_min', '—')} min, "
+        f"cover {dur.get('nominal_cover_mm', '—')} mm"
+    )
+    lines.append(
+        f"- **Occupancy:** {params.get('occupancy_category', 'office')} → "
+        f"**imposed Qk = {qk:g} kN/m²** (standard occupancy table)"
+    )
     if dead:
-        dead_str = ", ".join(f"{k.replace('_kNm2', '')}={v}" for k, v in dead.items())
+        dead_str = ", ".join(f"{k.replace('_kNm2', '').replace('_kNm', '')}={v}" for k, v in dead.items())
         lines.append(f"- **Superimposed dead loads:** {dead_str} kN/m²")
-    if params.get("bearing_capacity_kPa"):
-        lines.append(f"- **Soil bearing capacity:** {params['bearing_capacity_kPa']} kN/m²")
+    if _get_path(params, "geotech.bearing_capacity_kPa") is not None:
+        lines.append(f"- **Soil bearing capacity:** {params['geotech']['bearing_capacity_kPa']} kN/m²")
 
     lines.append("")
     lines.append(
         "I'll assemble the factored loads on this basis and run the analysis. "
-        "Confirm the loads to proceed, or tell me what to adjust."
+        "**Confirm the loads** to proceed, or tell me what to adjust."
     )
     return "\n".join(lines)
 
@@ -442,15 +627,16 @@ async def _collect_design_considerations(
 
     Flow
     ----
-    1. If the engineer has not yet replied to the opening prompt, ask about the
-       building type / purpose, storeys and storey height.
-    2. LLM-extract a project profile from the reply (extract only, never invent),
-       merging with anything gathered on earlier turns.
-    3. If required fields (occupancy, storey count) are missing, ask a targeted
-       follow-up rather than guessing.
+    1. If the engineer has not yet replied to the opening prompt, present the full
+       design questionnaire (building, materials, durability/fire, loading).
+    2. LLM-extract a project brief from the reply (extract only, never invent),
+       deep-merging with anything gathered on earlier turns.
+    3. If any required field is missing, ask a domain-grouped follow-up rather
+       than guessing — nothing is assumed on the engineer's behalf.
     4. Derive the imposed load Qk from occupancy via the loading service; for a
        ``custom`` occupancy with no stated Qk, ask for it explicitly.
-    5. Assemble the load definition, validate (non-blocking), and submit.
+    5. Assemble the load definition, validate (non-blocking) and submit; propagate
+       the gathered materials into the geometry meta for the design suite.
 
     Parameters
     ----------
@@ -488,19 +674,12 @@ async def _collect_design_considerations(
     except Exception:
         extracted = {}
 
-    # Merge new non-null values onto the running profile (dead_loads merged deep).
-    for key, value in extracted.items():
-        if value is None:
-            continue
-        if key == "dead_loads" and isinstance(value, dict):
-            merged_dead = dict(params.get("dead_loads") or {})
-            merged_dead.update({k: v for k, v in value.items() if v is not None})
-            params["dead_loads"] = merged_dead
-        else:
-            params[key] = value
+    # Deep-merge new non-null values onto the running profile.
+    params = _deep_merge_parameters(params, extracted)
 
     # ── Step 3: ask for any missing required considerations ───────────────────
-    missing = _extract_missing_consideration_fields(params)
+    parsed_json = state.get("parsed_structural_json") or {}
+    missing = _extract_missing_consideration_fields(params, parsed_json)
     if missing:
         return {
             "project_parameters": params,
@@ -546,6 +725,10 @@ async def _collect_design_considerations(
         pass  # Validation failure is non-blocking if the service is unavailable
 
     await loading_service.define(project_id, load_def)
+
+    # Push the gathered materials/durability into every member's geometry meta so
+    # the design suite and self-weight calculation use them (not hard-coded defaults).
+    await _propagate_material_meta(project_id, params)
 
     return {
         "project_parameters": params,

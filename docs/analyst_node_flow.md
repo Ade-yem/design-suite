@@ -143,12 +143,12 @@ Delegates to `_handle_reanalysis`:
 - Increments `iteration_count`, clears `reanalysis_triggered`, and lets the graph fall back through to the Designer.
 
 ### 4.2 Branch B — Design considerations + load collection (`load_definition` missing)
-Delegates to `_collect_design_considerations`. Rather than asking the engineer for a raw `Qk`, the Analyst first **profiles the project**, then *reasons* to the load parameters (mirrors `docs/conversational_project_setup_proposal.md`):
-- **Opens the dialogue** (when the last message isn't a fresh `HumanMessage`) with `_build_considerations_prompt`: building **type / purpose**, whether it is **multi-storey** and **how many storeys**, **storey height**, and optional dead loads / soil / material context.
-- **LLM extraction** (`gemini-1.5-pro`, `temperature=0`, extract-only/never-invent) maps the free-text reply to a project profile — crucially classifying building usage into an `occupancy_category` — and **merges** it onto anything gathered on earlier turns (`project_parameters` in state; `dead_loads` merged deep).
-- **Required fields** (`_REQUIRED_CONSIDERATION_FIELDS`): `occupancy_category`, `num_storeys` (auto-defaulted to 1 when `is_multistorey` is false). Missing → targeted follow-up (`_build_missing_consideration_question`); the agent blocks until satisfied.
-- **Derives `Qk`** from occupancy via `loading_service.imposed_load_for(occupancy, design_code)` (wraps `OccupancyLoadTable`) instead of asking for it. A `custom` occupancy with no stated value triggers an explicit `Qk` request.
-- Builds the load definition (`_build_load_definition_from_parameters`), validates (non-blocking), and `loading_service.define(...)` persists it; posts a **derived-parameters summary card** (`_build_parameters_summary`). `load_definition` is now set, so the **next** entry into the node proceeds to Branch C. The captured `project_parameters` (storey count etc.) are retained in state for downstream column load take-down.
+Delegates to `_collect_design_considerations`. The Analyst gathers a **complete design brief** before assembling loads — **nothing is assumed**, every input is asked of the engineer (mirrors `docs/conversational_project_setup_proposal.md`):
+- **Opens the questionnaire** (when the last message isn't a fresh `HumanMessage`) with `_build_considerations_prompt`, grouped into four domains — *Building & use*, *Materials*, *Durability & fire*, *Loading*.
+- **LLM extraction** (`gemini-1.5-pro`, `temperature=0`, extract-only/never-invent) maps the free-text reply into a nested project brief and **deep-merges** it across turns (`_deep_merge_parameters`; `materials`/`durability`/`dead_loads`/`geotech` merged one level deep). Building usage is classified into an `occupancy_category`; concrete grade like `C30/37` is split into `fck`/`fcu`.
+- **Required fields** (`_REQUIRED_FIELDS`) — all of: `design_working_life_years`; `num_storeys` (auto-1 only when explicitly single-storey), `storey_height_m`, `is_braced`; `materials.{concrete_grade, fy_main_MPa, fy_link_MPa, unit_weight_kNm3}`; `durability.{exposure_class, fire_resistance_min, nominal_cover_mm}`; `occupancy_category`; `dead_loads.{finishes, screed, services, partitions}`. **Conditionally** `geotech.bearing_capacity_kPa` when the geometry contains footings. `0`/`False` count as provided; only `None` is missing. Missing → domain-grouped follow-up (`_build_missing_consideration_question`); the agent blocks until satisfied.
+- **Derives `Qk`** from occupancy via `loading_service.imposed_load_for(occupancy, design_code)` (wraps `OccupancyLoadTable`); a `custom` occupancy with no stated value triggers an explicit `Qk` request. (Qk is the one code-table *lookup*, surfaced for confirmation — not an assumption.)
+- Builds the load definition (`_build_load_definition_from_parameters`), validates (non-blocking), `loading_service.define(...)` persists it, and **propagates materials into geometry `meta`** (`_propagate_material_meta` → `cover_mm`, `fcu_MPa`/`fck_MPa`, `fy_MPa`, `fyv_MPa`, `gamma_conc_kNm3`, `exposure_class`, `fire_resistance_min`) so the design suite and self-weight use them. Posts a **parameters summary card** (`_build_parameters_summary`). `load_definition` is now set, so the **next** entry into the node proceeds to Branch C; the full `project_parameters` brief is retained in state.
 
 ### 4.3 Branch C — Combinations + analysis (`load_definition` present)
 1. `loading_service.run_combinations(project_id)` — assembles factored member loads (see §5).
@@ -313,3 +313,56 @@ This keeps the existing service/solver/schema architecture intact — the work i
 | Other solvers | `apps/api/core/analysis/{column,slab,footing,staircase,wall}_solver.py` |
 | Analysis output schema | `apps/api/models/analysis/schema.py` |
 | Sample drawings | `sample/1-2 layout.dxf`, `sample/Floor-beam.dxf`, `sample/Floor-beam.pdf` |
+
+---
+
+## Appendix A — Design-input checklist & best-practice gaps (researched)
+
+This appendix records the structural-design best-practice review behind the
+decision to make the Analyst gather a **complete** brief (nothing assumed). It
+maps each required RC design input to where it now lives in the pipeline.
+
+### A.1 Required inputs for RC design (BS 8110 / EC2)
+
+| Domain | Input | Why it's needed | Status |
+|---|---|---|---|
+| **Design basis** | Design code | Partial factors, combination rules | From project creation (`state.design_code`) |
+| | Design working life (yrs) | EC2 durability / structural-class selection | **Now asked** (`design_working_life_years`) |
+| **Materials** | Concrete grade `fcu`/`fck` | Flexural/shear capacity, `fcd`, `fctm` | **Now asked** (`materials.concrete_grade` → `fck_MPa`/`fcu_MPa`) |
+| | Main bar yield `fy`/`fyk` | `As` design, min/max steel | **Now asked** (`materials.fy_main_MPa`) |
+| | Link yield `fyv`/`fywk` | Shear-link design | **Now asked** (`materials.fy_link_MPa`) |
+| | RC unit weight | Self-weight | **Now asked** (`materials.unit_weight_kNm3`) |
+| **Durability & fire** | Exposure class | Sets min grade + min cover | **Now asked** (`durability.exposure_class`) |
+| | Fire resistance period | Axis distance / cover + min member sizes | **Now asked** (`durability.fire_resistance_min`) |
+| | Nominal cover `c_nom` | Effective depth `d` → every capacity check | **Now asked** (`durability.nominal_cover_mm`) |
+| **Geometry / form** | No. of storeys | Column load take-down, stability | **Now asked** (`num_storeys`) |
+| | Storey height | Column effective length / slenderness | **Now asked** (`storey_height_m`) |
+| | Braced / unbraced | Effective-length factor, sway | **Now asked** (`is_braced`) |
+| | Member sections | Capacity | From parser (`meta.b/h/b_mm/h_mm`) |
+| **Loading** | Occupancy → `Qk` | Imposed load | **Asked** (occupancy) → derived via `OccupancyLoadTable`, confirmed |
+| | Superimposed dead loads | `Gk` | **Now asked** (`dead_loads.*`) |
+| | Cladding line load | Perimeter-beam `Gk` | Optional (`dead_loads.cladding_kNm`) |
+| | Roof load | Roof members | Optional (`roof_qk_kNm2`) |
+| **Geotechnical** | Soil bearing capacity | Footing sizing | **Conditionally asked** when footings present (`geotech.bearing_capacity_kPa`) |
+
+Materials/durability are pushed into each member's geometry `meta`
+(`_propagate_material_meta`) so the design suite reads real values, not defaults.
+
+### A.2 Still not modeled (recommended next, out of current vertical-load scope)
+
+1. **Lateral loads — wind (EN 1991-1-4 / BS 6399-2).** No basic wind speed, terrain/exposure, or building geometry inputs; no lateral analysis. Required for unbraced/sway frames and overall stability. Pairs with the unimplemented `GlobalMatrixSolver` frame path (§2, §7).
+2. **Snow loads (EN 1991-1-3).** Not collected; relevant for roofs.
+3. **Seismic.** Out of scope for BS 8110; EC8 not in remit — note explicitly.
+4. **Wind/notional load combinations.** Only gravity combos (`1.4Gk+1.6Qk` / `1.35Gk+1.5Qk`) and SLS characteristic exist; `LimitState` enum already defines `ULS_WIND`, `SLS_QUASI_PERMANENT`, `SLS_FREQUENT` but the engine never assembles them. Notional horizontal loads (BS 8110 Cl 3.1.4.2 / EC2 imperfections) absent.
+5. **Crack-width & long-term deflection (SLS).** Only a span/250 elastic deflection check exists; quasi-permanent combinations and crack control (EC2 7.3) are not assembled.
+6. **Cover derivation cross-check.** Cover is now asked directly; a future enhancement could *derive* `c_min` from exposure class + fire period and warn if the engineer's `c_nom` is below code minimum (durability safety net) — derive-and-verify rather than derive-and-assume.
+
+### Sources
+
+- [Cover to Reinforcement as per BS 8110 — Structural Guide](https://www.structuralguide.com/cover-to-reinforcement-as-per-bs-8110/)
+- [Nominal Cover to Reinforcement as per Eurocode — Structural Guide](https://www.structuralguide.com/nominal-cover-to-reinforcement-as-per-eurocode/)
+- [Durability of Structures and How to Calculate Concrete Cover (Eurocode 2) — Structville](https://structville.com/2017/11/durability-of-structures-and-how-to-calculate-concrete-cover-eurocode-2.html)
+- [Fire Resistance Design of Reinforced Concrete Structures — Structville](https://structville.com/fire-resistance-design-of-reinforced-concrete-structures)
+- [How to use BS 8500 with BS 8110 (concrete grade / exposure / cover)](https://morrisandperry.co.uk/wp-content/uploads/2024/07/how-to-use-bs8500-with-bs8110.pdf)
+- [Checklist to Ensure Structural Stability by Reinforced Design — Skytree](https://www.skytreeconsulting.com/blog/checklist-to-ensure-structural-stability-by-reinforced-design/)
+- [ASCE/SEI 7-22 Minimum Design Loads (load categories overview)](https://www.asce.org/publications-and-news/codes-and-standards/asce-sei-7-22)

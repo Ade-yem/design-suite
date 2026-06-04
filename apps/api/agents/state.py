@@ -120,15 +120,21 @@ class StructuralDesignState(TypedDict, total=False):
 
     project_parameters: Optional[dict]
     """
-    Design considerations gathered conversationally by the Analyst *after*
-    geometry confirmation and *before* loads are assembled.  Captures the
-    qualitative project context that governs loading and parameter selection.
+    Full design brief gathered conversationally by the Analyst *after* geometry
+    confirmation and *before* loads are assembled.  Every value is supplied by the
+    engineer — nothing is assumed.  Materials are propagated into per-member
+    geometry ``meta`` for the design suite and self-weight calculation.
 
-    Schema: {building_type, building_purpose, occupancy_category,
-             is_multistorey, num_storeys, storey_height_m, is_braced,
-             dead_loads: {finishes_kNm2, screed_kNm2, services_kNm2,
-                          partitions_kNm2}, imposed_qk_kNm2,
-             bearing_capacity_kPa}.
+    Schema:
+      building_type, building_purpose, occupancy_category,
+      is_multistorey, num_storeys, storey_height_m, is_braced,
+      design_working_life_years, imposed_qk_kNm2, roof_qk_kNm2,
+      materials: {concrete_grade, fck_MPa, fcu_MPa, fy_main_MPa,
+                  fy_link_MPa, unit_weight_kNm3},
+      durability: {exposure_class, fire_resistance_min, nominal_cover_mm},
+      dead_loads: {finishes_kNm2, screed_kNm2, services_kNm2,
+                   partitions_kNm2, cladding_kNm},
+      geotech: {bearing_capacity_kPa}.
     None until the engineer has answered the design-considerations dialogue.
     """
 
