@@ -34,35 +34,35 @@ jobs:
           PROJECT_STORE_BACKEND: memory
 
   frontend:
-‎    name: Frontend (Node.js)
-‎    runs-on: ubuntu-latest
-‎
-‎    steps:
-‎      - uses: actions/checkout@v4
-‎
-‎      # 1. Install PNPM first so the Node setup action can detect it
-‎      - name: Install pnpm
-‎        uses: pnpm/action-setup@v4
-‎        with:
-‎          version: 9
-‎
-‎      # 2. Set up Node and cache pnpm dependencies
-‎      - name: Set up Node.js 20
-‎        uses: actions/setup-node@v4
-‎        with:
-‎          node-version: "20"
-‎          cache: pnpm
-‎          cache-dependency-path: apps/web/pnpm-lock.yaml 
-‎
-‎      # 3. Install dependencies
-‎      - name: Install dependencies
-‎        run: pnpm install --frozen-lockfile
-‎        working-directory: apps/web
-‎
-‎      - name: Lint
-‎        run: pnpm run lint
-‎        working-directory: apps/web
-‎
-‎      - name: Build
-‎        run: pnpm run build
-‎        working-directory: apps/web
+    name: Frontend (Node.js)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Install PNPM first so the Node setup action can detect it
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # 2. Set up Node and cache pnpm dependencies
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: apps/web
+
+      - name: Lint
+        run: pnpm run lint
+        working-directory: apps/web
+
+      - name: Build
+        run: pnpm run build
+        working-directory: apps/web
