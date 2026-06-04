@@ -66,6 +66,7 @@ async def authenticated_user():
         hashed_password="hashed_dummy_password",
         full_name="Test User",
         role="engineer",
+        organisation_id="test-org-id",
     )
     return user
 
@@ -91,19 +92,21 @@ async def authenticated_client(async_client, authenticated_user):
     # Cleanup: remove override
     app.dependency_overrides.clear()
 
+
 @pytest.fixture
-async def test_project():
+async def test_project(authenticated_user):
     data = ProjectCreate(
         name="Test Project",
         reference="REF-123",
         client="Test Client",
         design_code="BS8110"
     )
-    project = await project_store.create(data)
+    project = await project_store.create(data, organisation_id=authenticated_user.organisation_id)
     return project.model_dump()
 
+
 @pytest.fixture
-async def geometry_verified_project():
+async def geometry_verified_project(authenticated_user):
     """Project already past Gate 1 — GEOMETRY_VERIFIED status."""
     data = ProjectCreate(
         name="Test Project",
@@ -111,9 +114,9 @@ async def geometry_verified_project():
         client="Test Client",
         design_code="BS8110"
     )
-    project = await project_store.create(data)
+    project = await project_store.create(data, organisation_id=authenticated_user.organisation_id)
     await project_store.advance_status(project.project_id, ProjectStatus.GEOMETRY_VERIFIED)
-    resolved = await project_store.get(project.project_id)
+    resolved = await project_store.get(project.project_id, organisation_id=authenticated_user.organisation_id)
     assert resolved is not None
     return resolved.model_dump()
 

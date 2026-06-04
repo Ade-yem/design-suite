@@ -36,7 +36,7 @@ TEST_USER = User(
     hashed_password="x",
     is_active=True,
     is_verified=True,
-    organisation_id=None,
+    organisation_id="test-org-id",
 )
 
 
@@ -55,7 +55,7 @@ GEOMETRY = {
         {"member_id": "B-01", "member_type": "beam"},
         {"member_id": "C-01", "member_type": "column"},
     ],
-    "scale": {"factor": 1.0, "unit": "mm"},
+    "scale": {"factor": 1.0, "unit": "mm", "confirmed": True},
 }
 
 
@@ -67,7 +67,8 @@ async def _make_file_uploaded_project() -> str:
             reference="ART-REF-1",
             client="Test Client",
             design_code="BS8110",
-        )
+        ),
+        organisation_id=TEST_USER.organisation_id,
     )
     await file_service.register_geometry(project.project_id, GEOMETRY)
     await project_store.advance_status(project.project_id, ProjectStatus.FILE_UPLOADED)
