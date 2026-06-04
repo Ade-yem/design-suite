@@ -30,7 +30,9 @@ from agents.state import StructuralDesignState
 
 logger = logging.getLogger(__name__)
 
-_llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
+
+def _get_llm():
+    return ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
 
 # Self-weight change that triggers a re-analysis feedback
 _SELF_WEIGHT_THRESHOLD_PCT = 5.0
@@ -286,7 +288,7 @@ async def handle_design_override(
     )
 
     try:
-        raw = await _llm.ainvoke(extraction_prompt)
+        raw = await _get_llm().ainvoke(extraction_prompt)
         content = raw.text.replace("```json", "").replace("```", "").strip()
         override_data: dict = json.loads(content)
     except Exception:

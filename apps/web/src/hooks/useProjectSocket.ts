@@ -52,9 +52,7 @@ export function useProjectSocket(
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectDelayRef = useRef(1000);
   const unmountedRef = useRef(false);
-
-  // Keep callbacks ref in sync without triggering reconnects
-  callbacksRef.current = callbacks;
+  const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     if (!projectId || unmountedRef.current) return;
@@ -106,7 +104,7 @@ export function useProjectSocket(
             reconnectDelayRef.current * 2,
             30_000
           );
-          connect();
+          connectRef.current();
         }, reconnectDelayRef.current);
       }
     };
@@ -123,6 +121,11 @@ export function useProjectSocket(
     }
     return false;
   }, []);
+
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+    connectRef.current = connect;
+  }, [callbacks, connect]);
 
   useEffect(() => {
     unmountedRef.current = false;

@@ -16,8 +16,11 @@ import {
   ArrowRight,
   RefreshCw,
   KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { GoogleSsoButton } from "@/components/auth/GoogleSsoButton";
+import { PRODUCT_NAME } from "@/lib/brand";
 import {
   AuthResponse,
   LoginResponse,
@@ -26,10 +29,13 @@ import {
   is2faChallenge,
 } from "@/types/auth";
 
+// Seconds between allowed code resends.
+const RESEND_COOLDOWN = 60;
+
 // Form input validations using Zod schemas
 const loginSchema = z.object({
   email: z.email("Please enter a valid email address."),
-  password: z.string().min(6, "Password must be at least 6 characters."),
+  password: z.string().min(8, "Password must be at least 8 characters."),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -46,8 +52,18 @@ export default function LoginPage() {
   } = useAuthStore();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
+  const [codeExpired, setCodeExpired] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
+
+  // The credentials that triggered the 2FA challenge, retained in memory only
+  // (never persisted) so we can re-request a fresh code without sending the user
+  // back to the start.
+  const [pendingCredentials, setPendingCredentials] =
+    useState<LoginFormValues | null>(null);
 
   // React Hook Form registration
   const {
@@ -58,15 +74,17 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
-  // 2FA expiration countdown effect
+  // 2FA expiration countdown effect. Timer/expiry resets happen in the event
+  // handlers that open or refresh the challenge, not here.
   useEffect(() => {
     if (!is2faRequired) return;
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          toast.error("2FA session expired. Please attempt login again.");
-          clearAuth();
+          // Keep the engineer on the verification screen — don't discard the
+          // login. They can request a fresh code from here.
+          setCodeExpired(true);
           return 0;
         }
         return prev - 1;
@@ -74,7 +92,16 @@ export default function LoginPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [is2faRequired, clearAuth]);
+  }, [is2faRequired]);
+
+  // Resend cooldown ticker.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   /**
    * Submits credentials to FastAPI backend to login.
@@ -94,10 +121,11 @@ export default function LoginPage() {
 
       // Handle 2FA Challenge interception using type guard
       if (is2faChallenge(response.data)) {
+        setPendingCredentials(data);
+        setCountdown(300);
+        setCodeExpired(false);
         set2faChallenge(response.data.user_id, response.data.email);
-        toast.info(
-          "Stateful 2FA Required. We've dispatched a PIN code to your email.",
-        );
+        toast.info("We emailed you a 6-digit code.");
         setIsLoading(false);
         return;
       }
@@ -172,7 +200,7 @@ export default function LoginPage() {
         userProfileResponse.data.organisation,
       );
 
-      toast.success("Two-Factor Verified! Entry Granted.");
+      toast.success("Verified. Taking you to your workspace…");
       router.push("/");
     } catch (err: unknown) {
       const apiErr = err as ApiError;
@@ -182,7 +210,48 @@ export default function LoginPage() {
     }
   };
 
+  /**
+   * Request a fresh 2FA code. The code is minted by the login endpoint, so we
+   * re-submit the retained credentials. Rate-limited by a cooldown.
+   */
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || isResending) return;
+    const creds = pendingCredentials;
+    if (!creds) {
+      toast.error("Please sign in again to receive a new code.");
+      clearAuth();
+      return;
+    }
 
+    setIsResending(true);
+    try {
+      const formData = new URLSearchParams();
+      formData.append("username", creds.email);
+      formData.append("password", creds.password);
+
+      await apiClient.post<AuthResponse>("/api/auth/jwt/login", formData, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+
+      setOtpCode("");
+      setCountdown(300);
+      setCodeExpired(false);
+      setResendCooldown(RESEND_COOLDOWN);
+      toast.success("We sent you a new code.");
+    } catch (err: unknown) {
+      const apiErr = err as ApiError;
+      toast.error(getFriendlyErrorMessage(apiErr.detail));
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  /** Abandon the 2FA challenge and return to the credentials screen. */
+  const handleCancel2fa = () => {
+    setPendingCredentials(null);
+    setCodeExpired(false);
+    clearAuth();
+  };
 
   return (
     <div className="relative min-h-screen bg-canvas-bg dot-grid flex items-center justify-center p-4 overflow-hidden">
@@ -200,14 +269,12 @@ export default function LoginPage() {
             <ShieldCheck className="w-6 h-6 text-primary" />
           </div>
           <h1 className="text-xl font-bold font-sans tracking-wide text-foreground">
-            {is2faRequired
-              ? "Security Verification"
-              : "Structural Design Copilot"}
+            {is2faRequired ? "Check your email" : PRODUCT_NAME}
           </h1>
           <p className="text-muted-foreground text-xs font-mono mt-1 text-center">
             {is2faRequired
-              ? `Verification dispatch active for ${pendingEmail}`
-              : "Enter credentials to access CAD environments."}
+              ? `Enter the code we sent to ${pendingEmail}`
+              : "Sign in to continue."}
           </p>
         </div>
 
@@ -252,7 +319,7 @@ export default function LoginPage() {
                   href="/forgot-password"
                   className="text-xs font-mono text-primary/80 hover:text-primary transition-colors hover:underline"
                 >
-                  Forgot Key?
+                  Forgot password?
                 </a>
               </div>
               <div className="relative">
@@ -260,12 +327,25 @@ export default function LoginPage() {
                   <Lock className="w-4 h-4" />
                 </span>
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   disabled={isLoading}
                   placeholder="••••••••"
-                  className="w-full bg-secondary/35 border border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/30 rounded-lg pl-10 pr-4 py-2.5 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/45"
+                  className="w-full bg-secondary/35 border border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/30 rounded-lg pl-10 pr-10 py-2.5 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/45"
                   {...register("password")}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
               </div>
               {errors.password && (
                 <span className="text-destructive text-xs font-mono block mt-1">
@@ -306,7 +386,7 @@ export default function LoginPage() {
             {/* Footer Onboarding Routing */}
             <div className="text-center mt-6">
               <span className="text-xs text-muted-foreground font-sans">
-                New to the Design Copilot?{" "}
+                New to {PRODUCT_NAME}?{" "}
                 <a
                   href="/register"
                   className="text-primary hover:underline font-semibold"
@@ -324,19 +404,18 @@ export default function LoginPage() {
               <div className="flex items-center space-x-2 text-primary">
                 <KeyRound className="w-4 h-4" />
                 <span className="text-xs font-mono font-bold uppercase tracking-wider">
-                  Verification Key Required
+                  Check your email
                 </span>
               </div>
               <p className="text-muted-foreground text-[11px] leading-relaxed font-sans">
-                We have emailed a 6-digit verification code PIN. Please retrieve
-                it to verify authentication profile.
+                We emailed you a 6-digit code. Enter it below to finish signing in.
               </p>
             </div>
 
             {/* OTP numeric input */}
             <div className="space-y-2">
               <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider block text-center">
-                Enter 6-Digit PIN Code
+                Enter 6-digit code
               </label>
               <input
                 type="text"
@@ -348,27 +427,47 @@ export default function LoginPage() {
                 className="w-full bg-secondary/35 border border-border focus:border-primary/50 text-center tracking-[0.75em] text-lg font-mono rounded-lg py-3 outline-none transition-all placeholder:text-muted-foreground/35"
               />
 
-              {/* Cooldown timer visual indicator */}
-              <div className="flex justify-between items-center text-[10px] font-mono text-muted-foreground px-1 mt-1">
-                <span>Verification session expires in:</span>
-                <span className="text-primary font-bold">
-                  {Math.floor(countdown / 60)}:
-                  {(countdown % 60).toString().padStart(2, "0")}
-                </span>
+              {/* Expiry status + resend */}
+              <div className="flex justify-between items-center text-[10px] font-mono px-1 mt-1">
+                {codeExpired ? (
+                  <span className="text-destructive font-bold">
+                    Code expired — resend to get a new one.
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    Code expires in{" "}
+                    <span className="text-primary font-bold">
+                      {Math.floor(countdown / 60)}:
+                      {(countdown % 60).toString().padStart(2, "0")}
+                    </span>
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={resendCooldown > 0 || isResending}
+                  className="text-primary/80 hover:text-primary hover:underline disabled:text-muted-foreground/50 disabled:no-underline transition-colors"
+                >
+                  {isResending
+                    ? "Sending…"
+                    : resendCooldown > 0
+                      ? `Resend in ${resendCooldown}s`
+                      : "Resend code"}
+                </button>
               </div>
             </div>
 
             {/* Submit Verification OTP */}
             <button
               type="submit"
-              disabled={isLoading || otpCode.length !== 6}
+              disabled={isLoading || otpCode.length !== 6 || codeExpired}
               className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-semibold flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-lg active:scale-[0.98]"
             >
               {isLoading ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
                 <>
-                  <span>Verify and Open IDE</span>
+                  <span>Verify</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -377,11 +476,11 @@ export default function LoginPage() {
             {/* Cancel / Fallback button */}
             <button
               type="button"
-              onClick={clearAuth}
+              onClick={handleCancel2fa}
               disabled={isLoading}
               className="w-full bg-transparent hover:bg-secondary/20 text-muted-foreground hover:text-foreground rounded-lg py-2 text-xs font-mono transition-all cursor-pointer"
             >
-              Back to Credentials Login
+              Use a different account
             </button>
           </form>
         )}

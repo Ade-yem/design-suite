@@ -6,6 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Design Suite is an AI-driven structural engineering IDE — a monorepo with a FastAPI backend (`apps/api`) and a Next.js frontend (`apps/web`). It automates the pipeline from architectural drawings (DXF/PDF) → geometry parsing → load analysis → reinforcement design → RC drawings, with human-in-the-loop safety gates at each phase.
 
+## Development Setup
+
+### Installing Git Hooks
+
+After cloning the repository, install the pre-commit hook to ensure code quality before commits:
+
+```bash
+bash scripts/install-hooks.sh
+```
+
+This installs automated checks that run before every commit:
+- **Backend**: pytest test suite + type checking
+- **Frontend**: ESLint + TypeScript compilation
+
+Checks are run only on changed files. To bypass checks (not recommended): `git commit --no-verify`
+
 ## Commands
 
 ### Backend (`apps/api/`)
