@@ -366,3 +366,61 @@ Materials/durability are pushed into each member's geometry `meta`
 - [How to use BS 8500 with BS 8110 (concrete grade / exposure / cover)](https://morrisandperry.co.uk/wp-content/uploads/2024/07/how-to-use-bs8500-with-bs8110.pdf)
 - [Checklist to Ensure Structural Stability by Reinforced Design — Skytree](https://www.skytreeconsulting.com/blog/checklist-to-ensure-structural-stability-by-reinforced-design/)
 - [ASCE/SEI 7-22 Minimum Design Loads (load categories overview)](https://www.asce.org/publications-and-news/codes-and-standards/asce-sei-7-22)
+
+---
+
+## Appendix B — Chat decision surfacing (frontend integration)
+
+All chat-based engineer decisions live in the **chat column**, which must
+auto-open whenever a decision is required — even when collapsed.
+
+### B.1 The node → chat bridge (was missing)
+
+Agent nodes communicate with the engineer by appending `AIMessage`s to state.
+The WebSocket layer previously only broadcast raw LLM token streams
+(`on_chat_model_stream`) and gate events, so these **static** messages (the
+analyst's questionnaire, follow-ups, summaries) never reached the chat. Added in
+`apps/api/websocket.py` (`run_or_resume_graph`): on every agent node's
+`on_chain_end`, broadcast each appended AI message as
+
+```jsonc
+{"type": "agent_message", "content": "…", "requires_input": true, "final": true}
+```
+
+`requires_input` is computed from the node's `agent_logs` status
+(`_node_requires_input`): any `awaiting_*`, `*_incomplete`, `validation_failed`,
+`failures_detected`, or the parameters-summary `design_considerations_complete`.
+
+### B.2 Auto-open behaviour
+
+In `apps/web/src/components/ChatSidebar.tsx`:
+- `onAgentMessage` → if `requires_input`, call `setChatOpen(true)` (surfaces the
+  chat even when `w-0`/collapsed). `final` messages render as discrete bubbles;
+  chunked messages still accumulate (future token streaming).
+- `onGateReached` → `setChatOpen(true)` and set the `pendingGate` (the approval
+  itself stays in the always-visible pipeline rail).
+
+`AgentMessage` in `apps/web/src/hooks/useProjectSocket.ts` gained the optional
+`requires_input` / `final` fields.
+
+### B.3 Graph re-entry fix (multi-turn collection)
+
+`analyst_agent → loading_gate` was unconditional, and `loading_gate` is
+`interrupt_before`. A multi-turn dialogue would therefore pause *before* the
+gate; the engineer's next message would resume straight *into* the gate,
+swallowing the reply. Fixed with `analyst_router` (`agents/analyst.py`) +
+conditional edges (`agents/graph.py`): while still gathering inputs the analyst
+routes to `END` (so the next message re-enters the node from the entry point);
+once `analysis_complete` it advances to `loading_gate`. The re-analysis return
+path is preserved (analysis already complete → straight to the gate).
+
+### B.4 Still pending (backend orchestration, out of this slice)
+
+- **Loading / design / drawing gate confirmation → graph resume.** Only the
+  geometry gate is fully wired (`routers/files.py` does `aupdate_state` + resume).
+  `confirm_gate` (`routers/pipeline.py`) currently only bumps DB status; it must
+  also `aupdate_state({"loading_confirmed": True, …})` and trigger
+  `run_or_resume_graph` for the rail's gate approvals to drive the graph.
+- **Runtime validation.** These changes are correct by construction but were not
+  executed (no backend runtime / `node_modules` in this environment); they need a
+  live smoke test of the parse → geometry → analyst-dialogue → analysis path.
