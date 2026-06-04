@@ -5,8 +5,11 @@ Artifact snapshot retrieval and inspection.
 
 Endpoints
 ---------
-GET    /api/v1/artifacts/{project_id}     List all artifacts for a project
-GET    /api/v1/artifacts/detail/{artifact_id}    Retrieve a single artifact
+GET    /api/v1/artifacts/{project_id}        List all artifacts for a project
+GET    /api/v1/artifacts/detail/{artifact_id} Retrieve a single artifact
+
+Persistence is delegated entirely to ``storage.artifact_store`` (memory or
+postgres backend) — this router only handles HTTP concerns.
 """
 
 from __future__ import annotations
@@ -14,15 +17,17 @@ from __future__ import annotations
 import json
 import logging
 from typing import Optional
-from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from dependencies import get_session
+from auth.dependencies import current_active_user
+from db.models.user import User
+from dependencies import get_project
 from middleware.error_handler import StructuralError
-from services.artifacts import artifact_service
+from schemas.artifact import ArtifactRecord
+from schemas.project import ProjectResponse
+from storage.artifact_store import artifact_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -48,11 +53,11 @@ class ArtifactResponse(BaseModel):
         Email of the engineer who approved the gate.
     content : dict | None
         The snapshot content (parsed geometry JSON, etc.).
-        Large artifacts can omit this in list responses.
+        Omitted from list responses; populated by the detail endpoint.
     preview_url : str | None
         Optional URL to a rendered preview.
     download_url : str | None
-        URL to download the artifact (e.g., as JSON or PDF).
+        URL to download the artifact.
     """
 
     artifact_id: str
@@ -66,46 +71,59 @@ class ArtifactResponse(BaseModel):
     download_url: Optional[str] = None
 
 
+def _to_response(record: ArtifactRecord, *, include_content: bool) -> ArtifactResponse:
+    """Map an ArtifactRecord onto the public ArtifactResponse envelope."""
+    content: Optional[dict] = None
+    if include_content and record.content:
+        try:
+            content = json.loads(record.content)
+        except json.JSONDecodeError:
+            content = None
+
+    return ArtifactResponse(
+        artifact_id=record.artifact_id,
+        project_id=record.project_id,
+        stage=record.stage,
+        status=record.status,
+        created_at=record.created_at.isoformat(),
+        author=record.author,
+        content=content,
+        preview_url=record.preview_url,
+        download_url=f"/api/v1/artifacts/download/{record.artifact_id}",
+    )
+
+
 @router.get("/{project_id}")
 async def list_artifacts(
     project_id: str,
-    session: AsyncSession = Depends(get_session),
+    project: ProjectResponse = Depends(get_project),
 ) -> list[ArtifactResponse]:
     """
     List all artifacts (snapshots) for a project.
+
+    Content is omitted from list responses; fetch the detail endpoint for the
+    full payload.
 
     Parameters
     ----------
     project_id : str
         Target project.
+    project : ProjectResponse
+        Resolved + org-scoped project (raises 404 if not accessible).
 
     Returns
     -------
     list[ArtifactResponse]
-        All snapshots, ordered by creation date. Content is omitted from list responses.
+        All snapshots, ordered by creation date.
     """
-    artifacts = await artifact_service.get_artifacts_for_project(session, project_id)
-
-    return [
-        ArtifactResponse(
-            artifact_id=a.artifact_id,
-            project_id=a.project_id,
-            stage=a.stage.value,
-            status=a.status,
-            created_at=a.created_at.isoformat(),
-            author=a.author.email if a.author else None,
-            content=None,  # Omit from list responses
-            preview_url=a.preview_url,
-            download_url=f"/api/v1/artifacts/download/{a.artifact_id}",
-        )
-        for a in artifacts
-    ]
+    records = await artifact_store.list_for_project(project_id)
+    return [_to_response(r, include_content=False) for r in records]
 
 
 @router.get("/detail/{artifact_id}")
 async def get_artifact(
     artifact_id: str,
-    session: AsyncSession = Depends(get_session),
+    user: User = Depends(current_active_user),
 ) -> ArtifactResponse:
     """
     Retrieve a single artifact with full content.
@@ -114,6 +132,8 @@ async def get_artifact(
     ----------
     artifact_id : str
         Target artifact.
+    user : User
+        Authenticated user (auth required).
 
     Returns
     -------
@@ -123,29 +143,14 @@ async def get_artifact(
     Raises
     ------
     StructuralError
-        If the artifact is not found (404).
+        HTTP 404 if the artifact is not found.
     """
-    artifact = await artifact_service.get_artifact_by_id(session, artifact_id)
-
-    if not artifact:
-        raise StructuralError("NOT_FOUND", stage="artifacts", status_code=404)
-
-    # Parse content JSON
-    content = None
-    if artifact.content:
-        try:
-            content = json.loads(artifact.content)
-        except json.JSONDecodeError:
-            pass
-
-    return ArtifactResponse(
-        artifact_id=artifact.artifact_id,
-        project_id=artifact.project_id,
-        stage=artifact.stage.value,
-        status=artifact.status,
-        created_at=artifact.created_at.isoformat(),
-        author=artifact.author.email if artifact.author else None,
-        content=content,
-        preview_url=artifact.preview_url,
-        download_url=f"/api/v1/artifacts/download/{artifact.artifact_id}",
-    )
+    record = await artifact_store.get(artifact_id)
+    if record is None:
+        raise StructuralError(
+            "ARTIFACT_NOT_FOUND",
+            stage="artifacts",
+            details={"artifact_id": artifact_id},
+            status_code=404,
+        )
+    return _to_response(record, include_content=True)
