@@ -16,6 +16,7 @@ import { ArtifactsDrawer } from "@/components/ArtifactsDrawer";
 import { pipelineStatusToStage } from "@/lib/pipelineStatus";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useArtifactStore } from "@/stores/artifactStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/project";
@@ -103,6 +104,7 @@ export default function WorkspacePage(): JSX.Element {
     isLoading,
   } = useProjectStore();
   const { chatOpen, setChatOpen } = useUIStore();
+  const { fetchArtifacts } = useArtifactStore();
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showUploadNudge, setShowUploadNudge] = useState(false);
@@ -116,6 +118,7 @@ export default function WorkspacePage(): JSX.Element {
   useEffect(() => {
     if (activeProject) {
       refreshActiveProject();
+      fetchArtifacts(activeProject.project_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject?.project_id]);
