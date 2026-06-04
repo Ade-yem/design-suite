@@ -182,38 +182,58 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
       >
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={cn(
-              "flex items-start gap-3 animate-fade-in-up",
-              msg.role === "user" && "flex-row-reverse"
-            )}
-          >
+        {messages.map((msg) => {
+          // Detect status events: messages that start with ✓ or 🔧
+          const isStatusEvent =
+            msg.role === "assistant" &&
+            (msg.content.startsWith("✓") || msg.content.startsWith("🔧"));
+
+          if (isStatusEvent) {
+            return (
+              <div
+                key={msg.id}
+                className="flex items-center justify-center py-2 animate-fade-in-up border-t border-b border-border/30"
+              >
+                <span className="text-xs text-foreground/40 font-mono">
+                  {msg.content}
+                </span>
+              </div>
+            );
+          }
+
+          return (
             <div
+              key={msg.id}
               className={cn(
-                "h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5",
-                msg.role === "assistant" ? "bg-primary/15" : "bg-secondary"
+                "flex items-start gap-3 animate-fade-in-up",
+                msg.role === "user" && "flex-row-reverse"
               )}
             >
-              {msg.role === "assistant" ? (
-                <Bot className="h-4 w-4 text-primary" />
-              ) : (
-                <User className="h-4 w-4 text-muted-foreground" />
-              )}
+              <div
+                className={cn(
+                  "h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5",
+                  msg.role === "assistant" ? "bg-primary/15" : "bg-secondary"
+                )}
+              >
+                {msg.role === "assistant" ? (
+                  <Bot className="h-4 w-4 text-primary" />
+                ) : (
+                  <User className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+              <div
+                className={cn(
+                  "rounded-lg px-3 py-2 text-sm leading-relaxed max-w-[85%]",
+                  msg.role === "assistant"
+                    ? "bg-muted text-foreground"
+                    : "bg-primary text-primary-foreground"
+                )}
+              >
+                {msg.content}
+              </div>
             </div>
-            <div
-              className={cn(
-                "rounded-lg px-3 py-2 text-sm leading-relaxed max-w-[85%]",
-                msg.role === "assistant"
-                  ? "bg-muted text-foreground"
-                  : "bg-primary text-primary-foreground"
-              )}
-            >
-              {msg.content}
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {isTyping && <TypingIndicator />}
 
         {/* Gate pointer — the approval itself lives in the pipeline rail. */}

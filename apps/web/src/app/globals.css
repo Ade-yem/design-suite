@@ -39,6 +39,13 @@
   --color-canvas-grid: hsl(var(--canvas-grid));
   --color-engineering-blue: hsl(var(--engineering-blue));
 
+  --color-status-created: hsl(var(--status-created));
+  --color-status-uploaded: hsl(var(--status-uploaded));
+  --color-status-verified: hsl(var(--status-verified));
+  --color-status-loading: hsl(var(--status-loading));
+  --color-status-in-progress: hsl(var(--status-in-progress));
+  --color-status-done: hsl(var(--status-done));
+
   --color-sidebar: hsl(var(--sidebar-background));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-primary: hsl(var(--sidebar-primary));
@@ -119,7 +126,7 @@
   --muted: 217 33% 14%;
   --muted-foreground: 215 20% 55%;
 
-  --accent: 24 95% 53%;
+  --accent: 180 70% 55%;
   --accent-foreground: 0 0% 100%;
 
   --destructive: 0 72% 51%;
@@ -128,7 +135,7 @@
   --success: 142 71% 45%;
   --success-foreground: 0 0% 100%;
 
-  --warning: 24 95% 53%;
+  --warning: 0 72% 51%;
   --warning-foreground: 0 0% 100%;
 
   --border: 217 33% 17%;
@@ -150,6 +157,17 @@
   --canvas-grid: 217 33% 12%;
   --engineering-blue: 217 91% 60%;
   --engineering-blue-glow: 217 91% 60% / 0.2;
+
+  /* Semantic status colors for pipeline stages */
+  --status-created: 215 20% 55%;
+  --status-uploaded: 217 91% 60%;
+  --status-verified: 199 89% 48%;
+  --status-loading: 262 80% 50%;
+  --status-in-progress: 45 93% 51%;
+  --status-done: 142 71% 45%;
+
+  /* Semantic UI colors */
+  --type-floor: 12px;
 }
 
 @layer base {
