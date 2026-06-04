@@ -34,7 +34,7 @@ from pydantic import BaseModel, Field
 
 from dependencies import get_project, require_file_uploaded
 from middleware.error_handler import StructuralError
-from schemas.project import ProjectResponse
+from schemas.project import ProjectResponse, ProjectStatus
 from services.files import file_service
 from storage.file_handler import file_handler
 from storage.job_store import job_store
@@ -58,6 +58,8 @@ class GeometryVerificationRequest(BaseModel):
         Optional list of member-level corrections to apply before advancing.
     notes : str
         Free-text note logged alongside the confirmation.
+    last_updated_at : str | None
+        The ISO timestamp of the last known update for concurrency checks.
     """
 
     confirmed: bool = Field(..., description="Must be True to pass the safety gate.")
@@ -65,6 +67,9 @@ class GeometryVerificationRequest(BaseModel):
         None, description="Member geometry corrections to apply."
     )
     notes: str = Field("", description="Engineer's confirmation notes.")
+    last_updated_at: Optional[str] = Field(
+        None, description="The ISO timestamp of the last known update for concurrency checks."
+    )
 
 
 class ScaleCorrectionRequest(BaseModel):
@@ -227,6 +232,24 @@ async def upload_file(
         ``UNSUPPORTED_FILE`` — wrong file type.
         ``FILE_TOO_LARGE``  — exceeds 50 MB.
     """
+    if project.pipeline_status_ordinal >= ProjectStatus.GEOMETRY_VERIFIED:
+        raise StructuralError(
+            "PIPELINE_ERROR",
+            stage="file_upload",
+            details={"reason": "Cannot upload drawing. Geometry has already been verified for this project."},
+            status_code=400,
+        )
+
+    # Check if there is another parsing job active
+    jobs = await job_store.list_for_project(project_id)
+    if any(j.job_type == "parsing" and j.status in ("queued", "running") for j in jobs):
+        raise StructuralError(
+            "PIPELINE_ERROR",
+            stage="file_upload",
+            details={"reason": "A parsing job is already in progress for this project."},
+            status_code=400,
+        )
+
     saved_path = await file_handler.save(project_id, file)
 
     saved_pdf_path: Optional[str] = None
@@ -256,7 +279,11 @@ async def upload_file(
 
 
 @router.get("/{project_id}/parse-status/{job_id}")
-async def get_parse_status(project_id: str, job_id: str) -> dict:
+async def get_parse_status(
+    project_id: str,
+    job_id: str,
+    project: ProjectResponse = Depends(get_project),
+) -> dict:
     """
     Poll the status of an async parsing job.
 
@@ -317,6 +344,7 @@ async def get_parsed_geometry(
 async def verify_geometry(
     project_id: str,
     payload: GeometryVerificationRequest,
+    background_tasks: BackgroundTasks,
     project: ProjectResponse = Depends(require_file_uploaded),
 ) -> dict:
     """
@@ -331,6 +359,8 @@ async def verify_geometry(
         Target project.
     payload : GeometryVerificationRequest
         Must contain ``confirmed = True``.
+    background_tasks : BackgroundTasks
+        FastAPI background task manager.
     project : ProjectResponse
         Gate dependency — project must have a file uploaded.
 
@@ -342,7 +372,7 @@ async def verify_geometry(
     Raises
     ------
     StructuralError
-        HTTP 400 if ``confirmed`` is False.
+        HTTP 400 if ``confirmed`` is False or parsing is active.
     """
     if not payload.confirmed:
         raise StructuralError(
@@ -351,19 +381,42 @@ async def verify_geometry(
             details={"reason": "Field 'confirmed' must be true to pass this gate."},
             status_code=400,
         )
+
+    # Concurrency check: Reject if parsing job is active
+    jobs = await job_store.list_for_project(project_id)
+    if any(j.job_type == "parsing" and j.status in ("queued", "running") for j in jobs):
+        raise StructuralError(
+            "PIPELINE_ERROR",
+            stage="geometry_verification",
+            details={"reason": "Cannot verify geometry while a parsing job is currently active."},
+            status_code=400,
+        )
+
     try:
-        return await file_service.verify_geometry(
+        res = await file_service.verify_geometry(
             project_id,
             corrections=payload.corrections,
             notes=payload.notes,
+            last_updated_at=payload.last_updated_at,
         )
     except ValueError as exc:
         raise StructuralError(
             "FILE_PARSE_ERROR",
             stage="geometry_verification",
             details={"reason": str(exc)},
-            status_code=404,
+            status_code=400,
         ) from exc
+
+    # Write confirmation to LangGraph checkpointer state
+    import agents.graph as _agent_graph
+    config = {"configurable": {"thread_id": project_id}}
+    await _agent_graph.app.aupdate_state(config, {"geometry_verified": True})
+
+    # Trigger resume in the background
+    from websocket import run_or_resume_graph
+    background_tasks.add_task(run_or_resume_graph, project_id, None)
+
+    return res
 
 
 @router.get("/{project_id}/scale")

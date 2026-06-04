@@ -53,8 +53,69 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         Secret used to sign email verification tokens.
     """
 
-    reset_password_token_secret = SECRET
-    verification_token_secret = SECRET
+    reset_password_token_secret = settings.RESET_PASSWORD_SECRET_KEY
+    verification_token_secret = settings.VERIFICATION_SECRET_KEY
+
+    # pyrefly: ignore [bad-override]
+    async def create(
+        self,
+        user_create: Any,
+        safe: bool = False,
+        request: Optional[Request] = None,
+    ) -> User:
+        """
+        Create a new user and associate them with a new Organisation atomically.
+
+        Parameters
+        ----------
+        user_create : Any
+            The user creation schema.
+        safe : bool
+            Whether to sanitize the input.
+        request : Request | None
+            The originating HTTP request.
+
+        Returns
+        -------
+        User
+            The created User model.
+        """
+        user_db = cast(SQLAlchemyUserDatabase, self.user_db)
+        session = user_db.session
+
+        if getattr(user_create, "organisation_id", None) is None:
+            base_name = getattr(user_create, "full_name", None) or user_create.email.split("@")[0]
+            org_name = f"{base_name.title()}'s Organisation"
+            try:
+                unique_slug = await self._generate_unique_slug(session, base_name)
+                org = Organisation(name=org_name, slug=unique_slug)
+                session.add(org)
+                await session.flush()  # Generates org ID
+                
+                # Assign organisation_id to the user being created
+                user_create.organisation_id = org.id
+            except Exception as e:
+                logger.error(
+                    "Failed to auto-create Organisation for user %s during create: %s",
+                    user_create.email,
+                    str(e),
+                    exc_info=True,
+                )
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="ORGANISATION_CREATION_FAILED",
+                )
+
+        try:
+            created_user = await super().create(user_create, safe=safe, request=request)
+            # pyrefly: ignore [bad-return]
+            return created_user
+        except Exception as e:
+            logger.error("User creation failed, rolling back organization: %s", str(e))
+            await session.rollback()
+            raise e
+
 
     def _slugify(self, text: str) -> str:
         """

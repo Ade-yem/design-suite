@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     APP_URL: str = "http://localhost:5000"
     FRONTEND_URL: str = os.getenv("FRONTEND_URL") or "http://localhost:3000"
     SECRET_KEY: str = os.getenv("SECRET_KEY") or "change-me-in-production"
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY") or os.getenv("SECRET_KEY") or "change-me-in-production"
+    RESET_PASSWORD_SECRET_KEY: str = os.getenv("RESET_PASSWORD_SECRET_KEY") or os.getenv("SECRET_KEY") or "change-me-in-production"
+    VERIFICATION_SECRET_KEY: str = os.getenv("VERIFICATION_SECRET_KEY") or os.getenv("SECRET_KEY") or "change-me-in-production"
     JWT_LIFETIME_SECONDS: int = int(os.getenv("JWT_LIFETIME_SECONDS") or "") if os.getenv("JWT_LIFETIME_SECONDS") else 3600
 
     # ── CORS ──────────────────────────────────────────────────────────────────
@@ -115,6 +118,32 @@ class Settings(BaseSettings):
         """Promote JOB_STORE_BACKEND to 'redis' when REDIS_URL is present."""
         if self.REDIS_URL and self.JOB_STORE_BACKEND == "memory":
             self.JOB_STORE_BACKEND = "redis"  # type: ignore[assignment]
+        return self
+
+    @model_validator(mode="after")
+    def _validate_secrets(self) -> "Settings":
+        """Fail fast in non-development if any secrets are default or empty."""
+        is_dev = self.APP_ENV in ("development", "test")
+        default_val = "change-me-in-production"
+        
+        # In non-dev, secret keys must not be default
+        if not is_dev:
+            for name, val in [
+                ("SECRET_KEY", self.SECRET_KEY),
+                ("JWT_SECRET_KEY", self.JWT_SECRET_KEY),
+                ("RESET_PASSWORD_SECRET_KEY", self.RESET_PASSWORD_SECRET_KEY),
+                ("VERIFICATION_SECRET_KEY", self.VERIFICATION_SECRET_KEY),
+            ]:
+                if not val or val == default_val:
+                    raise ValueError(
+                        f"Security configuration error: {name} must be set to a secure, "
+                        f"non-default value in environment '{self.APP_ENV}'."
+                    )
+        
+        if self.PROJECT_STORE_BACKEND == "postgres" and not self.DATABASE_URL:
+            raise ValueError(
+                "PROJECT_STORE_BACKEND is set to 'postgres' but DATABASE_URL is missing."
+            )
         return self
 
     # ── Project / Data store ──────────────────────────────────────────────────
