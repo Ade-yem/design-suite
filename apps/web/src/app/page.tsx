@@ -1,7 +1,7 @@
 "use client";
 
 import { JSX, useEffect, useRef, useState } from "react";
-import { Upload, X, Loader2, Compass } from "lucide-react";
+import { Upload, X } from "lucide-react";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import {

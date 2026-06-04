@@ -7,7 +7,6 @@ import {
   FileUp,
   FileText,
   CheckCircle2,
-  Trash2,
   Loader2,
   AlertCircle,
   X,
@@ -15,7 +14,6 @@ import {
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import { useProjectSocket } from "@/hooks/useProjectSocket";
-import type { JobStatus } from "@/types/project";
 
 /**
  * Props for the CanvasUploader component.
@@ -38,8 +36,6 @@ export interface CanvasUploaderHandle {
 }
 
 type UploadState = "idle" | "uploading" | "parsing" | "error";
-
-const POLL_INTERVAL_MS = 2000;
 
 /**
  * CanvasUploader component.

@@ -18,21 +18,21 @@ export function AuthGuard({ children }: AuthGuardProps) {
   // render children before hasHydrated(), the request interceptor reads a null
   // token and requests go out without Authorization headers.
   const [isReady, setIsReady] = useState(
-    () => typeof window !== "undefined" && useAuthStore.persist?.hasHydrated?.() || false
+    () => typeof window !== "undefined" && (useAuthStore.persist?.hasHydrated?.() || !useAuthStore.persist) || false
   );
 
   useEffect(() => {
-    if (isReady) return;
     if (typeof window === "undefined") return;
-    if (!useAuthStore.persist) {
-      setIsReady(true);
-      return;
-    }
+    if (!useAuthStore.persist) return;
+
     const unsub = useAuthStore.persist.onFinishHydration(() => setIsReady(true));
     // In case hydration already finished between the useState initializer and this effect
-    if (useAuthStore.persist.hasHydrated?.()) setIsReady(true);
+    if (useAuthStore.persist.hasHydrated?.()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsReady(true);
+    }
     return unsub;
-  }, [isReady]);
+  }, []);
 
   const isPublicRoute =
     pathname === "/login" ||

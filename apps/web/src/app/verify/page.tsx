@@ -18,15 +18,15 @@ function VerifyContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
 
-  const [status, setStatus] = useState<"verifying" | "success" | "failed">("verifying");
-  const [errorMessage, setErrorMessage] = useState("");
+  const [status, setStatus] = useState<"verifying" | "success" | "failed">(
+    token ? "verifying" : "failed"
+  );
+  const [errorMessage, setErrorMessage] = useState(
+    token ? "" : "No verification activation token was found in the URL. Please verify your verification link."
+  );
 
   useEffect(() => {
-    if (!token) {
-      setStatus("failed");
-      setErrorMessage("No verification activation token was found in the URL. Please verify your verification link.");
-      return;
-    }
+    if (!token) return;
 
     const triggerVerification = async () => {
       try {

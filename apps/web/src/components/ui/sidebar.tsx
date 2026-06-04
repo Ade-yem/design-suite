@@ -19,6 +19,8 @@ const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
+const generateSkeletonWidth = () => `${Math.floor(Math.random() * 40) + 50}%`;
+
 type SidebarContext = {
   state: "expanded" | "collapsed";
   open: boolean;
@@ -531,10 +533,8 @@ const SidebarMenuSkeleton = React.forwardRef<
     showIcon?: boolean;
   }
 >(({ className, showIcon = false, ...props }, ref) => {
-  // Random width between 50 to 90%.
-  const width = React.useMemo(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`;
-  }, []);
+  // Random width between 50 to 90%, generated once on mount.
+  const width = React.useMemo(() => generateSkeletonWidth(), []);
 
   return (
     <div
