@@ -43,6 +43,7 @@ from middleware.request_logger import RequestLoggerMiddleware
 # ── Router imports ─────────────────────────────────────────────────────────────
 from routers import (
     analysis,
+    artifacts,
     chat,
     design,
     drawings,
@@ -157,6 +158,7 @@ app.include_router(drawings.router,  prefix="/api/v1/drawings",  tags=["Drawings
 app.include_router(reports.router,   prefix="/api/v1/reports",   tags=["Reports"])
 app.include_router(pipeline.router,  prefix="/api/v1/pipeline",  tags=["Pipeline"])
 app.include_router(jobs.router,      prefix="/api/v1/jobs",      tags=["Jobs"])
+app.include_router(artifacts.router, prefix="/api/v1/artifacts", tags=["Artifacts"])
 
 # ── Auth routes (fastapi-users) ────────────────────────────────────────────────
 app.include_router(auth_router,          prefix="/api/auth/jwt",    tags=["Auth"])

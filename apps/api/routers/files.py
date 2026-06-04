@@ -32,10 +32,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, statu
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
+from auth.dependencies import current_active_user
+from db.models.user import User
 from dependencies import get_project, require_file_uploaded
 from middleware.error_handler import StructuralError
 from schemas.project import ProjectResponse, ProjectStatus
 from services.files import file_service
+from storage.artifact_store import artifact_store
 from storage.file_handler import file_handler
 from storage.job_store import job_store
 
@@ -346,12 +349,16 @@ async def verify_geometry(
     payload: GeometryVerificationRequest,
     background_tasks: BackgroundTasks,
     project: ProjectResponse = Depends(require_file_uploaded),
+    user: User = Depends(current_active_user),
 ) -> dict:
     """
     Human-in-the-loop Safety Gate 1: engineer confirms parsed geometry.
 
     Until this endpoint is called with ``confirmed: true``, no loading or
     analysis endpoints will accept requests for this project.
+
+    On confirmation, freezes an immutable snapshot (artifact) of the verified
+    geometry for the audit trail.
 
     Parameters
     ----------
@@ -363,11 +370,13 @@ async def verify_geometry(
         FastAPI background task manager.
     project : ProjectResponse
         Gate dependency — project must have a file uploaded.
+    user : User
+        Authenticated user — recorded as the snapshot author.
 
     Returns
     -------
     dict
-        ``{status, member_count, verified_at}``.
+        ``{status, member_count, verified_at, artifact_id}``.
 
     Raises
     ------
@@ -393,12 +402,28 @@ async def verify_geometry(
         )
 
     try:
-        res = await file_service.verify_geometry(
+        result = await file_service.verify_geometry(
             project_id,
             corrections=payload.corrections,
             notes=payload.notes,
             last_updated_at=payload.last_updated_at,
         )
+
+        # Freeze an immutable snapshot of the verified geometry (audit trail).
+        from db.models.artifact import ArtifactStage
+
+        parsed_geometry = await file_service.get_parsed(project_id)
+        if parsed_geometry:
+            snapshot = await artifact_store.create_snapshot(
+                project_id,
+                ArtifactStage.VERIFICATION,
+                content=parsed_geometry,
+                author_id=user.id,
+                author_email=user.email,
+                preview_url=None,  # TODO: generate geometry diagram on approval
+            )
+            result["artifact_id"] = snapshot.artifact_id
+
     except ValueError as exc:
         raise StructuralError(
             "FILE_PARSE_ERROR",
@@ -416,7 +441,7 @@ async def verify_geometry(
     from websocket import run_or_resume_graph
     background_tasks.add_task(run_or_resume_graph, project_id, None)
 
-    return res
+    return result
 
 
 @router.get("/{project_id}/scale")

@@ -111,6 +111,9 @@ class Project(Base):
     drawing: Mapped["ProjectDrawing | None"] = relationship(
         "ProjectDrawing", back_populates="project", uselist=False, cascade="all, delete-orphan"
     )
+    artifacts: Mapped[list["Artifact"]] = relationship(
+        "Artifact", back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class ProjectMember(Base):
