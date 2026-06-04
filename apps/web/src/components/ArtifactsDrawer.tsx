@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Download, Eye, Lock } from "lucide-react";
 import { useArtifactStore, type Artifact } from "@/stores/artifactStore";
 
