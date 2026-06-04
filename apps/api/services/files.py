@@ -357,6 +357,7 @@ class FileService:
         project_id: str,
         corrections: Optional[list[dict]] = None,
         notes: str = "",
+        last_updated_at: Optional[str] = None,
     ) -> dict:
         """
         Apply optional geometry corrections and advance to GEOMETRY_VERIFIED.
@@ -371,6 +372,8 @@ class FileService:
             Member-level corrections to apply to the cached geometry.
         notes : str
             Engineer confirmation notes.
+        last_updated_at : str | None
+            The ISO timestamp of the last known update for concurrency checks.
 
         Returns
         -------
@@ -380,7 +383,8 @@ class FileService:
         Raises
         ------
         ValueError
-            If no parsed geometry exists for this project.
+            If no parsed geometry exists, scale is not confirmed, parsing is active,
+            or concurrency check fails.
         """
         try:
             parsed = await self.get_parsed(project_id)
@@ -390,13 +394,86 @@ class FileService:
                 "no parsed data found."
             ) from exc
 
+        # Check if parsing is active
+        from storage.job_store import job_store
+        jobs = await job_store.list_for_project(project_id)
+        if any(j.job_type == "parsing" and j.status in ("queued", "running") for j in jobs):
+            raise ValueError(
+                "Cannot verify geometry: a file parsing job is currently active."
+            )
+
+        # Enforce scale confirmation
+        try:
+            scale = await self.get_scale(project_id)
+        except KeyError as exc:
+            raise ValueError(
+                f"Cannot verify geometry for project '{project_id}': "
+                "scale must be confirmed first."
+            ) from exc
+
+        if not scale or not scale.get("confirmed"):
+            raise ValueError(
+                f"Cannot verify geometry for project '{project_id}': "
+                "scale factor must be confirmed by the engineer first."
+            )
+
+        # Concurrency / Optimistic locking check
+        if last_updated_at:
+            proj = await project_store.get(project_id, bypass_tenant_check=True)
+            if proj:
+                try:
+                    client_dt = datetime.fromisoformat(last_updated_at.replace("Z", "+00:00"))
+                    db_dt = proj.updated_at
+                    if db_dt > client_dt:
+                        raise ValueError(
+                            "Concurrency check failed: The project geometry has been updated "
+                            "by another session. Please refresh and try again."
+                        )
+                except ValueError as e:
+                    if "Concurrency check" in str(e):
+                        raise
+                    pass
+
         if corrections:
             parsed["user_corrections"] = corrections
+            
+            # Map existing members by member_id
+            existing_members = {
+                m.get("member_id"): m
+                for m in parsed.get("members", [])
+                if m.get("member_id")
+            }
+            
+            for correction in corrections:
+                member_id = correction.get("member_id")
+                if not member_id:
+                    continue
+                if member_id in existing_members:
+                    # Update fields of existing member
+                    existing_members[member_id].update(correction)
+                else:
+                    # Append new member if it doesn't exist
+                    parsed.setdefault("members", []).append(correction)
+                    existing_members[member_id] = correction
+
+            # Rebuild members list and save
+            parsed["members"] = list(existing_members.values())
             _store.set_parsed(project_id, parsed)
 
+        # Batch synchronize project store member registry with the updated members list
+        mids = [
+            m.get("member_id")
+            for m in parsed.get("members", [])
+            if m.get("member_id")
+        ]
+        await project_store.register_members_batch(project_id, mids)
+
+        # Advance status
         await project_store.advance_status(project_id, ProjectStatus.GEOMETRY_VERIFIED)
-        scale = _store.get_scale(project_id) or {}
-        await self._db_save_geometry(project_id, parsed, scale)
+        
+        # Save geometry to database with verified_at timestamp
+        now = datetime.now(timezone.utc)
+        await self._db_save_geometry(project_id, parsed, scale, verified_at=now)
         member_count = len(parsed.get("members", []))
 
         logger.info(
@@ -408,7 +485,7 @@ class FileService:
         return {
             "status": "verified",
             "member_count": member_count,
-            "verified_at": datetime.now(timezone.utc).isoformat(),
+            "verified_at": now.isoformat(),
         }
 
     async def register_geometry(self, project_id: str, data: dict) -> None:
@@ -438,7 +515,7 @@ class FileService:
 
     # ── DB persistence helpers ────────────────────────────────────────────────
 
-    async def _db_save_geometry(self, project_id: str, geometry: dict, scale: dict) -> None:
+    async def _db_save_geometry(self, project_id: str, geometry: dict, scale: dict, verified_at: datetime | None = None,) -> None:
         """Upsert parsed geometry and scale to ProjectGeometry. Silent no-op if DB unavailable."""
         from config import settings
         if settings.PROJECT_STORE_BACKEND != "postgres":
@@ -462,11 +539,14 @@ class FileService:
                     row.geometry = geo_str
                     row.scale_json = scale_str
                     row.updated_at = now
+                    if verified_at is not None:
+                        row.verified_at = verified_at
                 else:
                     session.add(ProjectGeometry(
                         project_id=project_id,
                         geometry=geo_str,
                         scale_json=scale_str,
+                        verified_at=verified_at,
                     ))
                 await session.commit()
         except RuntimeError:

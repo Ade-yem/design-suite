@@ -39,7 +39,7 @@ def get_jwt_strategy() -> JWTStrategy:
         Configured JWT strategy with secret and lifetime from settings.
     """
     return JWTStrategy(
-        secret=settings.SECRET_KEY,
+        secret=settings.JWT_SECRET_KEY,
         lifetime_seconds=settings.JWT_LIFETIME_SECONDS,
     )
 

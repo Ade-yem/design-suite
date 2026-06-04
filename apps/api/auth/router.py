@@ -443,6 +443,11 @@ async def google_oauth_callback(
                 exc_info=True,
             )
             await session.rollback()
+            try:
+                # Clean up the user record to prevent orphans with null organisation_id
+                await user_manager.delete(user)
+            except Exception as del_err:
+                logger.error("Failed to delete orphaned OAuth user: %s", del_err)
             return RedirectResponse(
                 url=f"{settings.FRONTEND_URL}/login?error=organisation_creation_failed",
                 status_code=302,

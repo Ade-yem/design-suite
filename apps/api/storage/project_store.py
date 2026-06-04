@@ -94,16 +94,29 @@ class MemoryProjectStore:
         self._members[project_id] = set()
         return self._to_response(record)
 
-    async def get(self, project_id: str, organisation_id: str | None = None) -> Optional[ProjectResponse]:
+    async def get(
+        self,
+        project_id: str,
+        organisation_id: str | None = None,
+        bypass_tenant_check: bool = False,
+    ) -> Optional[ProjectResponse]:
         record = self._projects.get(project_id)
         if record is None:
             return None
-        if organisation_id is not None and record.get("organisation_id") != organisation_id:
-            return None
+        if not bypass_tenant_check:
+            if organisation_id is None:
+                return None
+            if record.get("organisation_id") != organisation_id:
+                return None
         return self._to_response(record)
 
-    async def get_or_404(self, project_id: str, organisation_id: str | None = None) -> ProjectResponse:
-        project = await self.get(project_id, organisation_id)
+    async def get_or_404(
+        self,
+        project_id: str,
+        organisation_id: str | None = None,
+        bypass_tenant_check: bool = False,
+    ) -> ProjectResponse:
+        project = await self.get(project_id, organisation_id, bypass_tenant_check=bypass_tenant_check)
         if project is None:
             raise StructuralError(
                 error_code="PROJECT_NOT_FOUND",
@@ -112,11 +125,16 @@ class MemoryProjectStore:
             )
         return project
 
-    async def list_all(self, organisation_id: str | None = None) -> list[ProjectListItem]:
+    async def list_all(
+        self, organisation_id: str | None = None, bypass_tenant_check: bool = False
+    ) -> list[ProjectListItem]:
         items = []
         for r in self._projects.values():
-            if organisation_id is not None and r.get("organisation_id") != organisation_id:
-                continue
+            if not bypass_tenant_check:
+                if organisation_id is None:
+                    continue
+                if r.get("organisation_id") != organisation_id:
+                    continue
             items.append(
                 ProjectListItem(
                     project_id=r["project_id"],
@@ -129,13 +147,20 @@ class MemoryProjectStore:
         return sorted(items, key=lambda x: x.updated_at, reverse=True)
 
     async def update(
-        self, project_id: str, data: ProjectUpdate, organisation_id: str | None = None
+        self,
+        project_id: str,
+        data: ProjectUpdate,
+        organisation_id: str | None = None,
+        bypass_tenant_check: bool = False,
     ) -> Optional[ProjectResponse]:
         record = self._projects.get(project_id)
         if record is None:
             return None
-        if organisation_id is not None and record.get("organisation_id") != organisation_id:
-            return None
+        if not bypass_tenant_check:
+            if organisation_id is None:
+                return None
+            if record.get("organisation_id") != organisation_id:
+                return None
         if data.name is not None:
             record["name"] = data.name
         if data.reference is not None:
@@ -147,12 +172,20 @@ class MemoryProjectStore:
         record["updated_at"] = datetime.now(timezone.utc)
         return self._to_response(record)
 
-    async def delete(self, project_id: str, organisation_id: str | None = None) -> bool:
+    async def delete(
+        self,
+        project_id: str,
+        organisation_id: str | None = None,
+        bypass_tenant_check: bool = False,
+    ) -> bool:
         if project_id not in self._projects:
             return False
         record = self._projects[project_id]
-        if organisation_id is not None and record.get("organisation_id") != organisation_id:
-            return False
+        if not bypass_tenant_check:
+            if organisation_id is None:
+                return False
+            if record.get("organisation_id") != organisation_id:
+                return False
         del self._projects[project_id]
         self._members.pop(project_id, None)
         return True
@@ -193,8 +226,7 @@ class MemoryProjectStore:
             List of member identifiers to register.
         """
         if project_id in self._members:
-            for mid in member_ids:
-                self._members[project_id].add(mid)
+            self._members[project_id] = set(member_ids)
 
     async def remove_member(self, project_id: str, member_id: str) -> None:
         if project_id in self._members:
@@ -270,7 +302,12 @@ class PostgresProjectStore:
             await session.refresh(row)
             return self._to_response(row, member_count=0)
 
-    async def get(self, project_id: str, organisation_id: str | None = None) -> Optional[ProjectResponse]:
+    async def get(
+        self,
+        project_id: str,
+        organisation_id: str | None = None,
+        bypass_tenant_check: bool = False,
+    ) -> Optional[ProjectResponse]:
         from db.session import get_session_maker
         from db.models.project import Project, ProjectMember
         from sqlalchemy import select, func
@@ -278,7 +315,9 @@ class PostgresProjectStore:
         session_maker = get_session_maker()
         async with session_maker() as session:
             stmt = select(Project).where(Project.project_id == project_id)
-            if organisation_id is not None:
+            if not bypass_tenant_check:
+                if organisation_id is None:
+                    return None
                 stmt = stmt.where(Project.organisation_id == organisation_id)
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
@@ -290,8 +329,13 @@ class PostgresProjectStore:
             ).scalar_one()
             return self._to_response(row, member_count=count)
 
-    async def get_or_404(self, project_id: str, organisation_id: str | None = None) -> ProjectResponse:
-        project = await self.get(project_id, organisation_id)
+    async def get_or_404(
+        self,
+        project_id: str,
+        organisation_id: str | None = None,
+        bypass_tenant_check: bool = False,
+    ) -> ProjectResponse:
+        project = await self.get(project_id, organisation_id, bypass_tenant_check=bypass_tenant_check)
         if project is None:
             raise StructuralError(
                 error_code="PROJECT_NOT_FOUND",
@@ -300,7 +344,9 @@ class PostgresProjectStore:
             )
         return project
 
-    async def list_all(self, organisation_id: str | None = None) -> list[ProjectListItem]:
+    async def list_all(
+        self, organisation_id: str | None = None, bypass_tenant_check: bool = False
+    ) -> list[ProjectListItem]:
         from db.session import get_session_maker
         from db.models.project import Project
         from sqlalchemy import select
@@ -308,7 +354,9 @@ class PostgresProjectStore:
         session_maker = get_session_maker()
         async with session_maker() as session:
             stmt = select(Project)
-            if organisation_id is not None:
+            if not bypass_tenant_check:
+                if organisation_id is None:
+                    return []
                 stmt = stmt.where(Project.organisation_id == organisation_id)
             stmt = stmt.order_by(Project.updated_at.desc())
             rows = (await session.execute(stmt)).scalars().all()
@@ -326,7 +374,11 @@ class PostgresProjectStore:
             return res
 
     async def update(
-        self, project_id: str, data: ProjectUpdate, organisation_id: str | None = None
+        self,
+        project_id: str,
+        data: ProjectUpdate,
+        organisation_id: str | None = None,
+        bypass_tenant_check: bool = False,
     ) -> Optional[ProjectResponse]:
         from db.session import get_session_maker
         from db.models.project import Project, ProjectMember
@@ -335,7 +387,9 @@ class PostgresProjectStore:
         session_maker = get_session_maker()
         async with session_maker() as session:
             stmt = select(Project).where(Project.project_id == project_id)
-            if organisation_id is not None:
+            if not bypass_tenant_check:
+                if organisation_id is None:
+                    return None
                 stmt = stmt.where(Project.organisation_id == organisation_id)
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
@@ -358,7 +412,12 @@ class PostgresProjectStore:
             ).scalar_one()
             return self._to_response(row, member_count=count)
 
-    async def delete(self, project_id: str, organisation_id: str | None = None) -> bool:
+    async def delete(
+        self,
+        project_id: str,
+        organisation_id: str | None = None,
+        bypass_tenant_check: bool = False,
+    ) -> bool:
         from db.session import get_session_maker
         from db.models.project import Project
         from sqlalchemy import select
@@ -366,7 +425,9 @@ class PostgresProjectStore:
         session_maker = get_session_maker()
         async with session_maker() as session:
             stmt = select(Project).where(Project.project_id == project_id)
-            if organisation_id is not None:
+            if not bypass_tenant_check:
+                if organisation_id is None:
+                    return False
                 stmt = stmt.where(Project.organisation_id == organisation_id)
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
@@ -473,12 +534,9 @@ class PostgresProjectStore:
         member_ids : list[str]
             List of member identifiers to register.
         """
-        if not member_ids:
-            return
-
         from db.session import get_session_maker
         from db.models.project import ProjectMember
-        from sqlalchemy import select
+        from sqlalchemy import select, delete
 
         session_maker = get_session_maker()
         async with session_maker() as session:
@@ -486,8 +544,18 @@ class PostgresProjectStore:
             stmt = select(ProjectMember.member_id).where(ProjectMember.project_id == project_id)
             existing_rows = (await session.execute(stmt)).scalars().all()
             existing_set = set(existing_rows)
+            target_set = set(member_ids)
 
-            # 2. Filter new members and prepare batch insert
+            # 2. Delete obsolete members
+            obsolete = existing_set - target_set
+            if obsolete:
+                del_stmt = delete(ProjectMember).where(
+                    ProjectMember.project_id == project_id,
+                    ProjectMember.member_id.in_(list(obsolete))
+                )
+                await session.execute(del_stmt)
+
+            # 3. Filter new members and prepare batch insert
             new_members = []
             added_in_batch = set()
             for mid in member_ids:
@@ -512,15 +580,16 @@ class PostgresProjectStore:
                         )
                     )
 
-            # 3. Add and commit all new members in a single transaction
+            # 4. Add and commit all modifications in a single transaction
             if new_members:
                 session.add_all(new_members)
-                await session.commit()
-                logger.info(
-                    "Batch registered %d new members for project %s", 
-                    len(new_members), 
-                    project_id
-                )
+            await session.commit()
+            logger.info(
+                "Batch synchronized members for project %s: deleted %d, added %d", 
+                project_id,
+                len(obsolete),
+                len(new_members),
+            )
 
     async def remove_member(self, project_id: str, member_id: str) -> None:
         from db.session import get_session_maker
