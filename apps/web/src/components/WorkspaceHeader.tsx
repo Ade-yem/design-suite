@@ -1,12 +1,28 @@
 import { MessageSquare } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { getPipelineStatus } from "@/lib/pipelineStatus";
 import { cn } from "@/lib/utils";
 
 export function WorkspaceHeader() {
   const { chatOpen, chatUnread, toggleChat } = useUIStore();
+  const { activeProject } = useProjectStore();
+  const status = activeProject ? getPipelineStatus(activeProject.pipeline_status) : null;
 
   return (
-    <header className="h-12 flex items-center justify-end px-4 border-b border-border bg-card shrink-0">
+    <header className="h-12 flex items-center justify-between px-4 border-b border-border bg-card shrink-0">
+      {/* Left: project breadcrumb */}
+      {activeProject && (
+        <div className="text-xs text-foreground/70 font-medium">
+          <span className="text-foreground">{activeProject.name}</span>
+          <span className="mx-2 text-foreground/40">·</span>
+          <span>{activeProject.reference}</span>
+          <span className="mx-2 text-foreground/40">·</span>
+          <span className={status?.textClass}>{status?.label}</span>
+        </div>
+      )}
+
+      {/* Right: chat toggle */}
       <button
         onClick={toggleChat}
         className={cn(
