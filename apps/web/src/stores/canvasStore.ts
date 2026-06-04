@@ -242,6 +242,14 @@ interface CanvasActions {
    * Clear all canvas state. Called when switching projects or signing out.
    */
   clearCanvas: () => void;
+
+  /**
+   * Compute zoom/pan to focus on a single member, then apply it.
+   * Zooms and centers the canvas on the specified member.
+   *
+   * @param memberId - The member ID to focus on.
+   */
+  focusMember: (memberId: string, canvasW: number, canvasH: number) => void;
 }
 
 export type CanvasStore = CanvasState & CanvasActions;
@@ -368,4 +376,23 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
   },
 
   clearCanvas: () => set(INITIAL_STATE),
+
+  focusMember: (memberId, canvasW, canvasH) => {
+    const { members } = get();
+    const member = members.find((m) => m.member_id === memberId);
+    if (!member) return;
+
+    // Compute bounds for this single member
+    const bounds = computeBounds([member]);
+    if (!bounds) return;
+
+    // Reuse the fitTransform helper to get zoom/pan for this bounds
+    // Use 5% padding for a balanced zoom
+    const transform = computeFitTransform(bounds, canvasW, canvasH, 0.05);
+
+    set({
+      pan: transform.pan,
+      zoom: transform.zoom,
+    });
+  },
 }));
