@@ -118,6 +118,20 @@ class StructuralDesignState(TypedDict, total=False):
 
     # ── 4. Loading ────────────────────────────────────────────────────────────
 
+    project_parameters: Optional[dict]
+    """
+    Design considerations gathered conversationally by the Analyst *after*
+    geometry confirmation and *before* loads are assembled.  Captures the
+    qualitative project context that governs loading and parameter selection.
+
+    Schema: {building_type, building_purpose, occupancy_category,
+             is_multistorey, num_storeys, storey_height_m, is_braced,
+             dead_loads: {finishes_kNm2, screed_kNm2, services_kNm2,
+                          partitions_kNm2}, imposed_qk_kNm2,
+             bearing_capacity_kPa}.
+    None until the engineer has answered the design-considerations dialogue.
+    """
+
     load_definition: Optional[dict]
     """
     Validated load definition payload matching ``LoadDefinitionRequest`` schema.
@@ -258,6 +272,7 @@ def initial_state(project_id: str, design_code: str = "BS8110") -> StructuralDes
         geometry_verified=False,
         unit_confirmation=None,
         geometry_corrections=[],
+        project_parameters=None,
         load_definition=None,
         loading_output=None,
         loading_confirmed=False,
