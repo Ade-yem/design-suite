@@ -48,19 +48,21 @@ interface SidebarTooltipProps {
 }
 
 function SidebarTooltip({ label, children }: SidebarTooltipProps) {
-  const [mounted, setMounted] = useState(false);
   const [coords, setCoords] = useState<{ x: number; y: number } | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsMounted(true);
+    return () => {
+      setIsMounted(false);
+    };
   }, []);
 
   const handleMouseEnter = () => {
-    if (triggerRef.current) {
+    if (triggerRef.current && isMounted) {
       const rect = triggerRef.current.getBoundingClientRect();
-      // Position the tooltip 10px to the right of the trigger button, vertically centered
       setCoords({
         x: rect.right + 10,
         y: rect.top + rect.height / 2,
@@ -80,8 +82,8 @@ function SidebarTooltip({ label, children }: SidebarTooltipProps) {
       className="relative flex items-center justify-center w-full"
     >
       {children}
-      {mounted &&
-        coords &&
+      {coords &&
+        isMounted &&
         createPortal(
           <div
             style={{
@@ -110,7 +112,7 @@ export function ProjectSidebar() {
     isLoading,
   } = useProjectStore();
   const { user, clearAuth } = useAuthStore();
-  const { sidebarExpanded, setSidebarExpanded, toggleSidebar } = useUIStore();
+  const { sidebarExpanded, setSidebarExpanded } = useUIStore();
 
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
