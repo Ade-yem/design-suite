@@ -54,7 +54,7 @@ router = APIRouter()
 
 
 @router.post("/{project_id}/define", status_code=status.HTTP_201_CREATED)
-def define_loads(
+async def define_loads(
     project_id: str,
     payload: LoadDefinitionRequest,
     project: ProjectResponse = Depends(require_geometry_verified),
@@ -79,7 +79,7 @@ def define_loads(
     dict
         ``{project_id, status, design_code, occupancy_category, created_at}``
     """
-    return loading_service.define(project_id, payload.model_dump())
+    return await loading_service.define(project_id, payload.model_dump())
 
 
 @router.get("/{project_id}")

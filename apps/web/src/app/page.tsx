@@ -11,9 +11,12 @@ import {
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { ProjectPrompt } from "@/components/ProjectPrompt";
 import { NewProjectModal } from "@/components/NewProjectModal";
-import { pipelineStatusToStage } from "@/components/StageTracker";
+import { PipelineRail } from "@/components/PipelineRail";
+import { ArtifactsDrawer } from "@/components/ArtifactsDrawer";
+import { pipelineStatusToStage } from "@/lib/pipelineStatus";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useArtifactStore } from "@/stores/artifactStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/project";
@@ -101,6 +104,7 @@ export default function WorkspacePage(): JSX.Element {
     isLoading,
   } = useProjectStore();
   const { chatOpen, setChatOpen } = useUIStore();
+  const { fetchArtifacts } = useArtifactStore();
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showUploadNudge, setShowUploadNudge] = useState(false);
@@ -114,6 +118,7 @@ export default function WorkspacePage(): JSX.Element {
   useEffect(() => {
     if (activeProject) {
       refreshActiveProject();
+      fetchArtifacts(activeProject.project_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject?.project_id]);
@@ -131,6 +136,10 @@ export default function WorkspacePage(): JSX.Element {
     };
     const next = gateStatusMap[gate];
     if (next) updateActiveProjectStatus(next.status, next.ordinal);
+
+    // The reached gate's approval is hosted by the always-visible pipeline rail
+    // (the pending-gate identity is written to the UI store by the chat socket
+    // handler). No need to force the chat panel open any more.
   };
 
   const handleCreated = (project: Project) => {
@@ -148,7 +157,7 @@ export default function WorkspacePage(): JSX.Element {
           <WorkspaceLoadingPlaceholder />
         ) : activeProject ? (
           <>
-            <WorkspaceHeader currentStage={currentStage} />
+            <WorkspaceHeader />
 
             {/* Upload nudge — shown immediately after project creation */}
             {showUploadNudge && (
@@ -163,6 +172,11 @@ export default function WorkspacePage(): JSX.Element {
             )}
 
             <div className="flex-1 flex min-h-0 overflow-hidden">
+              <PipelineRail
+                projectId={activeProject.project_id}
+                currentStage={currentStage}
+                pipelineStatus={activeProject.pipeline_status}
+              />
               <div className="flex-1 min-w-0 overflow-hidden">
                 <CanvasViewport
                   ref={canvasRef}
@@ -171,19 +185,23 @@ export default function WorkspacePage(): JSX.Element {
                   onUploadStart={() => setShowUploadNudge(false)}
                 />
               </div>
-              <div
-                className={cn(
-                  "shrink-0 overflow-hidden",
-                  "transition-[width] duration-200 ease-out",
-                  chatOpen ? "w-80" : "w-0",
-                )}
-              >
-                <div className="w-80 h-full">
-                  <ChatSidebar
-                    projectId={activeProject.project_id}
-                    onGateReached={handleGateReached}
-                    onClose={() => setChatOpen(false)}
-                  />
+              {/* Right side: Artifacts drawer + Chat sidebar */}
+              <div className="flex shrink-0 overflow-hidden">
+                <ArtifactsDrawer />
+                <div
+                  className={cn(
+                    "shrink-0 overflow-hidden",
+                    "transition-[width] duration-200 ease-out",
+                    chatOpen ? "w-80" : "w-0",
+                  )}
+                >
+                  <div className="w-80 h-full">
+                    <ChatSidebar
+                      projectId={activeProject.project_id}
+                      onGateReached={handleGateReached}
+                      onClose={() => setChatOpen(false)}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

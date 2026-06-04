@@ -72,7 +72,7 @@ export function GeometryVerificationBar({
           </p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
             {isVerified
-              ? "Design parameters locked in. Let the Assistant engineer know in the conversation sidebar to analyze."
+              ? "Geometry locked — advancing to load analysis."
               : isError
                 ? "An error occurred while confirming geometry. Please review notes and retry."
                 : `Verify detected ${memberCount} member locations. Select any beam/column to customize cross-sections.`}

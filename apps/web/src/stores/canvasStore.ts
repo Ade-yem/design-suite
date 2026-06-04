@@ -125,6 +125,9 @@ interface CanvasState {
 
   /** Live DXF world coordinates under the mouse cursor. */
   mouseWorldPos: Point;
+
+  /** The most recently deleted member, retained so the delete can be undone. */
+  lastDeleted: GeometricMember | null;
 }
 
 /**
@@ -213,6 +216,12 @@ interface CanvasActions {
   deleteMember: (id: string) => void;
 
   /**
+   * Re-insert the most recently deleted member, undoing the last delete.
+   * No-op if nothing has been deleted since the last load.
+   */
+  restoreLastDeleted: () => void;
+
+  /**
    * Set the verification gate status.
    *
    * @param status - New verification status.
@@ -233,6 +242,14 @@ interface CanvasActions {
    * Clear all canvas state. Called when switching projects or signing out.
    */
   clearCanvas: () => void;
+
+  /**
+   * Compute zoom/pan to focus on a single member, then apply it.
+   * Zooms and centers the canvas on the specified member.
+   *
+   * @param memberId - The member ID to focus on.
+   */
+  focusMember: (memberId: string, canvasW: number, canvasH: number) => void;
 }
 
 export type CanvasStore = CanvasState & CanvasActions;
@@ -252,6 +269,7 @@ const INITIAL_STATE: CanvasState = {
   verificationStatus: "pending",
   verifyError: null,
   mouseWorldPos: { x: 0, y: 0 },
+  lastDeleted: null,
 };
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -319,14 +337,28 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
 
   deleteMember: (id) => {
     set((state) => {
+      const removed = state.members.find((m) => m.member_id === id) ?? null;
       const next = state.members.filter((m) => m.member_id !== id);
       return {
         members: next,
         bounds: computeBounds(next),
+        lastDeleted: removed,
         selectedMemberId:
           state.selectedMemberId === id ? null : state.selectedMemberId,
         hoveredMemberId:
           state.hoveredMemberId === id ? null : state.hoveredMemberId,
+      };
+    });
+  },
+
+  restoreLastDeleted: () => {
+    set((state) => {
+      if (!state.lastDeleted) return {};
+      const next = [...state.members, state.lastDeleted];
+      return {
+        members: next,
+        bounds: computeBounds(next),
+        lastDeleted: null,
       };
     });
   },
@@ -344,4 +376,23 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
   },
 
   clearCanvas: () => set(INITIAL_STATE),
+
+  focusMember: (memberId, canvasW, canvasH) => {
+    const { members } = get();
+    const member = members.find((m) => m.member_id === memberId);
+    if (!member) return;
+
+    // Compute bounds for this single member
+    const bounds = computeBounds([member]);
+    if (!bounds) return;
+
+    // Reuse the fitTransform helper to get zoom/pan for this bounds
+    // Use 5% padding for a balanced zoom
+    const transform = computeFitTransform(bounds, canvasW, canvasH, 0.05);
+
+    set({
+      pan: transform.pan,
+      zoom: transform.zoom,
+    });
+  },
 }));

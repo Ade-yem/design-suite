@@ -33,12 +33,12 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
-# LLM used for load input extraction only
-_llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro",
-    temperature=0,
-    google_api_key=settings.GEMINI_API_KEY,
-)
+def _get_llm():
+    return ChatGoogleGenerativeAI(
+        model="gemini-1.5-pro",
+        temperature=0,
+        google_api_key=settings.GEMINI_API_KEY,
+    )
 
 # Required fields for load definition — used to detect missing inputs
 _REQUIRED_LOAD_FIELDS: list[str] = [
@@ -299,7 +299,7 @@ async def _collect_load_inputs(
     )
 
     try:
-        raw = await _llm.ainvoke(extraction_prompt)
+        raw = await _get_llm().ainvoke(extraction_prompt)
         content = raw.text.replace("```json", "").replace("```", "").strip()
         load_data: dict = json.loads(content)
     except Exception:

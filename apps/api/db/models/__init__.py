@@ -25,6 +25,7 @@ from db.models.pipeline import (
     ProjectDesign,
     ProjectDrawing,
 )
+from db.models.artifact import Artifact, ArtifactStage
 
 __all__ = [
     "Organisation",
@@ -37,4 +38,6 @@ __all__ = [
     "ProjectAnalysis",
     "ProjectDesign",
     "ProjectDrawing",
+    "Artifact",
+    "ArtifactStage",
 ]

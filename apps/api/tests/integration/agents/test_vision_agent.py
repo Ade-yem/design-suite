@@ -15,6 +15,7 @@ real API services:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import pytest
 
 from agents.parser import (
@@ -27,6 +28,12 @@ from services.files import file_service
 from storage.project_store import project_store
 from schemas.project import ProjectCreate
 from config import settings
+
+# Compute sample folder path relative to repo root
+REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent  # Up from apps/api/tests/
+SAMPLE_FOLDER = REPO_ROOT / "sample"
+DXF_PATH = SAMPLE_FOLDER / "Floor-beam.dxf"
+PDF_PATH = SAMPLE_FOLDER / "Floor-beam.pdf"
 
 
 @pytest.mark.asyncio
@@ -41,7 +48,7 @@ class TestVisionAgentProduction:
         geometric entities and confidently detects the drawing units as 'millimetres'
         without triggering unit ambiguity.
         """
-        dxf_path = "/home/adehnaija/Documents/projects/design-suite/sample/Floor-beam.dxf"
+        dxf_path = str(DXF_PATH)
         if not os.path.exists(dxf_path):
             pytest.skip(f"Real drawing file not found at: {dxf_path}")
 
@@ -76,7 +83,7 @@ class TestVisionAgentProduction:
         high-signal columns/beams and pre-associates nearby text annotations using
         real spatial proximity calculations.
         """
-        dxf_path = "/home/adehnaija/Documents/projects/design-suite/sample/Floor-beam.dxf"
+        dxf_path = str(DXF_PATH)
         if not os.path.exists(dxf_path):
             pytest.skip(f"Real drawing file not found at: {dxf_path}")
 
@@ -119,7 +126,7 @@ class TestVisionAgentProduction:
         if not settings.GEMINI_API_KEY:
             pytest.skip("Skipping real LLM test: GEMINI_API_KEY is not configured.")
 
-        dxf_path = "/home/adehnaija/Documents/projects/design-suite/sample/Floor-beam.dxf"
+        dxf_path = str(DXF_PATH)
         if not os.path.exists(dxf_path):
             pytest.skip(f"Real drawing file not found at: {dxf_path}")
 
@@ -180,7 +187,7 @@ class TestVisionAgentProduction:
         the parsed structural members are registered with project storage,
         and a detailed markdown summary is delivered for engineer confirmation.
         """
-        dxf_path = "/home/adehnaija/Documents/projects/design-suite/sample/Floor-beam.dxf"
+        dxf_path = str(DXF_PATH)
         if not os.path.exists(dxf_path):
             pytest.skip(f"Real drawing file not found at: {dxf_path}")
 

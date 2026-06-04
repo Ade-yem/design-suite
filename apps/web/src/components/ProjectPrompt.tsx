@@ -6,6 +6,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import { apiClient } from "@/lib/api";
+import { getPipelineStatus } from "@/lib/pipelineStatus";
 import { NewProjectModal } from "./NewProjectModal";
 import type { Project, ProjectListItem } from "@/types/project";
 
@@ -94,16 +95,8 @@ function relativeTime(iso: string): string {
 }
 
 function statusMeta(status: string): { label: string; dot: string } {
-  const map: Record<string, { label: string; dot: string }> = {
-    created:           { label: "Created",          dot: "bg-muted-foreground" },
-    file_uploaded:     { label: "File uploaded",    dot: "bg-blue-400" },
-    geometry_verified: { label: "Geometry OK",      dot: "bg-blue-500" },
-    loading_defined:   { label: "Loads defined",    dot: "bg-violet-500" },
-    analysis_complete: { label: "Analysis done",    dot: "bg-amber-500" },
-    design_complete:   { label: "Design complete",  dot: "bg-orange-500" },
-    report_generated:  { label: "Report ready",     dot: "bg-green-500" },
-  };
-  return map[status] ?? { label: status.replace(/_/g, " "), dot: "bg-muted-foreground" };
+  const meta = getPipelineStatus(status);
+  return { label: meta.label, dot: meta.dotClass };
 }
 
 // ── Project card ──────────────────────────────────────────────────────────────
@@ -196,8 +189,19 @@ export function ProjectPrompt() {
   const { setSidebarExpanded } = useUIStore();
   const [showModal, setShowModal] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const { greeting, loading: greetingLoading } = useGreeting(projects.length);
+
+  // Filter projects by search term and status
+  const filteredProjects = projects.filter((p) => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.reference.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = !statusFilter || p.pipeline_status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const handleOpenProject = async (projectId: string) => {
     if (openingId) return;
@@ -259,27 +263,60 @@ export function ProjectPrompt() {
 
           {projects.length > 0 ? (
             <div className="space-y-3">
+              {/* Search + filter bar */}
+              <div className="flex items-center gap-2 mb-6 pb-4 border-b border-border">
+                <input
+                  type="text"
+                  placeholder="Search projects…"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-1 px-3 py-2 text-xs rounded border border-border bg-muted/40 text-foreground placeholder:text-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <select
+                  value={statusFilter || ""}
+                  onChange={(e) => setStatusFilter(e.target.value || null)}
+                  className="px-3 py-2 text-xs rounded border border-border bg-muted/40 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">All statuses</option>
+                  <option value="created">Created</option>
+                  <option value="file_uploaded">File uploaded</option>
+                  <option value="geometry_verified">Geometry OK</option>
+                  <option value="loading_defined">Loads defined</option>
+                  <option value="analysis_complete">Analysis done</option>
+                  <option value="design_complete">Design complete</option>
+                  <option value="report_generated">Report ready</option>
+                </select>
+              </div>
+
               {/* Section label + count */}
               <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
                   Projects
                 </span>
                 <span className="text-[10px] font-mono text-muted-foreground/60">
-                  {projects.length} total
+                  {filteredProjects.length} {filteredProjects.length !== projects.length ? `of ${projects.length}` : "total"}
                 </span>
               </div>
 
-              <ul className="space-y-1.5">
-                {projects.map((p) => (
-                  <li key={p.project_id}>
-                    <ProjectCard
-                      project={p}
-                      openingId={openingId}
-                      onOpen={handleOpenProject}
-                    />
-                  </li>
-                ))}
-              </ul>
+              {filteredProjects.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {filteredProjects.map((p) => (
+                    <li key={p.project_id}>
+                      <ProjectCard
+                        project={p}
+                        openingId={openingId}
+                        onOpen={handleOpenProject}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-xs text-foreground/50 italic">
+                    No projects found matching your search.
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <EmptyState onNew={() => setShowModal(true)} />

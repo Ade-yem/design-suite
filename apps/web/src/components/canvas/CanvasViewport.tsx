@@ -25,8 +25,8 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { screenToWorld, zoomTowardPoint } from "@/lib/canvas/transform";
 import { drawDotGrid } from "@/lib/canvas/drawGrid";
@@ -40,8 +40,9 @@ import { CanvasToolbar } from "./CanvasToolbar";
 import { CoordinateReadout } from "./CoordinateReadout";
 import { MemberTooltip } from "./MemberTooltip";
 import { PropertyInspector } from "./PropertyInspector";
-import { GeometryVerificationBar } from "./GeometryVerificationBar";
 import { CanvasUploader, type CanvasUploaderHandle } from "./CanvasUploader";
+import { MembersPanel } from "./MembersPanel";
+import { GeometryGate } from "./GeometryGate";
 
 export interface CanvasViewportHandle {
   /** Public API: lets parent elements trigger DXF file browsing */
@@ -89,8 +90,10 @@ export const CanvasViewport = forwardRef<
     setMouseWorldPos,
     updateMember,
     deleteMember,
+    restoreLastDeleted,
     setVerificationStatus,
     resetGeometry,
+    focusMember,
   } = useCanvasStore();
 
   // ── Component State ──────────────────────────────────────────────────────
@@ -365,12 +368,19 @@ export const CanvasViewport = forwardRef<
   const handleDeleteMember = () => {
     if (selectedMemberId) {
       deleteMember(selectedMemberId);
+      toast("Member deleted", {
+        description: "Removed from the staged layout. Not saved until you confirm geometry.",
+        action: {
+          label: "Undo",
+          onClick: () => restoreLastDeleted(),
+        },
+      });
     }
   };
 
   // ── Geometry Verification API handlers ───────────────────────────────────
 
-  const handleConfirmGeometry = async (notes: string) => {
+  const handleConfirmGeometry = async (notes?: string) => {
     setVerificationStatus("submitting");
     try {
       const corrections = members.map((m) => ({
@@ -386,6 +396,11 @@ export const CanvasViewport = forwardRef<
         corrections,
         notes,
       });
+
+      // Geometry is its own safety gate (Gate 1). Confirming it advances the
+      // pipeline automatically — no hand-off to the chat — so the engineer's
+      // single confirm action both locks the layout and unblocks load analysis.
+      await apiClient.post(`/api/v1/pipeline/${projectId}/resume`);
 
       setVerificationStatus("verified");
       if (onParsedRef.current) {
@@ -407,107 +422,99 @@ export const CanvasViewport = forwardRef<
     await fetchExistingGeometry();
   };
 
+  const handleZoomToMember = (memberId: string) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    focusMember(memberId, canvas.width, canvas.height);
+  };
+
   const selectedMember = members.find((m) => m.member_id === selectedMemberId);
   const hoveredMember = members.find((m) => m.member_id === hoveredMemberId);
 
   return (
-    <div className="h-full flex flex-col relative" ref={containerRef}>
-      {/* Absolute floating UI elements */}
+    <div className="h-full flex flex-row relative" ref={containerRef}>
+      {/* Members panel: left dock (collapsible) */}
       {uploadState === "done" && (
-        <>
-          {/* Scale confirmation banner — shown when scale was auto-detected but not yet confirmed */}
-          {scale?.detected && !scale?.confirmed && (
-            <div className="absolute top-0 inset-x-0 z-20 flex items-center gap-3 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 backdrop-blur-md">
-              <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
-              <span className="text-xs text-amber-200 font-medium flex-1">
-                Scale auto-detected — please confirm before proceeding.
-              </span>
-              <span className="text-xs text-amber-300/70 font-mono">
-                factor: {scaleFactor}
-              </span>
-              <select
-                value={scaleUnit}
-                onChange={(e) => setScaleUnit(e.target.value)}
-                className="bg-muted/60 border border-border text-xs rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 text-foreground"
-              >
-                <option value="mm">mm</option>
-                <option value="m">m</option>
-                <option value="cm">cm</option>
-              </select>
-              <button
-                onClick={handleConfirmScale}
-                disabled={isConfirmingScale}
-                className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 text-amber-950 text-xs font-semibold rounded hover:bg-amber-400 transition-all disabled:opacity-50 shrink-0"
-              >
-                {isConfirmingScale ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Check className="h-3 w-3" />
-                )}
-                Confirm Scale
-              </button>
-            </div>
-          )}
-
-          <CanvasToolbar
-            activeTool={activeTool}
-            setTool={setTool}
-            onZoomIn={() => setZoom(zoom * 1.2)}
-            onZoomOut={() => setZoom(zoom / 1.2)}
-            onFitToView={() =>
-              fitToView(
-                canvasRef.current?.width ?? 800,
-                canvasRef.current?.height ?? 600,
-              )
-            }
-          />
-
-          <CoordinateReadout mouseWorldPos={mouseWorldPos} scale={scale} />
-
-          {hoveredMember && tooltipPos && (
-            <MemberTooltip
-              hoveredMember={hoveredMember}
-              tooltipPos={tooltipPos}
-            />
-          )}
-
-          {selectedMember && (
-            <PropertyInspector
-              selectedMember={selectedMember}
-              onDeselect={() => selectMember(null)}
-              onDelete={handleDeleteMember}
-              onSave={handleSaveProperties}
-            />
-          )}
-
-          <GeometryVerificationBar
-            verificationStatus={verificationStatus}
-            memberCount={members.length}
-            onConfirm={handleConfirmGeometry}
-            onReset={handleResetGeometry}
-          />
-        </>
+        <MembersPanel
+          members={members}
+          selectedMemberId={selectedMemberId}
+          onSelectMember={selectMember}
+          onZoomToMember={handleZoomToMember}
+        />
       )}
 
-      {/* Viewport content area */}
-      <div className="flex-1 bg-[#0b0f19] relative overflow-hidden transition-colors select-none">
-        {uploadState === "done" ? (
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 block cursor-crosshair"
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-          />
-        ) : (
-          <CanvasUploader
-            ref={uploaderRef}
-            projectId={projectId}
-            onUploadStart={onUploadStart}
-            onParsed={fetchExistingGeometry}
-          />
+      {/* Canvas area: flex-1 container with floating layers */}
+      <div className="flex-1 flex flex-col relative overflow-hidden bg-[#0b0f19] transition-colors select-none">
+        {/* Absolute floating UI elements (positioned into this container, not the outer) */}
+        {uploadState === "done" && (
+          <>
+            {/* Unified stepped Safety Gate 1 — replaces scale banner + geometry bar */}
+            <GeometryGate
+              scale={scale}
+              scaleFactor={scaleFactor}
+              scaleUnit={scaleUnit as "mm" | "m" | "cm"}
+              onScaleUnitChange={setScaleUnit}
+              onConfirmScale={handleConfirmScale}
+              isConfirmingScale={isConfirmingScale}
+              verificationStatus={verificationStatus}
+              memberCount={members.length}
+              onConfirmGeometry={handleConfirmGeometry}
+              onResetGeometry={handleResetGeometry}
+            />
+
+            <CanvasToolbar
+              activeTool={activeTool}
+              setTool={setTool}
+              onZoomIn={() => setZoom(zoom * 1.2)}
+              onZoomOut={() => setZoom(zoom / 1.2)}
+              onFitToView={() =>
+                fitToView(
+                  canvasRef.current?.width ?? 800,
+                  canvasRef.current?.height ?? 600,
+                )
+              }
+            />
+
+            <CoordinateReadout mouseWorldPos={mouseWorldPos} scale={scale} />
+
+            {hoveredMember && tooltipPos && (
+              <MemberTooltip
+                hoveredMember={hoveredMember}
+                tooltipPos={tooltipPos}
+              />
+            )}
+
+            {selectedMember && (
+              <PropertyInspector
+                selectedMember={selectedMember}
+                onDeselect={() => selectMember(null)}
+                onDelete={handleDeleteMember}
+                onSave={handleSaveProperties}
+              />
+            )}
+          </>
         )}
+
+        {/* Viewport content area */}
+        <div className="flex-1 relative overflow-hidden">
+          {uploadState === "done" ? (
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 block cursor-crosshair"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            />
+          ) : (
+            <CanvasUploader
+              ref={uploaderRef}
+              projectId={projectId}
+              onUploadStart={onUploadStart}
+              onParsed={fetchExistingGeometry}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
