@@ -19,17 +19,17 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import { apiClient } from "@/lib/api";
+import { getPipelineStatus } from "@/lib/pipelineStatus";
+import { PRODUCT_NAME } from "@/lib/brand";
 import { NewProjectModal } from "./NewProjectModal";
 import type { Project } from "@/types/project";
 
 function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
+  return getPipelineStatus(status).label;
 }
 
 function statusColor(status: string): string {
-  if (status === "created") return "text-muted-foreground";
-  if (status === "report_generated") return "text-success";
-  return "text-primary";
+  return getPipelineStatus(status).textClass;
 }
 
 function getInitials(name: string | null): string {
@@ -189,10 +189,7 @@ export function ProjectSidebar() {
               <div className="flex items-center gap-2 min-w-0">
                 <Hexagon className="h-5 w-5 text-primary shrink-0" />
                 <span className="text-sm font-semibold tracking-tight whitespace-nowrap">
-                  StructAI
-                </span>
-                <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">
-                  Copilot
+                  {PRODUCT_NAME}
                 </span>
               </div>
               <button
@@ -315,7 +312,7 @@ export function ProjectSidebar() {
                             </div>
                             <span
                               className={cn(
-                                "text-[10px] font-mono capitalize shrink-0 hidden group-hover:hidden",
+                                "text-[10px] font-mono capitalize shrink-0",
                                 statusColor(p.pipeline_status),
                               )}
                             >
