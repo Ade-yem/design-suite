@@ -17,6 +17,8 @@ interface UIState {
    * the approve action) and the chat (which points the engineer to the rail).
    */
   pendingGate: PendingGate | null;
+  pipelineRailExpanded: boolean;
+  membersPanelExpanded: boolean;
 }
 
 interface UIActions {
@@ -27,6 +29,8 @@ interface UIActions {
   incrementUnread: () => void;
   clearUnread: () => void;
   setPendingGate: (g: PendingGate | null) => void;
+  setPipelineRailExpanded: (v: boolean) => void;
+  setMembersPanelExpanded: (v: boolean) => void;
 }
 
 export type UIStore = UIState & UIActions;
@@ -38,6 +42,8 @@ export const useUIStore = create<UIStore>()(
       chatOpen: true,
       chatUnread: 0,
       pendingGate: null,
+      pipelineRailExpanded: true,
+      membersPanelExpanded: true,
 
       toggleSidebar: () => set((s) => ({ sidebarExpanded: !s.sidebarExpanded })),
       setSidebarExpanded: (v) => set({ sidebarExpanded: v }),
@@ -56,6 +62,8 @@ export const useUIStore = create<UIStore>()(
       incrementUnread: () => set((s) => ({ chatUnread: s.chatUnread + 1 })),
       clearUnread: () => set({ chatUnread: 0 }),
       setPendingGate: (g) => set({ pendingGate: g }),
+      setPipelineRailExpanded: (v) => set({ pipelineRailExpanded: v }),
+      setMembersPanelExpanded: (v) => set({ membersPanelExpanded: v }),
     }),
     {
       name: "structai-ui-state",
@@ -63,6 +71,8 @@ export const useUIStore = create<UIStore>()(
       partialize: (state) => ({
         sidebarExpanded: state.sidebarExpanded,
         chatOpen: state.chatOpen,
+        pipelineRailExpanded: state.pipelineRailExpanded,
+        membersPanelExpanded: state.membersPanelExpanded,
       }),
     }
   )

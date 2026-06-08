@@ -227,17 +227,13 @@ async def resume_pipeline(
     """
     current = ProjectStatus(project.pipeline_status_ordinal)
     job_id = await job_store.create("analysis", project_id=project_id)
-    background_tasks.add_task(
-        _run_pipeline_background,
-        project_id=project_id,
-        job_id=job_id,
-        start_from=current.label(),
-        stop_before=None,
-    )
+    # Trigger LangGraph resume in the background instead of running the stub
+    from websocket import run_or_resume_graph
+    background_tasks.add_task(run_or_resume_graph, project_id, None)
     return {
         "job_id": job_id,
         "status_url": f"/api/v1/pipeline/{project_id}/status",
-        "message": f"Pipeline resumed from '{current.label()}'. Job: {job_id}.",
+        "message": f"Pipeline resumed from '{current.label()}' via LangGraph. Job: {job_id}.",
     }
 
 
@@ -394,6 +390,20 @@ async def confirm_gate(
 
     await project_store.advance_status(project_id, target_status)
     logger.info("Gate '%s' confirmed for project %s.", gate, project_id)
+
+    # Write confirmation to LangGraph checkpointer state (C5)
+    _gate_to_state_key = {
+        "geometry_verified": "geometry_verified",
+        "loading_confirmed": "loading_confirmed",
+        "design_complete":   "design_confirmed",
+        "report_approved":   "drawing_confirmed",
+    }
+    state_key = _gate_to_state_key.get(gate)
+    if state_key:
+        import agents.graph as _agent_graph
+        config = {"configurable": {"thread_id": project_id}}
+        await _agent_graph.app.aupdate_state(config, {state_key: True})
+
     return {
         "gate": gate,
         "confirmed_at": datetime.now(timezone.utc).isoformat(),

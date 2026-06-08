@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 import { AuthGuard } from "@/components/AuthGuard";
 import { PRODUCT_NAME } from "@/lib/brand";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +31,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthGuard>{children}</AuthGuard>
+        <TooltipProvider>
+          <AuthGuard>{children}</AuthGuard>
+        </TooltipProvider>
         <Toaster theme="dark" position="bottom-right" closeButton richColors />
       </body>
     </html>

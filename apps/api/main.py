@@ -118,7 +118,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG00
 # ── Application ────────────────────────────────────────────────────────────────
 app = FastAPI(
     lifespan=lifespan,
-    title="Structural Design Copilot API",
+    title="StructAI Copilot API",
     version=settings.API_VERSION,
     description=(
         "AI-driven multi-agent structural engineering backend. "

@@ -108,6 +108,7 @@ export default function WorkspacePage(): JSX.Element {
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showUploadNudge, setShowUploadNudge] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const canvasRef = useRef<CanvasViewportHandle>(null);
 
@@ -117,7 +118,10 @@ export default function WorkspacePage(): JSX.Element {
 
   useEffect(() => {
     if (activeProject) {
-      refreshActiveProject();
+      setIsRefreshing(true);
+      refreshActiveProject().finally(() => {
+        setIsRefreshing(false);
+      });
       fetchArtifacts(activeProject.project_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,7 +157,7 @@ export default function WorkspacePage(): JSX.Element {
       <ProjectSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {isLoading ? (
+        {isLoading || isRefreshing ? (
           <WorkspaceLoadingPlaceholder />
         ) : activeProject ? (
           <>

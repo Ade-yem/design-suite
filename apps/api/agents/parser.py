@@ -662,11 +662,24 @@ Each entry must follow this exact schema:
             return []
 
         for m in slab_members:
-            m["member_type"] = "slab"
-            m["type"] = "slab"
+            is_void = m.get("is_void", False)
+            m_type = "void" if is_void else "slab"
+            m["member_type"] = m_type
+            m["type"] = m_type
             meta = m.setdefault("meta", {})
             meta.setdefault("slab_type", "solid_slab")
             meta.setdefault("thickness_mm", 150)
+            
+            # Deterministically calculate Lx and Ly from boundary polygon if present
+            boundary = m.get("boundary_polygon")
+            if boundary and len(boundary) >= 3:
+                xs = [pt["x"] for pt in boundary]
+                ys = [pt["y"] for pt in boundary]
+                w_m = round((max(xs) - min(xs)) / 1000.0, 3)
+                h_m = round((max(ys) - min(ys)) / 1000.0, 3)
+                meta["Lx"] = min(w_m, h_m)
+                meta["Ly"] = max(w_m, h_m)
+
             Lx = meta.get("Lx", 0)
             Ly = meta.get("Ly", 0)
             m["spans_m"] = [Lx, Ly] if Lx and Ly else []
@@ -707,7 +720,7 @@ def _extract_beams_deterministically(beam_candidates: list[dict]) -> list[dict]:
 
         length_mm = math.hypot(end["x"] - start["x"], end["y"] - start["y"])
         l_clear = round(length_mm / 1000.0, 4)
-        if l_clear < 0.6:
+        if l_clear < 0.1:  # Discard extremely short lines/hatch ticks
             continue
 
         member_id: Optional[str] = None
@@ -725,6 +738,10 @@ def _extract_beams_deterministically(beam_candidates: list[dict]) -> list[dict]:
                 lbl = re.search(r"(\d*[Bb]\d+)", text_val)
                 if lbl:
                     member_id = lbl.group(1)
+
+        # Drop stub beams (length < 0.6 m) ONLY if they have no explicit structural label
+        if l_clear < 0.6 and member_id is None:
+            continue
 
         if member_id is None:
             member_id = f"B{seq}"
@@ -1068,7 +1085,8 @@ async def parser_node(state: StructuralDesignState) -> dict:
     # ── Step 4.5: extract members if not yet populated ───────────────────────
     if not parsed.get("members"):
         logger.info("Extracting structural members via LLM...")
-        members = await _run_llm_member_extraction(project_id, parsed)
+        pdf_path = state.get("uploaded_pdf_path")
+        members = await _run_llm_member_extraction(project_id, parsed, pdf_path=pdf_path)
         parsed["members"] = members
         
         # Save structural JSON back to files service and project store
@@ -1078,7 +1096,7 @@ async def parser_node(state: StructuralDesignState) -> dict:
         await project_store.register_members_batch(project_id, mids)
 
     # ── Step 5: geometry summary ───────────────────────────────────────────────
-    scale = file_service.get_scale(project_id)
+    scale = await file_service.get_scale(project_id)
     summary = _build_geometry_summary(parsed)
 
     message = AIMessage(content=(

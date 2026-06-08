@@ -13,6 +13,8 @@ import {
   LogOut,
   User,
   Loader2,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/stores/projectStore";
@@ -22,7 +24,7 @@ import { apiClient } from "@/lib/api";
 import { getPipelineStatus } from "@/lib/pipelineStatus";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { NewProjectModal } from "./NewProjectModal";
-import type { Project } from "@/types/project";
+import type { Project, ProjectListItem } from "@/types/project";
 
 function statusLabel(status: string): string {
   return getPipelineStatus(status).label;
@@ -108,6 +110,7 @@ export function ProjectSidebar() {
     projects,
     activeProject,
     setActiveProject,
+    clearActiveProject,
     fetchProjects,
     isLoading,
   } = useProjectStore();
@@ -117,6 +120,27 @@ export function ProjectSidebar() {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
+
+  // Project deletion state
+  const [deletingProject, setDeletingProject] = useState<ProjectListItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteProject = async () => {
+    if (!deletingProject) return;
+    setIsDeleting(true);
+    try {
+      await apiClient.delete(`/api/v1/projects/${deletingProject.project_id}`);
+      if (activeProject?.project_id === deletingProject.project_id) {
+        clearActiveProject();
+      }
+      await fetchProjects();
+      setDeletingProject(null);
+    } catch {
+      alert("Failed to delete project. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -287,61 +311,87 @@ export function ProjectSidebar() {
                     return (
                       <li key={p.project_id}>
                         {sidebarExpanded ? (
-                          <button
-                            onClick={() => handleOpenProject(p.project_id)}
-                            disabled={!!openingId}
-                            className={cn(
-                              "w-full flex items-center gap-2 py-2 rounded-md text-left transition-colors group disabled:opacity-60",
-                              isActive
-                                ? "bg-primary/10 border-l-2 border-primary text-foreground pl-1.5 pr-2"
-                                : "hover:bg-muted text-muted-foreground hover:text-foreground px-2",
-                            )}
-                          >
-                            {isOpening ? (
-                              <Loader2 className="h-4 w-4 text-primary shrink-0 animate-spin" />
-                            ) : isActive ? (
-                              <FolderOpen className="h-4 w-4 text-primary shrink-0" />
-                            ) : (
-                              <Folder className="h-4 w-4 shrink-0 group-hover:text-primary transition-colors" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate leading-tight">
-                                {p.name}
-                              </p>
-                              <p className="text-[10px] font-mono text-muted-foreground truncate">
-                                {p.reference}
-                              </p>
-                            </div>
-                            <span
-                              className={cn(
-                                "text-[10px] font-mono capitalize shrink-0",
-                                statusColor(p.pipeline_status),
-                              )}
-                            >
-                              {statusLabel(p.pipeline_status)}
-                            </span>
-                          </button>
-                        ) : (
-                          <SidebarTooltip label={p.name}>
+                          <div className="w-full flex items-center py-0.5 rounded-md transition-colors group">
                             <button
                               onClick={() => handleOpenProject(p.project_id)}
                               disabled={!!openingId}
                               className={cn(
-                                "w-full flex items-center justify-center p-2 rounded-md transition-colors disabled:opacity-60",
+                                "flex-1 flex items-center gap-2 py-1.5 rounded-md text-left transition-colors disabled:opacity-60",
                                 isActive
-                                  ? "bg-primary/10 text-primary"
-                                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                                  ? "bg-primary/10 border-l-2 border-primary text-foreground pl-1.5 pr-2"
+                                  : "hover:bg-muted/65 text-muted-foreground hover:text-foreground px-2",
                               )}
-                              aria-label={p.name}
                             >
                               {isOpening ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <Loader2 className="h-4 w-4 text-primary shrink-0 animate-spin" />
                               ) : isActive ? (
-                                <FolderOpen className="h-4 w-4" />
+                                <FolderOpen className="h-4 w-4 text-primary shrink-0" />
                               ) : (
-                                <Folder className="h-4 w-4" />
+                                <Folder className="h-4 w-4 shrink-0 group-hover:text-primary transition-colors" />
                               )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate leading-tight">
+                                  {p.name}
+                                </p>
+                                <p className="text-[10px] font-mono text-muted-foreground truncate">
+                                  {p.reference}
+                                </p>
+                              </div>
+                              <span
+                                className={cn(
+                                  "text-[10px] font-mono capitalize shrink-0 group-hover:hidden",
+                                  statusColor(p.pipeline_status),
+                                )}
+                              >
+                                {statusLabel(p.pipeline_status)}
+                              </span>
                             </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeletingProject(p);
+                              }}
+                              className="hidden group-hover:flex p-1.5 ml-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive shrink-0 transition-colors"
+                              title="Delete Project"
+                              aria-label={`Delete ${p.name}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <SidebarTooltip label={p.name}>
+                            <div className="relative group w-full flex items-center justify-center py-1">
+                              <button
+                                onClick={() => handleOpenProject(p.project_id)}
+                                disabled={!!openingId}
+                                className={cn(
+                                  "w-full flex items-center justify-center p-2 rounded-md transition-colors disabled:opacity-60",
+                                  isActive
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                                )}
+                                aria-label={p.name}
+                              >
+                                {isOpening ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : isActive ? (
+                                  <FolderOpen className="h-4 w-4" />
+                                ) : (
+                                  <Folder className="h-4 w-4" />
+                                )}
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeletingProject(p);
+                                }}
+                                className="absolute -top-0.5 -right-0.5 hidden group-hover:flex p-0.5 rounded bg-destructive text-destructive-foreground border border-background hover:bg-destructive/90 shrink-0 shadow-md transition-colors"
+                                title="Delete Project"
+                                aria-label={`Delete ${p.name}`}
+                              >
+                                <Trash2 className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
                           </SidebarTooltip>
                         )}
                       </li>
@@ -458,6 +508,51 @@ export function ProjectSidebar() {
           onClose={() => setShowModal(false)}
           onCreated={handleCreated}
         />
+      )}
+
+      {deletingProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#070913]/85 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-card border border-border/80 rounded-xl shadow-2xl p-6 flex flex-col gap-6">
+            <div className="flex items-start gap-4">
+              <div className="h-10 w-10 rounded-full bg-destructive/10 flex items-center justify-center text-destructive shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <h3 className="text-sm font-semibold tracking-wide text-foreground">
+                  Delete Project
+                </h3>
+                <p className="text-xs text-muted-foreground leading-normal">
+                  Are you sure you want to delete <span className="font-semibold text-foreground font-mono">{deletingProject.name}</span> ({deletingProject.reference})?
+                  This action is irreversible and will permanently delete all associated project files, geometry calculations, and members.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-border/40">
+              <button
+                onClick={() => setDeletingProject(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteProject}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Project"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
