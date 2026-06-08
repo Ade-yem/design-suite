@@ -3,7 +3,14 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useAuthStore } from "@/stores/authStore";
 
-export interface AgentMessage { type: "agent_message"; content: string }
+export interface AgentMessage {
+  type: "agent_message";
+  content: string;
+  /** True when this message asks the engineer to make a decision (auto-opens chat). */
+  requires_input?: boolean;
+  /** True when this is a complete, discrete message rather than a streamed chunk. */
+  final?: boolean;
+}
 export interface StatusLog { type: "status_log"; tool: string; status: string }
 export interface GateReached { type: "gate_reached"; gate: string; action_required: string }
 export interface DrawingCommands { type: "drawing_commands"; data: unknown }
