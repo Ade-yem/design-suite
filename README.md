@@ -1,4 +1,4 @@
-# Design Suite
+# StructAI Copilot
 
 An open-source, AI-driven structural engineering IDE that automates the full RC design pipeline — from architectural drawings to reinforcement schedules and production drawings — with a human engineer confirming every major decision before the pipeline advances.
 
@@ -6,7 +6,7 @@ An open-source, AI-driven structural engineering IDE that automates the full RC 
 
 ## What It Does
 
-Design Suite ingests a DXF or PDF architectural drawing, extracts the structural geometry, runs finite element analysis, designs reinforcement to BS8110 or Eurocode 2, and generates RC drawings and calculation reports. A multi-agent LangGraph pipeline orchestrated by Google Gemini drives the process; four hard-stop safety gates require explicit engineer confirmation before each stage can proceed.
+StructAI Copilot ingests a DXF or PDF architectural drawing, extracts the structural geometry, runs finite element analysis, designs reinforcement to BS8110 or Eurocode 2, and generates RC drawings and calculation reports. A multi-agent LangGraph pipeline orchestrated by Google Gemini drives the process; four hard-stop safety gates require explicit engineer confirmation before each stage can proceed.
 
 ---
 
@@ -171,14 +171,6 @@ We welcome contributions — bug fixes, design-code implementations, new member 
    cd apps/web && npm run lint
    ```
 5. Open a pull request with a clear description of what changed and why.
-
-### Areas that need help
-
-- Additional design code implementations (ACI 318, IS 456)
-- CI/CD pipeline (GitHub Actions)
-- Additional member type support (retaining walls, pile caps)
-- WebSocket integration in the frontend chat sidebar (currently stubbed)
-- End-to-end test coverage
 
 ### Code conventions
 
