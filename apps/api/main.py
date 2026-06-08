@@ -82,38 +82,63 @@ _log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG001
     """
-    Wire a PostgreSaver-backed LangGraph checkpointer when DATABASE_URL is set.
-    Falls back to the default MemorySaver (already compiled in agents.graph) if
-    Postgres is unavailable or the package is not installed.
+    Manage the application lifecycle.
+
+    Wires a PostgreSaver-backed LangGraph checkpointer using psycopg_pool's
+    AsyncConnectionPool when DATABASE_URL is set and PROJECT_STORE_BACKEND
+    is postgres. Using a connection pool ensures idle connections are recycled
+    and re-established automatically to prevent OperationalErrors.
+    Falls back to the default MemorySaver if Postgres is unavailable.
+
+    Parameters
+    ----------
+    fastapi_app : FastAPI
+        The FastAPI application instance.
+
+    Yields
+    ------
+    None
     """
     import agents.graph as _agent_graph
 
-    _postgres_saver_ctx = None
+    _pool = None
 
     if settings.PROJECT_STORE_BACKEND == "postgres" and settings.DATABASE_URL:
         try:
+            from typing import Any
             from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-            # Keep reference to the context manager
-            _postgres_saver_ctx = AsyncPostgresSaver.from_conn_string(settings.DATABASE_URL)
-            _postgres_saver = await _postgres_saver_ctx.__aenter__()
+            from psycopg_pool import AsyncConnectionPool
+            from psycopg.rows import dict_row
+
+            _log.info("Initializing LangGraph checkpointer with AsyncConnectionPool...")
+            _pool: Any = AsyncConnectionPool(
+                conninfo=settings.DATABASE_URL,
+                min_size=1,
+                max_size=10,
+                open=False,
+                kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row}
+            )
+            await _pool.open()
+
+            _postgres_saver = AsyncPostgresSaver(_pool)
             await _postgres_saver.setup()
             _agent_graph.app = _agent_graph.build_app(_postgres_saver)
-            _log.info("LangGraph checkpointer: AsyncPostgresSaver (postgres).")
+            _log.info("LangGraph checkpointer: AsyncPostgresSaver with AsyncConnectionPool (postgres).")
         except Exception as exc:  # package not installed or DB not reachable
             if settings.APP_ENV not in ("development", "test"):
                 _log.critical("Failed to initialize Postgres checkpointer in production: %s", exc)
                 raise exc
-            _log.warning("LangGraph PostgreSaver unavailable (%s) — falling back to MemorySaver.", exc)
-            _postgres_saver_ctx = None
+            _log.warning("LangGraph PostgreSaver with AsyncConnectionPool unavailable (%s) — falling back to MemorySaver.", exc)
+            _pool = None
 
     yield  # ── application runs ──────────────────────────────────────────────
 
-    if _postgres_saver_ctx is not None:
+    if _pool is not None:
         try:
-            # Await the context manager exit
-            await _postgres_saver_ctx.__aexit__(None, None, None)
+            await _pool.close()
+            _log.info("Successfully closed LangGraph checkpointer AsyncConnectionPool.")
         except Exception as exc:
-            _log.error("Failed to cleanly exit Postgres checkpointer context manager: %s", exc)
+            _log.error("Failed to cleanly close Postgres checkpointer connection pool: %s", exc)
 
 # ── Application ────────────────────────────────────────────────────────────────
 app = FastAPI(
