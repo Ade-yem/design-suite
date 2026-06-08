@@ -22,7 +22,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from agents.state import StructuralDesignState
 from agents.parser import parser_node
-from agents.analyst import analyst_node
+from agents.analyst import analyst_node, analyst_router
 from agents.designer import designer_node
 from agents.drafter import drafter_node
 from agents.supervisor import supervisor_node, supervisor_router
@@ -71,7 +71,18 @@ workflow.add_conditional_edges(
     }
 )
 
-workflow.add_edge("analyst_agent", "loading_gate")
+# The analyst gathers the design brief / loads conversationally over several
+# turns.  While it is still collecting it routes to END so the next engineer
+# message re-enters the node fresh; once analysis is complete it advances to the
+# loading-confirmation gate.
+workflow.add_conditional_edges(
+    "analyst_agent",
+    analyst_router,
+    {
+        "awaiting_input": END,
+        "analysis_done":  "loading_gate",
+    }
+)
 
 workflow.add_conditional_edges(
     "loading_gate",
