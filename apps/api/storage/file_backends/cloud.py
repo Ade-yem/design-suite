@@ -23,6 +23,7 @@ from typing import Optional
 import cloudinary
 import cloudinary.uploader
 import cloudinary.utils
+import cloudinary.api
 from fastapi import UploadFile
 
 from config import settings, ACCEPTED_EXTENSIONS
@@ -97,6 +98,26 @@ class CloudinaryFileBackend(FileStorageBackend):
         contents = await file.read()
         if len(contents) > settings.max_upload_bytes:
             raise StructuralError("FILE_TOO_LARGE", status_code=413)
+
+        # Validate magic bytes / file content (H6)
+        is_valid = False
+        if suffix == ".pdf":
+            is_valid = contents.startswith(b"%PDF")
+        elif suffix == ".dxf":
+            stripped = contents[:1024].strip()
+            is_valid = (
+                contents.startswith(b"AutoCAD Binary DXF") or
+                stripped.startswith(b"0") or
+                stripped.startswith(b"999") or
+                b"SECTION" in stripped[:100]
+            )
+
+        if not is_valid:
+            raise StructuralError(
+                "UNSUPPORTED_FILE",
+                details={"message": "File content does not match its extension type."},
+                status_code=400,
+            )
 
         timestamp = int(time.time() * 1000)
         safe_name = f"{timestamp}_{Path(original_name).stem}"

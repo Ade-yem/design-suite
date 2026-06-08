@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronLeft, Layers } from "lucide-react";
 import type { GeometricMember, MemberType } from "@/types/canvas";
+import { useUIStore } from "@/stores/uiStore";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface MembersPanelProps {
   members: GeometricMember[];
@@ -60,29 +62,37 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
   onSelectMember,
   onZoomToMember,
 }) => {
-  const [isExpanded, setIsExpanded] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    const stored = localStorage.getItem("membersPanel.expanded");
-    return stored !== "false";
-  });
+  const {
+    membersPanelExpanded,
+    setMembersPanelExpanded,
+    pipelineRailExpanded,
+  } = useUIStore();
 
   const grouped = groupByType(members);
   const visibleGroups = GROUP_ORDER.filter((type) => grouped[type].length > 0);
   const totalCount = members.length;
 
-  useEffect(() => {
-    localStorage.setItem("membersPanel.expanded", isExpanded ? "true" : "false");
-  }, [isExpanded]);
-
-  if (!isExpanded) {
+  if (!membersPanelExpanded) {
+    if (!pipelineRailExpanded) {
+      return null;
+    }
     return (
-      <button
-        onClick={() => setIsExpanded(true)}
-        className="w-12 flex items-center justify-center bg-muted/40 border-r border-border hover:bg-muted/60 transition-colors shrink-0"
-        title="Expand Members panel"
-      >
-        <ChevronRight className="h-4 w-4" />
-      </button>
+      <div className="w-12 h-full flex flex-col bg-muted/40 border-r border-border shrink-0 items-center py-4">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setMembersPanelExpanded(true)}
+              className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Expand Members list"
+            >
+              <Layers className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" align="center">
+            Expand Members list
+          </TooltipContent>
+        </Tooltip>
+      </div>
     );
   }
 
@@ -95,7 +105,7 @@ export const MembersPanel: React.FC<MembersPanelProps> = ({
           <span className="ml-2 text-foreground/50">{totalCount} total</span>
         </div>
         <button
-          onClick={() => setIsExpanded(false)}
+          onClick={() => setMembersPanelExpanded(false)}
           className="p-1 hover:bg-muted/60 rounded transition-colors"
           title="Collapse Members panel"
         >

@@ -85,7 +85,7 @@ class MemberGeometry(BaseModel):
     """
 
     member_id: str = Field(..., description="Unique member identifier.")
-    member_type: Literal["beam", "slab", "column", "wall", "footing", "staircase"] = Field(
+    member_type: Literal["beam", "slab", "column", "wall", "footing", "staircase", "void"] = Field(
         ..., description="Structural member type."
     )
     floor_level: str = Field("G", description="Floor/storey label.")

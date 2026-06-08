@@ -200,7 +200,7 @@ function drawSpanningArrows(
     ctx.fillStyle = "rgba(16, 185, 129, 0.70)";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    const label = lx ? `Lx=${(lx / 1000).toFixed(1)}m` : `Ly=${((ly ?? 0) / 1000).toFixed(1)}m`;
+    const label = lx ? `Lx=${lx.toFixed(1)}m` : `Ly=${(ly ?? 0).toFixed(1)}m`;
     ctx.fillText(label, cx, cy + 8);
   }
 }

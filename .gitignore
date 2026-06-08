@@ -3,4 +3,3 @@ venv/
 **/api/**/*.svg
 apps/api/uploads/*
 logs
-parsed.json

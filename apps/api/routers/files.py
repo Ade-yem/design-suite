@@ -281,6 +281,95 @@ async def upload_file(
     )
 
 
+@router.post(
+    "/{project_id}/reparse",
+    response_model=UploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def reparse_project_files(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    project: ProjectResponse = Depends(require_file_uploaded),
+) -> UploadResponse:
+    """
+    Re-run the Vision & Parsing Agent on already uploaded project drawing files.
+
+    Resets the verified status and local layout changes, starting the geometry
+    classification from scratch.
+
+    Parameters
+    ----------
+    project_id : str
+        Target project.
+    background_tasks : BackgroundTasks
+        FastAPI background task queue.
+    project : ProjectResponse
+        Gate dependency confirming a file has already been uploaded.
+
+    Returns
+    -------
+    UploadResponse
+        ``job_id`` and ``status_url`` for polling the background parse job.
+    """
+    if project.pipeline_status_ordinal >= ProjectStatus.GEOMETRY_VERIFIED:
+        raise StructuralError(
+            "PIPELINE_ERROR",
+            stage="reparse",
+            details={"reason": "Cannot reparse drawing. Geometry has already been verified for this project."},
+            status_code=400,
+        )
+
+    # Check if there is another parsing job active
+    jobs = await job_store.list_for_project(project_id)
+    if any(j.job_type == "parsing" and j.status in ("queued", "running") for j in jobs):
+        raise StructuralError(
+            "PIPELINE_ERROR",
+            stage="reparse",
+            details={"reason": "A parsing job is already in progress for this project."},
+            status_code=400,
+        )
+
+    # Retrieve already uploaded files
+    filenames = file_handler.list_files(project_id)
+    dxf_file = next((f for f in filenames if f.lower().endswith(".dxf")), None)
+    pdf_file = next((f for f in filenames if f.lower().endswith(".pdf")), None)
+
+    if not dxf_file:
+        raise StructuralError(
+            "FILE_NOT_FOUND",
+            stage="reparse",
+            details={"reason": "No primary DXF drawing file found for this project. Please upload one first."},
+            status_code=404,
+        )
+
+    saved_path = await file_handler.get_url(project_id, dxf_file)
+    saved_pdf_path = await file_handler.get_url(project_id, pdf_file) if pdf_file else None
+
+    # Clear cached geometry in service
+    await file_service.clear(project_id)
+
+    job_id = await job_store.create("parsing", project_id=project_id)
+    background_tasks.add_task(
+        _parse_file_background,
+        project_id=project_id,
+        file_path=saved_path,
+        job_id=job_id,
+        pdf_path=saved_pdf_path,
+    )
+    logger.info(
+        "Reparse triggered for project %s (DXF: '%s', PDF ref: '%s'). Parse job: %s.",
+        project_id,
+        dxf_file,
+        pdf_file if pdf_file else "none",
+        job_id,
+    )
+    return UploadResponse(
+        message="Reparsing project drawing initiated. Parsing in progress.",
+        job_id=job_id,
+        status_url=f"/api/v1/files/{project_id}/parse-status/{job_id}",
+    )
+
+
 @router.get("/{project_id}/parse-status/{job_id}")
 async def get_parse_status(
     project_id: str,

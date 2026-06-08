@@ -16,6 +16,8 @@ interface GeometryGateProps {
   memberCount: number;
   onConfirmGeometry: (notes?: string) => Promise<void>;
   onResetGeometry: () => void;
+  onRegenerateLayout?: () => Promise<void>;
+  isRegenerating?: boolean;
 }
 
 export const GeometryGate: React.FC<GeometryGateProps> = ({
@@ -29,6 +31,8 @@ export const GeometryGate: React.FC<GeometryGateProps> = ({
   memberCount,
   onConfirmGeometry,
   onResetGeometry,
+  onRegenerateLayout,
+  isRegenerating = false,
 }) => {
   const [isConfirmingGeometry, setIsConfirmingGeometry] = useState(false);
 
@@ -41,8 +45,9 @@ export const GeometryGate: React.FC<GeometryGateProps> = ({
   const step2Done = true; // Always true; step 2 is review, not a gating action
   const step3Enabled = step1Done && step2Done; // Can only sign off if scale confirmed
 
-  // Only show the gate if scale was detected (or if we're still verifying)
-  if (!scaleDetected && verificationStatus === "pending") {
+  // Only show the gate if a scale is present and either detected or confirmed
+  const hasScale = scale !== null;
+  if ((!hasScale || (!scaleDetected && !scaleConfirmed)) && verificationStatus === "pending") {
     return null;
   }
 
@@ -123,11 +128,21 @@ export const GeometryGate: React.FC<GeometryGateProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={() => onResetGeometry()}
-              disabled={!step3Enabled || isConfirmingGeometry}
+              disabled={!step3Enabled || isConfirmingGeometry || isRegenerating}
               className="px-3 py-1 text-xs rounded border border-amber-500/30 text-amber-200 hover:bg-amber-500/10 transition-all disabled:opacity-40"
             >
               Reset Geometry
             </button>
+            {onRegenerateLayout && (
+              <button
+                onClick={onRegenerateLayout}
+                disabled={!step3Enabled || isConfirmingGeometry || isRegenerating}
+                className="px-3 py-1 text-xs rounded border border-amber-500/30 text-amber-200 hover:bg-amber-500/10 transition-all disabled:opacity-40 inline-flex items-center gap-1.5"
+              >
+                {isRegenerating && <Loader2 className="h-3 w-3 animate-spin" />}
+                Regenerate Layout
+              </button>
+            )}
             <button
               onClick={async () => {
                 setIsConfirmingGeometry(true);
@@ -137,7 +152,7 @@ export const GeometryGate: React.FC<GeometryGateProps> = ({
                   setIsConfirmingGeometry(false);
                 }
               }}
-              disabled={!step3Enabled || isConfirmingGeometry}
+              disabled={!step3Enabled || isConfirmingGeometry || isRegenerating}
               className="ml-auto px-4 py-1 bg-blue-600 text-white text-xs font-semibold rounded hover:bg-blue-500 transition-all disabled:opacity-40"
             >
               {isConfirmingGeometry ? (

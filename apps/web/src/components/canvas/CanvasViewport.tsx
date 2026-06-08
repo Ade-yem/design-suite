@@ -43,6 +43,8 @@ import { PropertyInspector } from "./PropertyInspector";
 import { CanvasUploader, type CanvasUploaderHandle } from "./CanvasUploader";
 import { MembersPanel } from "./MembersPanel";
 import { GeometryGate } from "./GeometryGate";
+import { useProjectSocket } from "@/hooks/useProjectSocket";
+import { Loader2 } from "lucide-react";
 
 export interface CanvasViewportHandle {
   /** Public API: lets parent elements trigger DXF file browsing */
@@ -60,7 +62,7 @@ interface CanvasViewportProps {
   onUploadStart?: () => void;
 }
 
-type UploadState = "idle" | "done" | "parsing";
+type UploadState = "not ready" | "idle" | "done" | "parsing";
 
 export const CanvasViewport = forwardRef<
   CanvasViewportHandle,
@@ -97,11 +99,43 @@ export const CanvasViewport = forwardRef<
   } = useCanvasStore();
 
   // ── Component State ──────────────────────────────────────────────────────
-  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [uploadState, setUploadState] = useState<UploadState>("not ready");
   const [tooltipPos, setTooltipPos] = useState<Point | null>(null);
   const [scaleUnit, setScaleUnit] = useState<string>("mm");
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [isConfirmingScale, setIsConfirmingScale] = useState(false);
+
+  // Regeneration state
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerateProgress, setRegenerateProgress] = useState<number>(0);
+  const [regenerateStep, setRegenerateStep] = useState<string>("");
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+
+  // Establish dynamic WebSocket connection for live regeneration progress updates
+  useProjectSocket(projectId, {
+    onJobUpdate: (msg) => {
+      if (activeJobId && msg.job_id === activeJobId) {
+        if (msg.status === "complete") {
+          fetchExistingGeometry().then(() => {
+            setIsRegenerating(false);
+            setActiveJobId(null);
+            setRegenerateProgress(0);
+            setRegenerateStep("");
+            toast.success("Geometry layout regenerated successfully.");
+          });
+        } else if (msg.status === "failed") {
+          setIsRegenerating(false);
+          setActiveJobId(null);
+          setRegenerateProgress(0);
+          setRegenerateStep("");
+          toast.error(msg.errors?.[0] ?? "Geometry regeneration failed.");
+        } else {
+          setRegenerateProgress(msg.progress_pct);
+          setRegenerateStep(msg.current_step);
+        }
+      }
+    },
+  });
 
   // Refs
   const uploaderRef = useRef<CanvasUploaderHandle>(null);
@@ -130,7 +164,7 @@ export const CanvasViewport = forwardRef<
         setUploadState("idle");
         return;
       }
-      setUploadState("parsing");
+      setUploadState((prev) => (prev === "done" ? "done" : "parsing"));
       const { data } = await apiClient.get<ParsedGeometry>(
         `/api/v1/files/${projectId}/parsed`,
       );
@@ -232,9 +266,15 @@ export const CanvasViewport = forwardRef<
   // Depends only on `uploadState` (handleResize/fitToView are stable), so
   // user zoom/pan is preserved instead of being reset on every interaction.
   useEffect(() => {
-    if (uploadState !== "done") return;
+    if (uploadState !== "done" || !containerRef.current) return;
+    
     handleResize();
-    window.addEventListener("resize", handleResize);
+
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    resizeObserver.observe(containerRef.current);
+
     // Delay fit to view slightly to allow container sizing to settle
     const fitTimer = setTimeout(() => {
       fitToView(
@@ -242,8 +282,9 @@ export const CanvasViewport = forwardRef<
         canvasRef.current?.height ?? 600,
       );
     }, 100);
+
     return () => {
-      window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
       clearTimeout(fitTimer);
     };
   }, [uploadState, handleResize, fitToView]);
@@ -257,7 +298,7 @@ export const CanvasViewport = forwardRef<
     // Handle pan mode (Spacebar or Middle Click or Pan Tool active)
     if (activeTool === "pan" || e.button === 1 || e.shiftKey) {
       isPanningRef.current = true;
-      startPanRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+      startPanRef.current = { x: e.clientX - pan.x, y: e.clientY + pan.y };
       e.preventDefault();
       return;
     }
@@ -289,7 +330,7 @@ export const CanvasViewport = forwardRef<
     if (isPanningRef.current) {
       const nextPan = {
         x: e.clientX - startPanRef.current.x,
-        y: e.clientY - startPanRef.current.y,
+        y: startPanRef.current.y - e.clientY,
       };
       setPan(nextPan);
     } else if (activeTool === "select") {
@@ -422,6 +463,29 @@ export const CanvasViewport = forwardRef<
     await fetchExistingGeometry();
   };
 
+  const handleRegenerateLayout = async () => {
+    setIsRegenerating(true);
+    setRegenerateProgress(0);
+    setRegenerateStep("Initiating layout regeneration...");
+    setVerificationStatus("pending");
+    resetGeometry();
+
+    try {
+      const { data } = await apiClient.post<{ job_id: string }>(
+        `/api/v1/files/${projectId}/reparse`
+      );
+      setActiveJobId(data.job_id);
+    } catch (err: unknown) {
+      const msg =
+        (err as { detail?: string }).detail ??
+        "Failed to trigger geometry regeneration.";
+      toast.error(msg);
+      setIsRegenerating(false);
+      setRegenerateProgress(0);
+      setRegenerateStep("");
+    }
+  };
+
   const handleZoomToMember = (memberId: string) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -460,6 +524,8 @@ export const CanvasViewport = forwardRef<
               memberCount={members.length}
               onConfirmGeometry={handleConfirmGeometry}
               onResetGeometry={handleResetGeometry}
+              onRegenerateLayout={handleRegenerateLayout}
+              isRegenerating={isRegenerating}
             />
 
             <CanvasToolbar
@@ -498,14 +564,34 @@ export const CanvasViewport = forwardRef<
         {/* Viewport content area */}
         <div className="flex-1 relative overflow-hidden">
           {uploadState === "done" ? (
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 block cursor-crosshair"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            />
+            <>
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 block cursor-crosshair"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              />
+              {isRegenerating && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-card/75 backdrop-blur-xs z-30">
+                  <div className="flex flex-col items-center gap-4 bg-[#0b0f19]/80 px-8 py-6 rounded-xl border border-border/40 shadow-2xl">
+                    <Loader2 className="h-10 w-10 text-primary animate-spin" />
+                    <p className="text-sm font-semibold tracking-wide uppercase font-mono text-primary">
+                      Regenerating Layout ({regenerateProgress.toFixed(0)}%)
+                    </p>
+                    <p className="text-xs text-muted-foreground font-mono text-center max-w-sm">
+                      {regenerateStep}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : uploadState === "not ready" ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0b0f19] z-10">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+              <p className="text-xs text-muted-foreground font-mono mt-2">Loading workspace...</p>
+            </div>
           ) : (
             <CanvasUploader
               ref={uploaderRef}

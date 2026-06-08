@@ -79,6 +79,29 @@ class LocalFileBackend(FileStorageBackend):
                 status_code=400,
             )
 
+        # Check magic bytes for content validation (H6)
+        header = await file.read(1024)
+        await file.seek(0)
+
+        is_valid = False
+        if suffix == ".pdf":
+            is_valid = header.startswith(b"%PDF")
+        elif suffix == ".dxf":
+            stripped = header.strip()
+            is_valid = (
+                header.startswith(b"AutoCAD Binary DXF") or
+                stripped.startswith(b"0") or
+                stripped.startswith(b"999") or
+                b"SECTION" in stripped[:100]
+            )
+
+        if not is_valid:
+            raise StructuralError(
+                "UNSUPPORTED_FILE",
+                details={"message": "File content does not match its extension type."},
+                status_code=400,
+            )
+
         timestamp = int(time.time() * 1000)
         safe_name = f"{timestamp}_{Path(original_name).name}"
         dest = self._project_dir(project_id) / safe_name

@@ -7,8 +7,12 @@ import {
   Calculator,
   PenTool,
   Loader2,
+  ChevronLeft,
+  ListTodo,
+  Layers,
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
@@ -45,9 +49,56 @@ export function PipelineRail({
   currentStage,
   pipelineStatus,
 }: PipelineRailProps) {
-  const { pendingGate, setPendingGate } = useUIStore();
+  const {
+    pendingGate,
+    setPendingGate,
+    pipelineRailExpanded,
+    setPipelineRailExpanded,
+    membersPanelExpanded,
+    setMembersPanelExpanded,
+  } = useUIStore();
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (!pipelineRailExpanded) {
+    return (
+      <div className="w-12 h-full flex flex-col bg-muted/40 border-r border-border shrink-0 items-center py-4 gap-4">
+        {/* Pipeline Rail Trigger */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setPipelineRailExpanded(true)}
+              className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Expand Pipeline"
+            >
+              <ListTodo className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" align="center">
+            Expand Pipeline
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Stacked Members Panel Trigger (only if both are collapsed) */}
+        {!membersPanelExpanded && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setMembersPanelExpanded(true)}
+                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Expand Members list"
+              >
+                <Layers className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" align="center">
+              Expand Members list
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    );
+  }
 
   const currentIdx = STAGES.findIndex((s) => s.id === currentStage);
   const statusLabel = getPipelineStatus(pipelineStatus).label;
@@ -72,8 +123,17 @@ export function PipelineRail({
 
   return (
     <div className="w-56 shrink-0 h-full border-r border-border bg-card flex flex-col">
-      <div className="h-8 px-3 border-b border-border flex items-center shrink-0">
-        <span className="text-xs font-mono text-muted-foreground">Pipeline</span>
+      <div className="h-8 px-3 border-b border-border flex items-center justify-between shrink-0">
+        <span className="text-xs font-mono text-muted-foreground">
+          Pipeline
+        </span>
+        <button
+          onClick={() => setPipelineRailExpanded(false)}
+          className="p-1 hover:bg-muted/60 rounded transition-colors"
+          title="Collapse Pipeline rail"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4">

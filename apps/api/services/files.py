@@ -503,15 +503,38 @@ class FileService:
         _store.set_scale(project_id, scale)
         await self._db_save_geometry(project_id, data, scale)
 
-    def clear(self, project_id: str) -> None:
+    async def clear(self, project_id: str) -> None:
         """
-        Remove all cached geometry and scale data for a project.
+        Remove all cached and persisted geometry and scale data for a project.
 
         Parameters
         ----------
         project_id : str
+            Project identifier whose geometry should be cleared.
         """
         _store.clear(project_id)
+
+        # Clear registered members
+        from storage.project_store import project_store
+        await project_store.register_members_batch(project_id, [])
+
+        from config import settings
+        if settings.PROJECT_STORE_BACKEND != "postgres":
+            return
+        try:
+            from db.session import get_session_maker
+            from db.models.project import ProjectGeometry
+            from sqlalchemy import delete
+
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                stmt = delete(ProjectGeometry).where(ProjectGeometry.project_id == project_id)
+                await session.execute(stmt)
+                await session.commit()
+        except RuntimeError:
+            pass  # DATABASE_URL not configured
+        except Exception as exc:
+            logger.warning("DB geometry clear failed for project %s: %s", project_id, exc)
 
     # ── DB persistence helpers ────────────────────────────────────────────────
 
