@@ -8,6 +8,8 @@ An open-source, AI-driven structural engineering IDE that automates the full RC 
 
 StructAI Copilot ingests a DXF or PDF architectural drawing, extracts the structural geometry, runs finite element analysis, designs reinforcement to BS8110 or Eurocode 2, and generates RC drawings and calculation reports. A multi-agent LangGraph pipeline orchestrated by Google Gemini drives the process; four hard-stop safety gates require explicit engineer confirmation before each stage can proceed.
 
+Every gate approval freezes an immutable, authored, timestamped **artifact** — building an auditable trail of exactly what was signed off, when, and by whom.
+
 ---
 
 ## The Pipeline
@@ -35,13 +37,25 @@ Each gate is a hard stop. The backend returns `403 GATE_NOT_PASSED` if any downs
 ```mermaid
 graph TD
     Browser["Browser\n(Next.js 16)"] -- "REST + WebSocket" --> API["FastAPI\n(uvicorn :8000)"]
-    API --> DB[("PostgreSQL 15")]
+    API --> PS["Project / Artifact Store\nMemory / PostgreSQL"]
+    PS --> DB[("PostgreSQL 15")]
     API --> LG["LangGraph\nAgent Pipeline"]
     LG --> Gemini["Google Gemini\nLLM"]
     API --> FS["File Storage\nLocal / Cloudinary"]
     API --> JS["Job Store\nMemory / Redis"]
     Browser -- "JWT (Bearer)" --> API
 ```
+
+### Pluggable, memory-first storage
+
+Every external dependency sits behind a swappable store with a memory backend, so the app — and the entire test suite — boots with **no database, Redis, or cloud storage** required. Opt into the persistent backend per store by setting the relevant environment variable:
+
+| Store | Memory backend (default) | Persistent backend | Selector |
+|---|---|---|---|
+| Projects | in-process | PostgreSQL | `PROJECT_STORE_BACKEND` (`memory` \| `postgres`) |
+| Artifacts (gate snapshots) | in-process | PostgreSQL | follows `PROJECT_STORE_BACKEND` |
+| Async jobs | in-process | Redis (auto when `REDIS_URL` set) | `JOB_STORE_BACKEND` (`memory` \| `redis`) |
+| Files | local disk | Cloudinary | `FILE_STORAGE_BACKEND` (`local` \| `cloudinary`) |
 
 ---
 
@@ -164,12 +178,13 @@ We welcome contributions — bug fixes, design-code implementations, new member 
 3. Make your changes, write or update tests.
 4. Run the test suite before opening a PR:
    ```bash
-   # Backend
+   # Backend — runs fully in-memory, no database or API keys needed
    cd apps/api && pytest
 
    # Frontend
-   cd apps/web && npm run lint
+   cd apps/web && npm run lint && npm run build
    ```
+   The backend suite mocks all Gemini calls and forces memory-backed stores via `tests/conftest.py`, so it runs offline. The same checks run in CI on every push (`.github/workflows/ci.yml`).
 5. Open a pull request with a clear description of what changed and why.
 
 ### Code conventions
