@@ -724,7 +724,7 @@ def _extract_beams_deterministically(beam_candidates: list[dict]) -> list[dict]:
     return members
 
 
-async def _run_llm_member_extraction(
+async def _run_member_extraction(
     project_id: str,
     parsed_json: dict,
     pdf_path: Optional[str] = None,
@@ -992,7 +992,7 @@ async def run_pipeline(dxf_path: str, pdf_path: Optional[str] = None) -> dict:
     project_id = "standalone-project"
     
     # Run LLM member extraction
-    members = await _run_llm_member_extraction(project_id, raw_dxf_data, pdf_path=pdf_path)
+    members = await _run_member_extraction(project_id, raw_dxf_data, pdf_path=pdf_path)
     
     # Apply post-processing
     members = _deduplicate_beams(members)
