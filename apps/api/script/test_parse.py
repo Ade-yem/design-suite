@@ -1,7 +1,7 @@
 import asyncio
 import os
 
-from agents.parser import _run_llm_member_extraction
+from agents.parser import _run_member_extraction
 from config import settings
 from schemas.project import ProjectCreate
 from services.files import file_service
@@ -40,7 +40,7 @@ async def test_real_llm_dual_input_parsing() -> None:
     assert parsed is not None
 
     # 2. Run LLM extraction with both parsed DXF structure and visual reference PDF
-    members = await _run_llm_member_extraction(project_id, parsed, pdf_path=pdf_path)
+    members = await _run_member_extraction(project_id, parsed, pdf_path=pdf_path)
     print(members)
     # 3. Assert results are correctly classified
     assert len(members) > 0

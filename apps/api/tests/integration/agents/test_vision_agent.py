@@ -21,7 +21,7 @@ import pytest
 from agents.parser import (
     _detect_unit_ambiguity,
     _prepare_candidates_summary,
-    _run_llm_member_extraction,
+    _run_member_extraction,
     parser_node
 )
 from services.files import file_service
@@ -144,7 +144,7 @@ class TestVisionAgentProduction:
         parsed = await file_service.parse(project_id, dxf_path)
 
         # Call real LLM classification
-        members = await _run_llm_member_extraction(project_id, parsed)
+        members = await _run_member_extraction(project_id, parsed)
 
         assert len(members) > 0
 
@@ -277,7 +277,7 @@ class TestVisionAgentProduction:
         assert parsed is not None
 
         # 2. Run LLM extraction with both parsed DXF structure and visual reference PDF
-        members = await _run_llm_member_extraction(project_id, parsed, pdf_path=pdf_path)
+        members = await _run_member_extraction(project_id, parsed, pdf_path=pdf_path)
         print(members)
         # 3. Assert results are correctly classified
         assert len(members) > 0

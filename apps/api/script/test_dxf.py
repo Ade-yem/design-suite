@@ -12,7 +12,7 @@ import asyncio
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.parsing.dxf_parser import extract_geometry
-from agents.parser import _run_llm_member_extraction
+from agents.parser import _run_member_extraction
 def parse_dxf_entities(file_path: str):
     """
     Parses the given DXF file, prints details about its entities,
@@ -32,7 +32,7 @@ def parse_dxf_entities(file_path: str):
 
     try:
         result = extract_geometry(file_path)
-        members = asyncio.run(_run_llm_member_extraction("project_id", result))
+        members = asyncio.run(_run_member_extraction("project_id", result))
         output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "result.json")
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(members, f, indent=2)

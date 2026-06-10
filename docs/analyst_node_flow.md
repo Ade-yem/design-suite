@@ -109,7 +109,7 @@ Each entry in `members` is a dict with this shape (column / beam / slab variants
 }
 ```
 
-**How the parser builds these (3-stage pipeline in `_run_llm_member_extraction`):**
+**How the parser builds these (3-stage pipeline in `_run_member_extraction`):**
 
 1. **Beams — deterministic.** DXF `LINE` geometry already carries correct coordinates; section (`b_mm × h_mm`) and label are read from nearby `BeamText` (regex `(\d{2,4})[xX×](\d{2,4})` and `(\d*[Bb]\d+)`). Default section `225×450 mm`. Stubs `< 0.6 m` (column-face artefacts) are dropped. Parallel edge-pairs are merged to a centreline (`_cluster_candidate_pairs`, `_deduplicate_beams`). No LLM — avoids overwhelming the model with ~90 featureless lines.
 2. **Columns — LLM.** Closed rectangular/circular polylines are sent to Gemini for label assignment and section confirmation; defaults `L_clear = 3.0`, `end_condition = fixed_fixed`, `N_uls = 1000`, `M_uls = 0`.
@@ -119,10 +119,10 @@ Each entry in `members` is a dict with this shape (column / beam / slab variants
 
 The `sample/` drawings (`1-2 layout.dxf`, `Floor-beam.dxf`, `Floor-beam.pdf`) are real multi-storey RC floor plans:
 
-| Drawing | LINE | LWPOLYLINE | CIRCLE | TEXT | Notes |
-|---|---|---|---|---|---|
-| `1-2 layout.dxf` | 456 | 154 | 168 | 507 | Layers: `Beam`, `Column`, `AxisBalloons_*`, `BeamText`, `AxisText_*` |
-| `Floor-beam.dxf` | 225 | 76 | 84 | 251 | Same layer scheme |
+| Drawing          | LINE | LWPOLYLINE | CIRCLE | TEXT | Notes                                                                |
+| ---------------- | ---- | ---------- | ------ | ---- | -------------------------------------------------------------------- |
+| `1-2 layout.dxf` | 456  | 154        | 168    | 507  | Layers: `Beam`, `Column`, `AxisBalloons_*`, `BeamText`, `AxisText_*` |
+| `Floor-beam.dxf` | 225  | 76         | 84     | 251  | Same layer scheme                                                    |
 
 - **Beams** are drawn as **pairs of parallel lines** on the `Beam` layer, annotated in `BeamText` as e.g. `1B1 225x450 … 1B45 225x450` — i.e. all `225 mm × 450 mm`, IDs `B1…B45`.
 - **Columns** are `LWPOLYLINE` rectangles (~`225×225 mm`) on the `Column` layer arranged on a grid.
@@ -137,20 +137,25 @@ The `sample/` drawings (`1-2 layout.dxf`, `Floor-beam.dxf`, `Floor-beam.pdf`) ar
 `analyst_node(state)` (`agents/analyst.py`) is a three-way branch:
 
 ### 4.1 Branch A — Re-analysis (`reanalysis_triggered`)
+
 Delegates to `_handle_reanalysis`:
+
 - Guards against runaway loops with `_MAX_ITERATIONS = 5`; beyond that emits a `CONVERGENCE_FAILED` warning and clears the flag.
 - Re-runs `analysis_service.run(project_id, member_ids=failed, options={self_weight_iteration: True})` for the failed members only, then **merges** the new member results into the cached set (`existing_map` keyed by `member_id`).
 - Increments `iteration_count`, clears `reanalysis_triggered`, and lets the graph fall back through to the Designer.
 
 ### 4.2 Branch B — Design considerations + load collection (`load_definition` missing)
+
 Delegates to `_collect_design_considerations`. The Analyst gathers a **complete design brief** before assembling loads — **nothing is assumed**, every input is asked of the engineer (mirrors `docs/conversational_project_setup_proposal.md`):
-- **Opens the questionnaire** (when the last message isn't a fresh `HumanMessage`) with `_build_considerations_prompt`, grouped into four domains — *Building & use*, *Materials*, *Durability & fire*, *Loading*.
+
+- **Opens the questionnaire** (when the last message isn't a fresh `HumanMessage`) with `_build_considerations_prompt`, grouped into four domains — _Building & use_, _Materials_, _Durability & fire_, _Loading_.
 - **LLM extraction** (`gemini-1.5-pro`, `temperature=0`, extract-only/never-invent) maps the free-text reply into a nested project brief and **deep-merges** it across turns (`_deep_merge_parameters`; `materials`/`durability`/`dead_loads`/`geotech` merged one level deep). Building usage is classified into an `occupancy_category`; concrete grade like `C30/37` is split into `fck`/`fcu`.
 - **Required fields** (`_REQUIRED_FIELDS`) — all of: `design_working_life_years`; `num_storeys` (auto-1 only when explicitly single-storey), `storey_height_m`, `is_braced`; `materials.{concrete_grade, fy_main_MPa, fy_link_MPa, unit_weight_kNm3}`; `durability.{exposure_class, fire_resistance_min, nominal_cover_mm}`; `occupancy_category`; `dead_loads.{finishes, screed, services, partitions}`. **Conditionally** `geotech.bearing_capacity_kPa` when the geometry contains footings. `0`/`False` count as provided; only `None` is missing. Missing → domain-grouped follow-up (`_build_missing_consideration_question`); the agent blocks until satisfied.
-- **Derives `Qk`** from occupancy via `loading_service.imposed_load_for(occupancy, design_code)` (wraps `OccupancyLoadTable`); a `custom` occupancy with no stated value triggers an explicit `Qk` request. (Qk is the one code-table *lookup*, surfaced for confirmation — not an assumption.)
+- **Derives `Qk`** from occupancy via `loading_service.imposed_load_for(occupancy, design_code)` (wraps `OccupancyLoadTable`); a `custom` occupancy with no stated value triggers an explicit `Qk` request. (Qk is the one code-table _lookup_, surfaced for confirmation — not an assumption.)
 - Builds the load definition (`_build_load_definition_from_parameters`), validates (non-blocking), `loading_service.define(...)` persists it, and **propagates materials into geometry `meta`** (`_propagate_material_meta` → `cover_mm`, `fcu_MPa`/`fck_MPa`, `fy_MPa`, `fyv_MPa`, `gamma_conc_kNm3`, `exposure_class`, `fire_resistance_min`) so the design suite and self-weight use them. Posts a **parameters summary card** (`_build_parameters_summary`). `load_definition` is now set, so the **next** entry into the node proceeds to Branch C; the full `project_parameters` brief is retained in state.
 
 ### 4.3 Branch C — Combinations + analysis (`load_definition` present)
+
 1. `loading_service.run_combinations(project_id)` — assembles factored member loads (see §5).
 2. `analysis_service.run(project_id, member_ids=None, options={"pattern_loading": True, "self_weight_iteration": True}, progress_cb=_progress)` — runs the engine; `_progress` appends `analysis_running` log entries with `pct` for the IDE status stream.
 3. `analysis_service.ensure_cached(...)` + `get_results(...)` — fetch the `AnalysisOutputSchema` dict.
@@ -170,7 +175,7 @@ Delegates to `_collect_design_considerations`. The Analyst gathers a **complete 
 
 The graph then hits `loading_gate` (Gate 2) and pauses for the engineer to **Confirm Analysis**.
 
-> **Note (ordering):** Gate 2 is described as "confirm factored loads", but in the current wiring the Analyst runs *both* combinations *and* full analysis before the gate interrupts. The engineer confirms after seeing analysis results. If the intent is to gate **before** spending compute on analysis, the combination and analysis steps should be split across two node visits. Flagged in §7.
+> **Note (ordering):** Gate 2 is described as "confirm factored loads", but in the current wiring the Analyst runs _both_ combinations _and_ full analysis before the gate interrupts. The engineer confirms after seeing analysis results. If the intent is to gate **before** spending compute on analysis, the combination and analysis steps should be split across two node visits. Flagged in §7.
 
 ---
 
@@ -220,19 +225,20 @@ where `geometry_meta = parsed_members[mid]["meta"]`. Results are stored as `Anal
 
 `AnalysisEngine.analyze_member` (`core/analysis/engine.py`) routes on `member_type`:
 
-| Type | Router | Solver | Method | Loads source |
-|---|---|---|---|---|
-| beam (1 span) | `_route_beam` | `SimplySupportedBeamSolver` | closed-form | `span.loads["n_uls"]` ✅ |
-| beam (≥2 spans) | `_route_beam` | `MomentCoefficientSolver` | BS8110 coefficients | `max(span n_uls)` ✅ |
-| slab (solid/2-way) | `_route_slab` | `TwoWaySlabSolver` | BS8110 Table 3.14 | `meta["n_uls"]` ⚠ default 10.0 |
-| slab (flat) | `_route_slab` | `FlatSlabSolver` | punching, closed-form | `meta["V_Ed"]` ⚠ default 0 |
-| slab (ribbed) | `_route_slab` | `RibbedSlabSolver` | T-beam closed-form | `meta["n_uls"]` ⚠ default 10.0 |
-| column | `_route_column` | `ColumnSolver` | BS8110 slenderness, closed-form | `meta["N_uls"/"M_uls"]` ⚠ placeholder |
-| wall | `_route_wall` | `WallSolver` | BS8110/EC2 slenderness | `meta` defaults |
-| footing | `_route_footing` | `PadFootingSolver` | closed-form | `meta` defaults |
-| staircase | `_route_staircase` | `StaircaseSolver` | closed-form | `meta` defaults |
+| Type               | Router             | Solver                      | Method                          | Loads source                          |
+| ------------------ | ------------------ | --------------------------- | ------------------------------- | ------------------------------------- |
+| beam (1 span)      | `_route_beam`      | `SimplySupportedBeamSolver` | closed-form                     | `span.loads["n_uls"]` ✅              |
+| beam (≥2 spans)    | `_route_beam`      | `MomentCoefficientSolver`   | BS8110 coefficients             | `max(span n_uls)` ✅                  |
+| slab (solid/2-way) | `_route_slab`      | `TwoWaySlabSolver`          | BS8110 Table 3.14               | `meta["n_uls"]` ⚠ default 10.0        |
+| slab (flat)        | `_route_slab`      | `FlatSlabSolver`            | punching, closed-form           | `meta["V_Ed"]` ⚠ default 0            |
+| slab (ribbed)      | `_route_slab`      | `RibbedSlabSolver`          | T-beam closed-form              | `meta["n_uls"]` ⚠ default 10.0        |
+| column             | `_route_column`    | `ColumnSolver`              | BS8110 slenderness, closed-form | `meta["N_uls"/"M_uls"]` ⚠ placeholder |
+| wall               | `_route_wall`      | `WallSolver`                | BS8110/EC2 slenderness          | `meta` defaults                       |
+| footing            | `_route_footing`   | `PadFootingSolver`          | closed-form                     | `meta` defaults                       |
+| staircase          | `_route_staircase` | `StaircaseSolver`           | closed-form                     | `meta` defaults                       |
 
 ### 6.1 Solver capabilities (already implemented)
+
 - **`SimplySupportedBeamSolver`** — superposition of UDL + point loads; `M=wL²/8`, `V=wL/2`, `δ=5wL⁴/384EI`; SLS deflection vs `span/250`; full `calculation_trace`.
 - **`MomentCoefficientSolver`** — BS8110 Table 3.5 coefficients (`0.09FL`/`0.066FL` sagging, `−0.10FL`/`−0.086FL` hogging; shears `0.45F/0.60F/0.50F`).
 - **`ColumnSolver`** — effective-length β (fixed-fixed 0.65 / fixed-pinned 0.80 / pinned 1.0), slenderness λ classification, minimum eccentricity `max(h/20, 20 mm)`, additional moment for slender columns.
@@ -241,6 +247,7 @@ where `geometry_meta = parsed_members[mid]["meta"]`. Results are stored as `Anal
 - **`GlobalMatrixSolver`** (`global_solver.py`) — a complete 2D Euler-Bernoulli frame matrix-stiffness solver (per-node 3 DOF, element `k`, transformation `T`, fixed-end forces from UDL, partitioned `K_ff D_f = F_f`, reactions + internal end forces). **Fully written, not yet called by the engine.**
 
 ### 6.2 Output contract (`models/analysis/schema.py`)
+
 `MemberAnalysisResult` carries everything the Designer needs: `stress_resultants` (`M_max_sagging/hogging`, `V_max`, `N_axial`, `deflection_max`), `critical_sections`, `reactions_kN`, `governing_pattern`, `SLS_checks`, `calculation_trace` (step / formula / inputs / result / `clause_reference`), `warnings`, `flags`. This schema is solid and should remain the stable interface to the Designer.
 
 ---
@@ -249,19 +256,19 @@ where `geometry_meta = parsed_members[mid]["meta"]`. Results are stored as `Anal
 
 The plumbing works; the **structural fidelity** is the gap. In rough priority:
 
-1. **Continuity is lost at the parser boundary.** Each beam segment becomes a single-span member, so `_route_beam` always takes the simply-supported path and the `MomentCoefficientSolver` / `GlobalMatrixSolver` paths are effectively dead for real drawings. *Fix:* either (a) group co-linear beam segments sharing a gridline into a multi-span `spans[]` member during/after parsing, or (b) assemble a per-gridline frame and feed `GlobalMatrixSolver`.
+1. **Continuity is lost at the parser boundary.** Each beam segment becomes a single-span member, so `_route_beam` always takes the simply-supported path and the `MomentCoefficientSolver` / `GlobalMatrixSolver` paths are effectively dead for real drawings. _Fix:_ either (a) group co-linear beam segments sharing a gridline into a multi-span `spans[]` member during/after parsing, or (b) assemble a per-gridline frame and feed `GlobalMatrixSolver`.
 
-2. **2D FEA is not wired in.** `GlobalMatrixSolver` exists but `AnalysisEngine` never instantiates it. CLAUDE.md advertises "runs 2D FEA". *Fix:* add a frame-assembly routing path (nodes from column centroids + beam endpoints, elements from beams/columns, supports at column bases) and route continuous/framed members there; keep closed-form solvers as the fast path for isolated members.
+2. **2D FEA is not wired in.** `GlobalMatrixSolver` exists but `AnalysisEngine` never instantiates it. CLAUDE.md advertises "runs 2D FEA". _Fix:_ add a frame-assembly routing path (nodes from column centroids + beam endpoints, elements from beams/columns, supports at column bases) and route continuous/framed members there; keep closed-form solvers as the fast path for isolated members.
 
-3. **No vertical load take-down.** Columns analyse with `N_uls = 1000 kN`, `M_uls = 0` (parser placeholders); slab/beam reactions never reach columns. *Fix:* accumulate beam end-reactions (already produced by the solvers) into the columns they frame into, and slab panel loads into supporting beams via tributary areas, before `_route_column` runs. This requires an analysis ordering: slabs → beams → columns.
+3. **No vertical load take-down.** Columns analyse with `N_uls = 1000 kN`, `M_uls = 0` (parser placeholders); slab/beam reactions never reach columns. _Fix:_ accumulate beam end-reactions (already produced by the solvers) into the columns they frame into, and slab panel loads into supporting beams via tributary areas, before `_route_column` runs. This requires an analysis ordering: slabs → beams → columns.
 
-4. **Slabs ignore assembled loads.** `_route_slab` reads `meta["n_uls"]` (never set in geometry `meta`) and defaults to `10.0 kN/m²`, bypassing `loading_service` output. *Fix:* thread the per-member `load_data.spans[...].loads["n_uls"]` (or a panel pressure) into the slab solvers, and map parser `slab_type = "solid_slab"` to the engine's expected `"solid"`/`"flat"`/`"ribbed"` keys (currently mismatched, so everything falls to the two-way default).
+4. **Slabs ignore assembled loads.** `_route_slab` reads `meta["n_uls"]` (never set in geometry `meta`) and defaults to `10.0 kN/m²`, bypassing `loading_service` output. _Fix:_ thread the per-member `load_data.spans[...].loads["n_uls"]` (or a panel pressure) into the slab solvers, and map parser `slab_type = "solid_slab"` to the engine's expected `"solid"`/`"flat"`/`"ribbed"` keys (currently mismatched, so everything falls to the two-way default).
 
-5. **Unused analysis options.** `pattern_loading` and `self_weight_iteration` are passed by the Analyst but `analysis_service.run` never reads `opts`. Pattern loading is only a per-span boolean today. *Fix:* implement pattern-load envelopes in the multi-span path and an actual self-weight iteration loop, or drop the options to avoid implying behaviour that doesn't exist.
+5. **Unused analysis options.** `pattern_loading` and `self_weight_iteration` are passed by the Analyst but `analysis_service.run` never reads `opts`. Pattern loading is only a per-span boolean today. _Fix:_ implement pattern-load envelopes in the multi-span path and an actual self-weight iteration loop, or drop the options to avoid implying behaviour that doesn't exist.
 
-6. **Re-analysis uses stale geometry.** `_handle_reanalysis` re-runs failed members, but `geometry_meta` (`b`, `h`, `I`) comes from `parsed_members`, which the Designer's size changes don't update. Without refreshed sections/`member_overrides`, the loop can converge to the same numbers. *Fix:* have the Designer write updated sections back to the geometry/override store that the engine reads.
+6. **Re-analysis uses stale geometry.** `_handle_reanalysis` re-runs failed members, but `geometry_meta` (`b`, `h`, `I`) comes from `parsed_members`, which the Designer's size changes don't update. Without refreshed sections/`member_overrides`, the loop can converge to the same numbers. _Fix:_ have the Designer write updated sections back to the geometry/override store that the engine reads.
 
-7. **Gate-2 semantics vs. compute ordering.** Gate 2 ("confirm loads") currently fires *after* full analysis. *Fix (if desired):* split combinations and analysis so the engineer confirms factored loads before the analysis run is spent.
+7. **Gate-2 semantics vs. compute ordering.** Gate 2 ("confirm loads") currently fires _after_ full analysis. _Fix (if desired):_ split combinations and analysis so the engineer confirms factored loads before the analysis run is spent.
 
 8. **Engine robustness.** `_route_footing` returns `None` for non-pad footings (would crash `model_dump()` downstream); slab/flat-slab `V_Ed` defaults to 0 making punching trivially pass. Add explicit `skipped`/`warning` results rather than `None`.
 
@@ -296,23 +303,23 @@ This keeps the existing service/solver/schema architecture intact — the work i
 
 ## 9. File reference map
 
-| Concern | File |
-|---|---|
-| Shared state | `apps/api/agents/state.py` |
-| Graph wiring | `apps/api/agents/graph.py` |
-| Routing | `apps/api/agents/supervisor.py` |
-| Parser node | `apps/api/agents/parser.py` |
-| Analyst node | `apps/api/agents/analyst.py` |
-| Gates | `apps/api/agents/gates.py` |
-| Loading service | `apps/api/services/loading.py` |
+| Concern                     | File                                                                       |
+| --------------------------- | -------------------------------------------------------------------------- |
+| Shared state                | `apps/api/agents/state.py`                                                 |
+| Graph wiring                | `apps/api/agents/graph.py`                                                 |
+| Routing                     | `apps/api/agents/supervisor.py`                                            |
+| Parser node                 | `apps/api/agents/parser.py`                                                |
+| Analyst node                | `apps/api/agents/analyst.py`                                               |
+| Gates                       | `apps/api/agents/gates.py`                                                 |
+| Loading service             | `apps/api/services/loading.py`                                             |
 | Loading serializer / schema | `apps/api/core/loading/serializer.py`, `apps/api/models/loading/schema.py` |
-| Analysis service | `apps/api/services/analysis.py` |
-| Analysis engine (router) | `apps/api/core/analysis/engine.py` |
-| Beam solvers | `apps/api/core/analysis/beam_solver.py` |
-| 2D FEA (unwired) | `apps/api/core/analysis/global_solver.py` |
-| Other solvers | `apps/api/core/analysis/{column,slab,footing,staircase,wall}_solver.py` |
-| Analysis output schema | `apps/api/models/analysis/schema.py` |
-| Sample drawings | `sample/1-2 layout.dxf`, `sample/Floor-beam.dxf`, `sample/Floor-beam.pdf` |
+| Analysis service            | `apps/api/services/analysis.py`                                            |
+| Analysis engine (router)    | `apps/api/core/analysis/engine.py`                                         |
+| Beam solvers                | `apps/api/core/analysis/beam_solver.py`                                    |
+| 2D FEA (unwired)            | `apps/api/core/analysis/global_solver.py`                                  |
+| Other solvers               | `apps/api/core/analysis/{column,slab,footing,staircase,wall}_solver.py`    |
+| Analysis output schema      | `apps/api/models/analysis/schema.py`                                       |
+| Sample drawings             | `sample/1-2 layout.dxf`, `sample/Floor-beam.dxf`, `sample/Floor-beam.pdf`  |
 
 ---
 
@@ -324,26 +331,26 @@ maps each required RC design input to where it now lives in the pipeline.
 
 ### A.1 Required inputs for RC design (BS 8110 / EC2)
 
-| Domain | Input | Why it's needed | Status |
-|---|---|---|---|
-| **Design basis** | Design code | Partial factors, combination rules | From project creation (`state.design_code`) |
-| | Design working life (yrs) | EC2 durability / structural-class selection | **Now asked** (`design_working_life_years`) |
-| **Materials** | Concrete grade `fcu`/`fck` | Flexural/shear capacity, `fcd`, `fctm` | **Now asked** (`materials.concrete_grade` → `fck_MPa`/`fcu_MPa`) |
-| | Main bar yield `fy`/`fyk` | `As` design, min/max steel | **Now asked** (`materials.fy_main_MPa`) |
-| | Link yield `fyv`/`fywk` | Shear-link design | **Now asked** (`materials.fy_link_MPa`) |
-| | RC unit weight | Self-weight | **Now asked** (`materials.unit_weight_kNm3`) |
-| **Durability & fire** | Exposure class | Sets min grade + min cover | **Now asked** (`durability.exposure_class`) |
-| | Fire resistance period | Axis distance / cover + min member sizes | **Now asked** (`durability.fire_resistance_min`) |
-| | Nominal cover `c_nom` | Effective depth `d` → every capacity check | **Now asked** (`durability.nominal_cover_mm`) |
-| **Geometry / form** | No. of storeys | Column load take-down, stability | **Now asked** (`num_storeys`) |
-| | Storey height | Column effective length / slenderness | **Now asked** (`storey_height_m`) |
-| | Braced / unbraced | Effective-length factor, sway | **Now asked** (`is_braced`) |
-| | Member sections | Capacity | From parser (`meta.b/h/b_mm/h_mm`) |
-| **Loading** | Occupancy → `Qk` | Imposed load | **Asked** (occupancy) → derived via `OccupancyLoadTable`, confirmed |
-| | Superimposed dead loads | `Gk` | **Now asked** (`dead_loads.*`) |
-| | Cladding line load | Perimeter-beam `Gk` | Optional (`dead_loads.cladding_kNm`) |
-| | Roof load | Roof members | Optional (`roof_qk_kNm2`) |
-| **Geotechnical** | Soil bearing capacity | Footing sizing | **Conditionally asked** when footings present (`geotech.bearing_capacity_kPa`) |
+| Domain                | Input                      | Why it's needed                             | Status                                                                         |
+| --------------------- | -------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Design basis**      | Design code                | Partial factors, combination rules          | From project creation (`state.design_code`)                                    |
+|                       | Design working life (yrs)  | EC2 durability / structural-class selection | **Now asked** (`design_working_life_years`)                                    |
+| **Materials**         | Concrete grade `fcu`/`fck` | Flexural/shear capacity, `fcd`, `fctm`      | **Now asked** (`materials.concrete_grade` → `fck_MPa`/`fcu_MPa`)               |
+|                       | Main bar yield `fy`/`fyk`  | `As` design, min/max steel                  | **Now asked** (`materials.fy_main_MPa`)                                        |
+|                       | Link yield `fyv`/`fywk`    | Shear-link design                           | **Now asked** (`materials.fy_link_MPa`)                                        |
+|                       | RC unit weight             | Self-weight                                 | **Now asked** (`materials.unit_weight_kNm3`)                                   |
+| **Durability & fire** | Exposure class             | Sets min grade + min cover                  | **Now asked** (`durability.exposure_class`)                                    |
+|                       | Fire resistance period     | Axis distance / cover + min member sizes    | **Now asked** (`durability.fire_resistance_min`)                               |
+|                       | Nominal cover `c_nom`      | Effective depth `d` → every capacity check  | **Now asked** (`durability.nominal_cover_mm`)                                  |
+| **Geometry / form**   | No. of storeys             | Column load take-down, stability            | **Now asked** (`num_storeys`)                                                  |
+|                       | Storey height              | Column effective length / slenderness       | **Now asked** (`storey_height_m`)                                              |
+|                       | Braced / unbraced          | Effective-length factor, sway               | **Now asked** (`is_braced`)                                                    |
+|                       | Member sections            | Capacity                                    | From parser (`meta.b/h/b_mm/h_mm`)                                             |
+| **Loading**           | Occupancy → `Qk`           | Imposed load                                | **Asked** (occupancy) → derived via `OccupancyLoadTable`, confirmed            |
+|                       | Superimposed dead loads    | `Gk`                                        | **Now asked** (`dead_loads.*`)                                                 |
+|                       | Cladding line load         | Perimeter-beam `Gk`                         | Optional (`dead_loads.cladding_kNm`)                                           |
+|                       | Roof load                  | Roof members                                | Optional (`roof_qk_kNm2`)                                                      |
+| **Geotechnical**      | Soil bearing capacity      | Footing sizing                              | **Conditionally asked** when footings present (`geotech.bearing_capacity_kPa`) |
 
 Materials/durability are pushed into each member's geometry `meta`
 (`_propagate_material_meta`) so the design suite reads real values, not defaults.
@@ -355,7 +362,7 @@ Materials/durability are pushed into each member's geometry `meta`
 3. **Seismic.** Out of scope for BS 8110; EC8 not in remit — note explicitly.
 4. **Wind/notional load combinations.** Only gravity combos (`1.4Gk+1.6Qk` / `1.35Gk+1.5Qk`) and SLS characteristic exist; `LimitState` enum already defines `ULS_WIND`, `SLS_QUASI_PERMANENT`, `SLS_FREQUENT` but the engine never assembles them. Notional horizontal loads (BS 8110 Cl 3.1.4.2 / EC2 imperfections) absent.
 5. **Crack-width & long-term deflection (SLS).** Only a span/250 elastic deflection check exists; quasi-permanent combinations and crack control (EC2 7.3) are not assembled.
-6. **Cover derivation cross-check.** Cover is now asked directly; a future enhancement could *derive* `c_min` from exposure class + fire period and warn if the engineer's `c_nom` is below code minimum (durability safety net) — derive-and-verify rather than derive-and-assume.
+6. **Cover derivation cross-check.** Cover is now asked directly; a future enhancement could _derive_ `c_min` from exposure class + fire period and warn if the engineer's `c_nom` is below code minimum (durability safety net) — derive-and-verify rather than derive-and-assume.
 
 ### Sources
 
@@ -384,7 +391,12 @@ analyst's questionnaire, follow-ups, summaries) never reached the chat. Added in
 `on_chain_end`, broadcast each appended AI message as
 
 ```jsonc
-{"type": "agent_message", "content": "…", "requires_input": true, "final": true}
+{
+  "type": "agent_message",
+  "content": "…",
+  "requires_input": true,
+  "final": true,
+}
 ```
 
 `requires_input` is computed from the node's `agent_logs` status
@@ -394,6 +406,7 @@ analyst's questionnaire, follow-ups, summaries) never reached the chat. Added in
 ### B.2 Auto-open behaviour
 
 In `apps/web/src/components/ChatSidebar.tsx`:
+
 - `onAgentMessage` → if `requires_input`, call `setChatOpen(true)` (surfaces the
   chat even when `w-0`/collapsed). `final` messages render as discrete bubbles;
   chunked messages still accumulate (future token streaming).
@@ -406,8 +419,8 @@ In `apps/web/src/components/ChatSidebar.tsx`:
 ### B.3 Graph re-entry fix (multi-turn collection)
 
 `analyst_agent → loading_gate` was unconditional, and `loading_gate` is
-`interrupt_before`. A multi-turn dialogue would therefore pause *before* the
-gate; the engineer's next message would resume straight *into* the gate,
+`interrupt_before`. A multi-turn dialogue would therefore pause _before_ the
+gate; the engineer's next message would resume straight _into_ the gate,
 swallowing the reply. Fixed with `analyst_router` (`agents/analyst.py`) +
 conditional edges (`agents/graph.py`): while still gathering inputs the analyst
 routes to `END` (so the next message re-enters the node from the entry point);
