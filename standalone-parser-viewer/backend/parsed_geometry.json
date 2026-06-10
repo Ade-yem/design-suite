@@ -1805,11 +1805,11 @@
       "meta": {
         "slab_type": "solid_slab",
         "thickness_mm": 150,
-        "Lx": 4.425,
+        "Lx": 2.527,
         "Ly": 5.95
       },
       "spans_m": [
-        4.425,
+        2.527,
         5.95
       ]
     },
@@ -1923,11 +1923,11 @@
       "meta": {
         "slab_type": "solid_slab",
         "thickness_mm": 150,
-        "Lx": 4.725,
+        "Lx": 4.009,
         "Ly": 7.125
       },
       "spans_m": [
-        4.725,
+        4.009,
         7.125
       ]
     },
@@ -2066,11 +2066,11 @@
       "meta": {
         "slab_type": "solid_slab",
         "thickness_mm": 150,
-        "Lx": 4.45,
+        "Lx": 3.209,
         "Ly": 6.15
       },
       "spans_m": [
-        4.45,
+        3.209,
         6.15
       ]
     },
@@ -2282,11 +2282,11 @@
       "meta": {
         "slab_type": "solid_slab",
         "thickness_mm": 150,
-        "Lx": 4.425,
+        "Lx": 3.614,
         "Ly": 5.85
       },
       "spans_m": [
-        4.425,
+        3.614,
         5.85
       ]
     },
@@ -2368,11 +2368,11 @@
       "meta": {
         "slab_type": "solid_slab",
         "thickness_mm": 150,
-        "Lx": 2.475,
+        "Lx": 1.765,
         "Ly": 5.325
       },
       "spans_m": [
-        2.475,
+        1.765,
         5.325
       ]
     },
@@ -5430,5 +5430,5 @@
     "dxf": "Floor-beam.dxf",
     "pdf": null
   },
-  "parsed_at": "2026-06-10T00:21:38.032952+00:00"
+  "parsed_at": "2026-06-10T08:34:42.950090+00:00"
 }

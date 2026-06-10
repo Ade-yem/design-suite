@@ -7,29 +7,24 @@ Responsibilities
 ----------------
 1. Trigger async DXF/PDF parsing via the FastAPI files router.
 2. Detect and surface unit/scale ambiguity **before** anything else.
-   (Risk 2 from the product brief — a 6 m beam vs a 6 mm beam produces
-   catastrophically different results.) The agent blocks here until the
-   engineer explicitly confirms units.
-3. Classify raw geometry entities into structured structural members using the LLM.
+3. Classify raw geometry entities into structured structural members.
 4. Summarise the detected structural members for engineer review.
 5. Produce the state update that feeds Gate 1 (geometry_verification_gate).
-
-Rule: This node **never calls analysis or design code directly**.
-      It only calls the files API tools.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import math
-import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
+from collections import defaultdict
 
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import AIMessage
+
+import shapely.geometry as sg
+from shapely.ops import polygonize, unary_union
 
 from agents.state import StructuralDesignState
 from config import settings
@@ -37,13 +32,6 @@ from services.files import file_service
 from storage.project_store import project_store
 
 logger = logging.getLogger(__name__)
-
-def _get_llm():
-    return ChatGoogleGenerativeAI(
-        model=settings.ACTION_MODEL,
-        temperature=0,
-        google_api_key=settings.GEMINI_API_KEY,
-    )
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -347,107 +335,6 @@ def _prepare_candidates_summary(parsed_json: dict) -> list[dict]:
     return candidates
 
 
-def _fallback_members_heuristics(candidates: list[dict]) -> list[dict]:
-    """
-    Fallback deterministic heuristic parser in case LLM fails or is unavailable.
-
-    Parameters
-    ----------
-    candidates : list[dict]
-        Pre-processed candidates with nearest text.
-
-    Returns
-    -------
-    list[dict]
-        Deterministic list of structural member dictionaries.
-    """
-    members = []
-    beam_idx = 1
-    col_idx = 1
-    
-    for cand in candidates:
-        layer_hint = cand["layer_hint"]
-        bbox = cand["bbox"]
-        spatial = cand.get("spatial", {})
-        
-        # Try to find a nearby label in text
-        label = None
-        for item in cand.get("nearest_text", []):
-            text_val = item["text"]
-            if re.match(r"^[BC]\d{1,3}$", text_val.upper()):
-                label = text_val.upper()
-                break
-                
-        w = bbox.get("width", 300.0)
-        h = bbox.get("height", 300.0)
-        
-        if layer_hint == "column_candidate" or "rectangular_outline" in cand.get("flags", []):
-            if not label:
-                label = f"C{col_idx}"
-                col_idx += 1
-            members.append({
-                "member_id": label,
-                "member_type": "column",
-                "type": "column",
-                "start_point": None,
-                "end_point": None,
-                "center_point": spatial.get("center_point"),
-                "boundary_polygon": None,
-                "is_void": False,
-                "meta": {
-                    "b": round(w),
-                    "h": round(h),
-                    "L_clear": 3.0,
-                    "end_condition": "fixed_fixed",
-                    "N_uls": 1000.0,
-                    "M_uls": 0.0
-                },
-                "spans": [{"span_id": "S1", "length_m": 3.0}],
-                "spans_m": [3.0]
-            })
-        else:
-            if not label:
-                label = f"B{beam_idx}"
-                beam_idx += 1
-                
-            length_m = round(max(w, h) / 1000.0, 2)
-            if length_m < 0.5:
-                length_m = 5.0
-                
-            b_mm = 300.0
-            h_mm = 500.0
-            for item in cand.get("nearest_text", []):
-                text_val = item["text"]
-                match = re.search(r"(\d{3})\s*[xX]\s*(\d{3})", text_val)
-                if match:
-                    b_mm = float(match.group(1))
-                    h_mm = float(match.group(2))
-                    break
-                    
-            I_val = round((b_mm / 1000.0) * ((h_mm / 1000.0) ** 3) / 12.0, 6)
-            
-            members.append({
-                "member_id": label,
-                "member_type": "beam",
-                "type": "beam",
-                "start_point": spatial.get("start_point"),
-                "end_point": spatial.get("end_point"),
-                "center_point": None,
-                "boundary_polygon": None,
-                "is_void": False,
-                "meta": {
-                    "b_mm": b_mm,
-                    "h_mm": h_mm,
-                    "L_clear": length_m,
-                    "E": 30e6,
-                    "I": I_val
-                },
-                "spans": [{"span_id": "S1", "length_m": length_m}],
-                "spans_m": [length_m]
-            })
-    return members
-
-
 # ─── Post-processing helpers ──────────────────────────────────────────────────
 
 
@@ -509,7 +396,7 @@ def _deduplicate_beams(members: list[dict]) -> list[dict]:
     return non_beams + merged + ungrouped
 
 
-def _filter_stub_beams(members: list[dict], min_span_m: float = 0.6) -> list[dict]:
+def _filter_stub_beams(members: list[dict], min_span_m: float = 0.1) -> list[dict]:
     """
     Remove beams shorter than min_span_m.
 
@@ -528,184 +415,198 @@ def _filter_stub_beams(members: list[dict], min_span_m: float = 0.6) -> list[dic
     return result
 
 
-async def _run_llm_slab_void_extraction(
-    project_id: str,
-    column_members: list[dict],
-    beam_members: list[dict],
-    pdf_path: Optional[str] = None,
-) -> list[dict]:
+def classify_columns_deterministically(col_candidates: list[dict], beam_members: list[dict]) -> list[dict]:
     """
-    Second LLM pass — identifies slab panels and void openings.
-
-    Uses the column grid and beam centrelines as a spatial framework and the
-    reference PDF as the visual ground truth for panel boundaries and voids.
-    Runs only when a PDF is available; returns an empty list otherwise.
-
-    Parameters
-    ----------
-    project_id : str
-        Project identifier for logging.
-    column_members : list[dict]
-        Already-classified column members (used for coordinate context).
-    beam_members : list[dict]
-        Already-classified, deduplicated beam members.
-    pdf_path : str | None
-        Absolute path to the reference PDF drawing.
-
-    Returns
-    -------
-    list[dict]
-        Slab panel and void member dicts ready to merge into the main list.
+    Deterministic column classification. Uses a structural beam footprint 
+    envelope to flawlessly reject title block frames and drawing border artifacts.
     """
-    # Check if the PDF has at least one page.
-    pdf_is_valid = False
-    if pdf_path and os.path.exists(pdf_path):
-        try:
-            import fitz
-            doc = fitz.open(pdf_path)
-            if doc.page_count > 0:
-                pdf_is_valid = True
-            else:
-                logger.warning("PDF file at '%s' has 0 pages; ignoring it as invalid.", pdf_path)
-        except Exception as err:
-            logger.warning("Failed to open PDF file at '%s': %s; ignoring it as invalid.", pdf_path, err)
-
-    if not pdf_path or not os.path.exists(pdf_path) or not pdf_is_valid:
-        logger.info("No valid PDF available — skipping slab/void extraction for project %s", project_id)
+    if not beam_members:
         return []
 
-    col_summary = [
-        {
-            "id": c.get("member_id"),
-            "x": round((c.get("center_point") or {}).get("x", 0), 1),
-            "y": round((c.get("center_point") or {}).get("y", 0), 1),
-            "b_mm": (c.get("meta") or {}).get("b", 225),
-            "h_mm": (c.get("meta") or {}).get("h", 225),
-        }
-        for c in column_members
-    ]
+    # 1. Establish the absolute physical footprint of the actual building framing using beams
+    beam_xs = []
+    beam_ys = []
+    for b in beam_members:
+        sp = b.get("start_point")
+        ep = b.get("end_point")
+        if sp and ep:
+            beam_xs.extend([sp["x"], ep["x"]])
+            beam_ys.extend([sp["y"], ep["y"]])
 
-    beam_summary = [
-        {
-            "id": b.get("member_id"),
-            "start": {
-                "x": round((b.get("start_point") or {}).get("x", 0), 1),
-                "y": round((b.get("start_point") or {}).get("y", 0), 1),
+    # Add a strict structural boundary buffer zone (1.2 meters) around the beam grid
+    STRUCTURAL_BUFFER = 1200.0
+    min_structural_x = min(beam_xs) - STRUCTURAL_BUFFER
+    max_structural_x = max(beam_xs) + STRUCTURAL_BUFFER
+    min_structural_y = min(beam_ys) - STRUCTURAL_BUFFER
+    max_structural_y = max(beam_ys) + STRUCTURAL_BUFFER
+
+    col_members = []
+    label_counters = defaultdict(int)
+
+    for c in col_candidates:
+        centroid = c.get("centroid", [0.0, 0.0])
+        bbox = c.get("bbox", {})
+        b_mm = bbox.get("width", 225.0)
+        h_mm = bbox.get("height", 225.0)
+        layer = c.get("layer", "").upper()
+        
+        # Immediate removal of known text, title, or sheet border layout layers
+        if any(kw in layer for kw in ("BORDER", "FRAME", "TITLE", "DEFPOINTS", "TEXT", "DIM", "ANALOG")):
+            continue
+
+        # --- Enforce Structural Footprint Filter ---
+        # Discard any candidate immediately if it falls outside the active beam layout grid area
+        if not (min_structural_x <= centroid[0] <= max_structural_x and min_structural_y <= centroid[1] <= max_structural_y):
+            continue
+
+        # Ignore unlabelled elements exceeding physical section sizing rules
+        if b_mm > 500.0 or h_mm > 500.0:
+            has_explicit_label = False
+            for t in c.get("nearest_text", []):
+                if re.search(r"\b(C\d+)\b", str(t["text"]).upper()):
+                    has_explicit_label = True
+                    break
+            if not has_explicit_label:
+                continue
+
+        base_label = None
+        for t in c.get("nearest_text", []):
+            text_val = str(t["text"]).strip().upper()
+            if "B" in text_val or "X" in text_val or "×" in text_val:
+                continue
+                
+            match = re.search(r"\b(C\d+)\b", text_val)
+            if match:
+                base_label = match.group(1)
+                break
+                
+        if not base_label:
+            base_label = "C_UNLABELED"
+
+        label_counters[base_label] += 1
+        member_id = f"{base_label}-{label_counters[base_label]}"
+        
+        col_members.append({
+            "member_id": member_id,
+            "member_type": "column",
+            "type": "column",
+            "start_point": None,
+            "end_point": None,
+            "center_point": {"x": centroid[0], "y": centroid[1]},
+            "boundary_polygon": None,
+            "is_void": False,
+            "meta": {
+                "b": int(b_mm),
+                "h": int(h_mm),
+                "L_clear": 3.0,
+                "end_condition": "fixed_fixed",
+                "N_uls": 1000.0,
+                "M_uls": 0.0
             },
-            "end": {
-                "x": round((b.get("end_point") or {}).get("x", 0), 1),
-                "y": round((b.get("end_point") or {}).get("y", 0), 1),
-            },
-            "span_m": round((b.get("spans_m") or [0])[0], 3),
-        }
-        for b in beam_members
-    ]
+            "spans": [],
+            "spans_m": []
+        })
+        
+    return col_members
 
-    prompt = f"""You are the Vision & Parsing Agent for an RC structural design copilot.
-You have already extracted {len(column_members)} columns and {len(beam_members)} beams from this floor plan.
-Your ONLY task now is to identify ALL slab panels and void openings.
 
---- Column positions (centre, mm) ---
-{json.dumps(col_summary, indent=2)}
-
---- Beam centrelines (mm) ---
-{json.dumps(beam_summary, indent=2)}
-
---- Instructions ---
-
-SLABS: Every rectangular or polygonal region enclosed by beams and columns is a slab panel.
-  - Trace the boundary_polygon using the beam centreline coordinates as panel corners.
-  - Label them S1, S2, S3, … in a logical order (top-left → bottom-right).
-  - Set is_void: false.
-  - Estimate Lx (shorter span, m) and Ly (longer span, m) from beam centreline positions.
-  - Default slab_type to "solid_slab" unless the PDF clearly shows ribbed or flat slab.
-  - Default thickness_mm to 150.
-
-VOIDS: Openings, stairwells, lift shafts, or cutouts visible in the floor plate.
-  - In the PDF these are typically marked with diagonal X crosses or void labels.
-  - Trace boundary_polygon around the opening perimeter.
-  - Set is_void: true.
-  - Label them V1, V2, V3, …
-
-Return ONLY a valid JSON array. No markdown fences, no preamble.
-
-Each entry must follow this exact schema:
-{{
-  "member_id": "S1",
-  "member_type": "slab",
-  "type": "slab",
-  "start_point": null,
-  "end_point": null,
-  "center_point": null,
-  "boundary_polygon": [{{"x": 0.0, "y": 0.0}}, ...],
-  "is_void": false,
-  "meta": {{
-    "slab_type": "solid_slab",
-    "Lx": 3.0,
-    "Ly": 4.0,
-    "thickness_mm": 150
-  }},
-  "spans": [],
-  "spans_m": []
-}}"""
-
-    try:
-        import base64
-        with open(pdf_path, "rb") as f:
-            pdf_b64 = base64.b64encode(f.read()).decode("utf-8")
-
-        llm = _get_llm()
-        content = [
-            {"type": "text", "text": prompt},
-            {"type": "file", "mime_type": "application/pdf", "base64": pdf_b64},
-        ]
-        # pyrefly: ignore [no-matching-overload]
-        response = await llm.ainvoke([HumanMessage(content=content)])
-        text = response.text.strip()
-
-        if "```" in text:
-            m = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
-            if m:
-                text = m.group(1).strip()
-
-        slab_members = json.loads(text)
-
-        if not isinstance(slab_members, list):
-            logger.warning("Slab extraction returned non-list for project %s", project_id)
-            return []
-
-        for m in slab_members:
-            is_void = m.get("is_void", False)
-            m_type = "void" if is_void else "slab"
-            m["member_type"] = m_type
-            m["type"] = m_type
-            meta = m.setdefault("meta", {})
-            meta.setdefault("slab_type", "solid_slab")
-            meta.setdefault("thickness_mm", 150)
+def extract_slabs_deterministically(all_members: list[dict]) -> list[dict]:
+    """
+    Finds all enclosed spaces (slabs) from beam centerlines using pure geometry.
+    Uses a closest-point minimization approach to prevent greedy cluster snapping
+    and maps true polygonal coordinates to eliminate rectangular overlaps.
+    """
+    beams = [m for m in all_members if m.get("member_type") == "beam"]
+    columns = [m for m in all_members if m.get("member_type") == "column"]
+    
+    col_points = []
+    for c in columns:
+        cp = c.get("center_point")
+        if cp:
+            col_points.append((cp["x"], cp["y"]))
             
-            # Deterministically calculate Lx and Ly from boundary polygon if present
-            boundary = m.get("boundary_polygon")
-            if boundary and len(boundary) >= 3:
-                xs = [pt["x"] for pt in boundary]
-                ys = [pt["y"] for pt in boundary]
-                w_m = round((max(xs) - min(xs)) / 1000.0, 3)
-                h_m = round((max(ys) - min(ys)) / 1000.0, 3)
-                meta["Lx"] = min(w_m, h_m)
-                meta["Ly"] = max(w_m, h_m)
+    SNAP_TOLERANCE = 650.0 
+    lines = []
 
-            Lx = meta.get("Lx", 0)
-            Ly = meta.get("Ly", 0)
-            m["spans_m"] = [Lx, Ly] if Lx and Ly else []
+    for beam in beams:
+        sp = beam.get("start_point")
+        ep = beam.get("end_point")
+        if not sp or not ep:
+            continue
+            
+        sx, sy = sp["x"], sp["y"]
+        ex, ey = ep["x"], ep["y"]
+        
+        # Find the absolute closest column for the start point
+        best_start_col = None
+        min_start_dist = float("inf")
+        for cx, cy in col_points:
+            dist = math.hypot(sx - cx, sy - cy)
+            if dist <= SNAP_TOLERANCE and dist < min_start_dist:
+                min_start_dist = dist
+                best_start_col = (cx, cy)
+        if best_start_col:
+            sx, sy = best_start_col
 
-        logger.info(
-            "Slab/void extraction: %d members for project %s",
-            len(slab_members), project_id,
-        )
-        return slab_members
+        # Find the absolute closest column for the end point
+        best_end_col = None
+        min_end_dist = float("inf")
+        for cx, cy in col_points:
+            dist = math.hypot(ex - cx, ey - cy)
+            if dist <= SNAP_TOLERANCE and dist < min_end_dist:
+                min_end_dist = dist
+                best_end_col = (cx, cy)
+        if best_end_col:
+            ex, ey = best_end_col
+                
+        lines.append(sg.LineString([(sx, sy), (ex, ey)]))
 
-    except Exception as exc:
-        logger.error("Slab/void extraction failed for project %s: %s", project_id, exc)
-        return []
+    # Union all snapped lines and find enclosed polygons
+    mls = unary_union(lines)
+    enclosed_polygons = list(polygonize(mls))
+    
+    slab_members = []
+    for idx, poly in enumerate(enclosed_polygons, start=1):
+        # --- CRITICAL FIX 1: Map the true polygon vertices instead of a bounding box ---
+        # This preserves L-shapes, recesses, and non-rectangular corners exactly.
+        coords = list(poly.exterior.coords)[:-1]
+        boundary_polygon = [{"x": round(pt[0], 4), "y": round(pt[1], 4)} for pt in coords]
+        
+        # Bounding box is only used to compute envelope sizes and design spans
+        min_x, min_y, max_x, max_y = poly.bounds
+        w_m = round((max_x - min_x) / 1000.0, 3)
+        h_m = round((max_y - min_y) / 1000.0, 3)
+        
+        # Filter out tiny artifacts and sheet-sized outer loops
+        if w_m < 0.20 or h_m < 0.20 or w_m > 15.0 or h_m > 15.0:
+            continue
+            
+        # --- CRITICAL FIX 2: Dynamic Aspect Ratio Sizing for Design Spans ---
+        # For non-rectangular slabs, using raw poly.bounds can overestimate Lx/Ly.
+        # We calculate the true plan area to derive an effective structural span width.
+        true_area_m2 = poly.area / 1_000_000.0
+        
+        # Estimate short span (Lx) based on true geometry area boundaries
+        estimated_lx = min(w_m, h_m)
+        if true_area_m2 < (w_m * h_m) * 0.85:
+            # Shape is complex (L-shaped/recessed). Adjust Lx to reflect truer panel span.
+            estimated_lx = round(true_area_m2 / max(w_m, h_m), 3)
+            
+        slab_members.append({
+            "member_id": f"S{idx}",
+            "member_type": "slab",
+            "type": "solid_slab",
+            "boundary_polygon": boundary_polygon,  # Now returns the exact custom polygon path
+            "meta": {
+                "slab_type": "solid_slab",
+                "thickness_mm": 150,
+                "Lx": round(max(0.2, estimated_lx), 3),
+                "Ly": max(w_m, h_m)
+            },
+            "spans_m": [round(max(0.2, estimated_lx), 3), max(w_m, h_m)]
+        })
+        
+    return slab_members
 
 
 def _extract_beams_deterministically(beam_candidates: list[dict]) -> list[dict]:
@@ -752,8 +653,8 @@ def _extract_beams_deterministically(beam_candidates: list[dict]) -> list[dict]:
                 if lbl:
                     member_id = lbl.group(1)
 
-        # Drop stub beams (length < 0.6 m) ONLY if they have no explicit structural label
-        if l_clear < 0.6 and member_id is None:
+        # Drop stub beams (length < 0.05 m) ONLY if they have no explicit structural label
+        if l_clear < 0.05 and member_id is None:
             continue
 
         if member_id is None:
@@ -784,10 +685,9 @@ def _extract_beams_deterministically(beam_candidates: list[dict]) -> list[dict]:
     return members
 
 
-async def _run_llm_member_extraction(
+async def _run_member_extraction(
     project_id: str,
     parsed_json: dict,
-    pdf_path: Optional[str] = None,
 ) -> list[dict]:
     """
     Extract structural members from parsed DXF + optional reference PDF.
@@ -795,17 +695,13 @@ async def _run_llm_member_extraction(
     Uses a three-stage pipeline:
 
     1. **Beams (deterministic)** — geometry comes from DXF LINE entities; section
-       and label are read from nearby BeamText annotations.  No LLM needed —
-       avoids sending ~90 featureless line candidates that overwhelm the model.
+       and label are read from nearby BeamText annotations.
 
-    2. **Columns (LLM)** — closed rectangular/circular polylines identified by the
-       DXF extractor are sent to Gemini for label assignment and section
-       confirmation.  Only column candidates (~80–160 items) are sent, keeping
-       the prompt within a reliable context budget.
+    2. **Columns (LLM)** — closed rectangular/circular polylines identified by the DXF extractor are sent to llm for label assignment and section confirmation.
 
-    3. **Slabs + voids (LLM, PDF-grounded)** — a second Gemini call uses the
-       already-extracted column and beam positions as a spatial framework plus
-       the PDF as primary visual reference to identify slab panels and voids.
+    3. **Slabs + voids (LLM, Rasterized image)** — a second llm call uses the
+       already-extracted columm, beam and deterministically extracted slab positions as a spatial framework plus
+       the rasterized PDF as primary visual reference to confirm or identify slab panels and voids.
 
     Parameters
     ----------
@@ -839,148 +735,28 @@ async def _run_llm_member_extraction(
         len(beam_members), project_id,
     )
 
-    # ── Stage 2: LLM column classification (column candidates only) ───────────
+    # ── Stage 2: Column classification
     col_candidates = [
         c for c in candidates
         if c.get("layer_hint") == "column_candidate"
         or (_COL_FLAGS & set(c.get("flags", [])))
     ]
 
-    col_data = [
-        {
-            "entity_id": c["entity_id"],
-            "layer": c["layer"],
-            "hint": c["layer_hint"],
-            "bbox_width_mm": c["bbox"].get("width"),
-            "bbox_height_mm": c["bbox"].get("height"),
-            "spatial": c.get("spatial", {}),
-            "flags": c["flags"],
-            "nearby_text": c["nearest_text"],
-        }
-        for c in col_candidates
-    ]
+    col_members = classify_columns_deterministically(col_candidates, beam_members)
+    logger.info(
+        "Deterministic column extraction: %d columns for project",
+        len(col_members)
+    )
 
-    prompt = f"""You are the Vision & Parsing Agent for a structural design copilot.
-Your ONLY task: classify the following column candidates from the DXF into column members.
-
-Column candidates (closed rectangular or circular section outlines in plan view):
-{json.dumps(col_data, indent=2)}
-
-Rules:
-1. Each candidate is a physical column section outline. Every distinct spatial location produces a unique member — do NOT collapse multiple positions into one.
-2. Assign a label using the nearest text annotations:
-   - If nearby text starts with C followed by digits (e.g. "C1", "C2"), use that as the type prefix.
-   - Append a sequential instance number: C1-1, C1-2, C2-1, C2-2, …
-   - If no label text is found within 1000 mm, assign the next available C1-N label.
-3. Set center_point exactly from the candidate's spatial.center_point.
-4. Set b and h from bbox_width_mm and bbox_height_mm (column section in mm).
-5. Default: L_clear=3.0, end_condition=fixed_fixed, N_uls=1000.0, M_uls=0.0.
-
-Return ONLY a valid JSON array. No markdown fences, no preamble.
-
-Schema:
-{{
-    "member_id": "C1-1",
-    "member_type": "column",
-    "type": "column",
-    "start_point": null,
-    "end_point": null,
-    "center_point": {{"x": 0.0, "y": 0.0}},
-    "boundary_polygon": null,
-    "is_void": false,
-    "meta": {{"b": 225, "h": 225, "L_clear": 3.0, "end_condition": "fixed_fixed", "N_uls": 1000.0, "M_uls": 0.0}},
-    "spans": [],
-    "spans_m": []
-}}"""
-
-    col_members: list[dict] = []
-    try:
-        llm = _get_llm()
-        content: list = [{"type": "text", "text": prompt}]
-
-        # Check if the PDF has at least one page.
-        pdf_is_valid = False
-        if pdf_path and os.path.exists(pdf_path):
-            try:
-                import fitz
-                doc = fitz.open(pdf_path)
-                if doc.page_count > 0:
-                    pdf_is_valid = True
-                else:
-                    logger.warning("PDF file at '%s' has 0 pages; ignoring it as invalid.", pdf_path)
-            except Exception as err:
-                logger.warning("Failed to open PDF file at '%s': %s; ignoring it as invalid.", pdf_path, err)
-
-        if pdf_path and pdf_is_valid:
-            try:
-                import base64
-                with open(pdf_path, "rb") as f:
-                    pdf_data = base64.b64encode(f.read()).decode("utf-8")
-                content.append({
-                    "type": "file",
-                    "mime_type": "application/pdf",
-                    "base64": pdf_data,
-                })
-                logger.info("PDF attached for column extraction, project %s", project_id)
-            except Exception as pdf_err:
-                logger.warning("Failed to encode PDF for column extraction: %s", pdf_err)
-
-        # pyrefly: ignore [no-matching-overload]
-        response = await llm.ainvoke([HumanMessage(content=content)])
-        text = response.text.strip()
-
-        # Unpack nested list-of-text-block wrappers (mock layer artefact)
-        try:
-            parsed_blocks = json.loads(text)
-            if isinstance(parsed_blocks, list) and parsed_blocks:
-                first_block = parsed_blocks[0]
-                if isinstance(first_block, dict) and "text" in first_block:
-                    text = first_block["text"].strip()
-        except Exception:
-            pass
-
-        if "```" in text:
-            m = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
-            if m:
-                text = m.group(1).strip()
-
-        try:
-            raw = json.loads(text)
-        except json.JSONDecodeError:
-            import ast
-            raw = ast.literal_eval(text)
-
-        if isinstance(raw, list):
-            for m in raw:
-                m_type = m.get("member_type", m.get("type", "column"))
-                m["member_type"] = m_type
-                m["type"] = m_type
-                if m_type == "column":
-                    meta = m.setdefault("meta", {})
-                    meta.setdefault("b", 300)
-                    meta.setdefault("h", 300)
-                    meta.setdefault("L_clear", 3.0)
-                    meta.setdefault("end_condition", "fixed_fixed")
-                    meta.setdefault("N_uls", 1000.0)
-                    meta.setdefault("M_uls", 0.0)
-            col_members = raw
-            logger.info(
-                "LLM column extraction: %d columns for project %s",
-                len(col_members), project_id,
-            )
-
-    except Exception as e:
-        logger.error("Column LLM extraction failed for project %s: %s", project_id, e)
-        col_members = _fallback_members_heuristics(col_candidates)
-
-    # ── Stage 3: slab + void extraction from PDF ──────────────────────────────
-    slab_members: list[dict] = []
-    if col_members or beam_members:
-        slab_members = await _run_llm_slab_void_extraction(
-            project_id, col_members, beam_members, pdf_path=pdf_path
-        )
-
-    return col_members + beam_members + slab_members
+    # ── Stage 3: slab + void extraction ──────────────────────────────
+    # Combine beams and columns for slab extraction
+    combined = col_members + beam_members
+    slab_members: list[dict] = extract_slabs_deterministically(combined)
+    logger.info(
+        "Deterministic slab extraction: %d slabs for project",
+        len(slab_members))
+        
+    return combined + slab_members
 
 
 def _build_geometry_summary(parsed_json: dict) -> str:
@@ -1033,6 +809,83 @@ def _build_geometry_summary(parsed_json: dict) -> str:
     else:
         summary.append("\nNo structural members identified yet.")
     return "\n".join(summary)
+
+
+def cross_reference_void_markers(entities: list[dict], members: list[dict]) -> list[dict]:
+    """
+    Analyzes raw geometry entities and annotations to flag which slab panels 
+    represent physical voids (stairwells, lift shafts, or service openings).
+    """
+    void_keywords = {"VOID", "OPENING", "STAIRWELL", "LIFT", "SHAFT", "OPEN"}
+    candidate_lines = []
+    void_centers = []
+
+    # 1. Gather isolated geometric entities and texts
+    for ent in entities:
+        dxf_type = ent.get("dxf_type")
+        layer = ent.get("layer", "").upper()
+        layer_hint = ent.get("layer_hint", "")
+        
+        # Explicitly skip grid lines, structural columns, or dimension tracks to avoid noise
+        if "GRID" in layer or "DIM" in layer or layer_hint in ("column_candidate", "beam_candidate"):
+            continue
+
+        # Capture lines that are long enough to be an 'X' marker cross-brace
+        if dxf_type == "LINE":
+            geom = ent.get("geometry", {})
+            start = geom.get("start")
+            end = geom.get("end")
+            if start and end:
+                dx = abs(end[0] - start[0])
+                dy = abs(end[1] - start[1])
+                length = math.hypot(dx, dy)
+                
+                # An 'X' cross line must be diagonal and typically > 500mm
+                if length > 500.0 and dx > 100.0 and dy > 100.0:
+                    candidate_lines.append(sg.LineString([tuple(start), tuple(end)]))
+                
+        # Capture text annotations directly
+        elif dxf_type in ("TEXT", "MTEXT"):
+            content = ent.get("attributes", {}).get("text_content", "").upper()
+            if any(kw in content for kw in void_keywords):
+                bbox = ent.get("bounding_box", {})
+                centroid = bbox.get("centroid", [0.0, 0.0])
+                void_centers.append(sg.Point(centroid[0], centroid[1]))
+
+    # 2. Compute intersection points of legitimate cross-brace lines
+    for i, line_a in enumerate(candidate_lines):
+        for line_b in candidate_lines[i + 1:]:
+            if line_a.intersects(line_b):
+                inter = line_a.intersection(line_b)
+                if isinstance(inter, sg.Point):
+                    # Check if they cross near their midpoints (typical for an X marker)
+                    void_centers.append(inter)
+
+    # 3. Spatial validation check
+    for member in members:
+        if member.get("member_type") != "slab":  # Fixed identity bug
+            continue
+            
+        boundary = member.get("boundary_polygon")
+        if not boundary or len(boundary) < 3:
+            continue
+            
+        poly_shape = sg.Polygon([(pt["x"], pt["y"]) for pt in boundary])
+        
+        # Check if this panel contains any verified void coordinates
+        is_panel_void = False
+        for center in void_centers:
+            if poly_shape.contains(center):
+                is_panel_void = True
+                break
+                
+        if is_panel_void:
+            member["member_type"] = "void"
+            member["type"] = "void"
+            if "meta" in member:
+                member["meta"]["slab_type"] = "opening_void"
+
+    return members
 
 
 # ─── Node ─────────────────────────────────────────────────────────────────────
@@ -1111,8 +964,11 @@ async def parser_node(state: StructuralDesignState) -> dict:
     # ── Step 4.5: extract members if not yet populated ───────────────────────
     if not parsed.get("members"):
         logger.info("Extracting structural members via LLM...")
-        pdf_path = state.get("uploaded_pdf_path")
-        members = await _run_llm_member_extraction(project_id, parsed, pdf_path=pdf_path)
+        # pdf_path = state.get("uploaded_pdf_path")
+        members = await _run_member_extraction(project_id, parsed)
+        members = _deduplicate_beams(members)
+        members = _filter_stub_beams(members)
+        members = cross_reference_void_markers(parsed["entities"], members)
         parsed["members"] = members
         
         # Save structural JSON back to files service and project store

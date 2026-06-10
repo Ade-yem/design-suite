@@ -534,7 +534,8 @@ def classify_columns_deterministically(col_candidates: list[dict], beam_members:
 def extract_slabs_deterministically(all_members: list[dict]) -> list[dict]:
     """
     Finds all enclosed spaces (slabs) from beam centerlines using pure geometry.
-    Uses a closest-point minimization approach to prevent greedy cluster snapping.
+    Uses a closest-point minimization approach to prevent greedy cluster snapping
+    and maps true polygonal coordinates to eliminate rectangular overlaps.
     """
     beams = [m for m in all_members if m.get("member_type") == "beam"]
     columns = [m for m in all_members if m.get("member_type") == "column"]
@@ -557,7 +558,7 @@ def extract_slabs_deterministically(all_members: list[dict]) -> list[dict]:
         sx, sy = sp["x"], sp["y"]
         ex, ey = ep["x"], ep["y"]
         
-        # --- FIX: Find the absolute closest column for the start point ---
+        # Find the absolute closest column for the start point
         best_start_col = None
         min_start_dist = float("inf")
         for cx, cy in col_points:
@@ -568,7 +569,7 @@ def extract_slabs_deterministically(all_members: list[dict]) -> list[dict]:
         if best_start_col:
             sx, sy = best_start_col
 
-        # --- FIX: Find the absolute closest column for the end point ---
+        # Find the absolute closest column for the end point
         best_end_col = None
         min_end_dist = float("inf")
         for cx, cy in col_points:
@@ -587,32 +588,43 @@ def extract_slabs_deterministically(all_members: list[dict]) -> list[dict]:
     
     slab_members = []
     for idx, poly in enumerate(enclosed_polygons, start=1):
+        # --- CRITICAL FIX 1: Map the true polygon vertices instead of a bounding box ---
+        # This preserves L-shapes, recesses, and non-rectangular corners exactly.
         coords = list(poly.exterior.coords)[:-1]
         boundary_polygon = [{"x": round(pt[0], 4), "y": round(pt[1], 4)} for pt in coords]
         
+        # Bounding box is only used to compute envelope sizes and design spans
         min_x, min_y, max_x, max_y = poly.bounds
         w_m = round((max_x - min_x) / 1000.0, 3)
         h_m = round((max_y - min_y) / 1000.0, 3)
         
-        # Relax constraints slightly to catch narrow passages
-        if w_m < 0.20 or h_m < 0.20:
+        # Filter out tiny artifacts and sheet-sized outer loops
+        if w_m < 0.20 or h_m < 0.20 or w_m > 15.0 or h_m > 15.0:
             continue
             
-        if w_m > 15.0 or h_m > 15.0:
-            continue
+        # --- CRITICAL FIX 2: Dynamic Aspect Ratio Sizing for Design Spans ---
+        # For non-rectangular slabs, using raw poly.bounds can overestimate Lx/Ly.
+        # We calculate the true plan area to derive an effective structural span width.
+        true_area_m2 = poly.area / 1_000_000.0
+        
+        # Estimate short span (Lx) based on true geometry area boundaries
+        estimated_lx = min(w_m, h_m)
+        if true_area_m2 < (w_m * h_m) * 0.85:
+            # Shape is complex (L-shaped/recessed). Adjust Lx to reflect truer panel span.
+            estimated_lx = round(true_area_m2 / max(w_m, h_m), 3)
             
         slab_members.append({
             "member_id": f"S{idx}",
             "member_type": "slab",
             "type": "solid_slab",
-            "boundary_polygon": boundary_polygon,
+            "boundary_polygon": boundary_polygon,  # Now returns the exact custom polygon path
             "meta": {
                 "slab_type": "solid_slab",
                 "thickness_mm": 150,
-                "Lx": min(w_m, h_m),
+                "Lx": round(max(0.2, estimated_lx), 3),
                 "Ly": max(w_m, h_m)
             },
-            "spans_m": [min(w_m, h_m), max(w_m, h_m)]
+            "spans_m": [round(max(0.2, estimated_lx), 3), max(w_m, h_m)]
         })
         
     return slab_members

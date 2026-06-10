@@ -7,13 +7,11 @@ Entry points
 ------------
 parse_file(file_path)  → Structural JSON dict  (dispatches by extension)
 parse_dxf(file_path)   → Structural JSON dict
-parse_pdf(file_path)   → Structural JSON dict  (text-only; geometry limited)
 """
 
 from __future__ import annotations
 
 from core.parsing.dxf_parser import extract_geometry
-from core.parsing.pdf_parser import parse_pdf
 
 
 def parse_file(file_path: str) -> dict:
@@ -39,12 +37,10 @@ def parse_file(file_path: str) -> dict:
     lower = file_path.lower()
     if lower.endswith(".dxf"):
         return extract_geometry(file_path)
-    if lower.endswith(".pdf"):
-        return parse_pdf(file_path)
     raise ValueError(
         f"Unsupported file type: '{file_path}'. "
         "Only .dxf and .pdf are accepted."
     )
 
 
-__all__ = ["parse_file", "extract_geometry", "parse_pdf"]
+__all__ = ["parse_file", "extract_geometry"]

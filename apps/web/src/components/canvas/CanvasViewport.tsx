@@ -45,6 +45,7 @@ import { MembersPanel } from "./MembersPanel";
 import { GeometryGate } from "./GeometryGate";
 import { useProjectSocket } from "@/hooks/useProjectSocket";
 import { Loader2 } from "lucide-react";
+import { useProjectStore } from "@/stores/projectStore";
 
 export interface CanvasViewportHandle {
   /** Public API: lets parent elements trigger DXF file browsing */
@@ -182,6 +183,16 @@ export const CanvasViewport = forwardRef<
     }
   }, [projectId, loadGeometry]);
 
+  const activeProject = useProjectStore((s) => s.activeProject);
+  useEffect(() => {
+    if (activeProject && activeProject.project_id === projectId) {
+      const isVerified = activeProject.pipeline_status_ordinal >= 2; // geometry_verified = 2
+      if (isVerified) {
+        setVerificationStatus("verified");
+      }
+    }
+  }, [activeProject, projectId, setVerificationStatus]);
+
   useEffect(() => {
     fetchExistingGeometry();
   }, [projectId, fetchExistingGeometry]);
@@ -267,7 +278,7 @@ export const CanvasViewport = forwardRef<
   // user zoom/pan is preserved instead of being reset on every interaction.
   useEffect(() => {
     if (uploadState !== "done" || !containerRef.current) return;
-    
+
     handleResize();
 
     const resizeObserver = new ResizeObserver(() => {
@@ -410,7 +421,8 @@ export const CanvasViewport = forwardRef<
     if (selectedMemberId) {
       deleteMember(selectedMemberId);
       toast("Member deleted", {
-        description: "Removed from the staged layout. Not saved until you confirm geometry.",
+        description:
+          "Removed from the staged layout. Not saved until you confirm geometry.",
         action: {
           label: "Undo",
           onClick: () => restoreLastDeleted(),
@@ -472,7 +484,7 @@ export const CanvasViewport = forwardRef<
 
     try {
       const { data } = await apiClient.post<{ job_id: string }>(
-        `/api/v1/files/${projectId}/reparse`
+        `/api/v1/files/${projectId}/reparse`,
       );
       setActiveJobId(data.job_id);
     } catch (err: unknown) {
@@ -590,7 +602,9 @@ export const CanvasViewport = forwardRef<
           ) : uploadState === "not ready" ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0b0f19] z-10">
               <Loader2 className="h-8 w-8 text-primary animate-spin" />
-              <p className="text-xs text-muted-foreground font-mono mt-2">Loading workspace...</p>
+              <p className="text-xs text-muted-foreground font-mono mt-2">
+                Loading workspace...
+              </p>
             </div>
           ) : (
             <CanvasUploader

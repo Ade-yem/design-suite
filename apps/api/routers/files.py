@@ -20,6 +20,8 @@ Until it returns ``{"status": "verified"}``, the loading, analysis, and design
 endpoints will reject requests for this project.
 """
 
+
+
 from __future__ import annotations
 
 import logging
@@ -170,14 +172,18 @@ async def _parse_file_background(
         if pdf_path:
             parsed["uploaded_pdf_path"] = pdf_path
 
-        # ezdxf extracts raw geometry only; run LLM classification when no
-        # members were identified by the DXF/PDF parser itself.
+        # ezdxf extracts raw geometry only;
         if not parsed.get("members"):
             await job_store.update_progress(job_id, 60.0, "Classifying structural members…")
-            from agents.parser import _run_llm_member_extraction
+            from agents.parser import cross_reference_void_markers, _filter_stub_beams, _deduplicate_beams, _run_member_extraction
             from storage.project_store import project_store as _pstore
-            members = await _run_llm_member_extraction(project_id, parsed, pdf_path=pdf_path)
+
+            members = await _run_member_extraction(project_id, parsed)
+            members = _deduplicate_beams(members)
+            members = _filter_stub_beams(members)
+            members = cross_reference_void_markers(parsed["entities"], members)
             parsed["members"] = members
+
             await file_service.register_geometry(project_id, parsed)
             mids = [member.get("member_id") for member in members if member.get("member_id")]
             await _pstore.register_members_batch(project_id, mids)

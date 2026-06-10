@@ -35,6 +35,7 @@ import type {
   CanvasTool,
   VerificationStatus,
   ParsedGeometry,
+  MemberMeta,
 } from "@/types/canvas";
 import { computeBounds, computeFitTransform } from "@/lib/canvas/transform";
 
@@ -46,8 +47,8 @@ import { computeBounds, computeFitTransform } from "@/lib/canvas/transform";
  * `boundary_polygon` array; their `start`/`end` are derived as AABB corners so
  * that bounding-box logic (fit-to-view, hit test fallback) still works.
  */
-function normalizeBackendMember(raw: unknown): GeometricMember {
-  const m = raw as Record<string, unknown>;
+export function normalizeBackendMember(raw: any): GeometricMember {
+  const m = raw as Record<string, any>;
   const polygon = Array.isArray(m.boundary_polygon)
     ? (m.boundary_polygon as Point[])
     : undefined;
@@ -65,18 +66,16 @@ function normalizeBackendMember(raw: unknown): GeometricMember {
     endRaw = (m.end ?? m.end_point ?? m.center_point ?? startRaw) as Point;
   }
 
-  // Columns arrive with section dims under `b`/`h`; beams/walls use `b_mm`/`h_mm`.
-  // Normalise to `b_mm`/`h_mm` so the renderer, bounds, and hit-test stay uniform.
-  const rawMeta = (m.meta ?? {}) as Record<string, unknown>;
+  const rawMeta = (m.meta ?? {}) as Record<string, any>;
   const meta = {
     ...rawMeta,
-    b_mm: (rawMeta.b_mm ?? rawMeta.b ?? 300) as number,
-    h_mm: (rawMeta.h_mm ?? rawMeta.h ?? 500) as number,
-  } as GeometricMember["meta"];
+    b_mm: Number(rawMeta.b_mm ?? rawMeta.b ?? 300),
+    h_mm: Number(rawMeta.h_mm ?? rawMeta.h ?? 500),
+  } as MemberMeta;
 
   return {
-    member_id: m.member_id as string,
-    member_type: m.member_type as MemberType,
+    member_id: (m.member_id ?? m.id ?? "Unknown") as string,
+    member_type: (m.member_type ?? m.type ?? "beam") as MemberType,
     start: startRaw,
     end: endRaw,
     boundary_polygon: polygon,
