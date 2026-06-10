@@ -1,0 +1,5434 @@
+{
+  "members": [
+    {
+      "member_id": "C1-1",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 7268.5207,
+        "y": 31397.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-2",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 7268.5207,
+        "y": 29972.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-3",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 3368.5207,
+        "y": 29972.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-1",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 8793.5207,
+        "y": 29972.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-4",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 10493.5207,
+        "y": 31397.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-5",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 10493.5207,
+        "y": 29972.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-2",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 8793.5207,
+        "y": 26972.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-6",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 10493.5207,
+        "y": 26972.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-7",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 11943.5257,
+        "y": 31397.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-8",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 11943.5257,
+        "y": 30797.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-9",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 12618.5257,
+        "y": 30797.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-10",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 12618.5257,
+        "y": 31397.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-11",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 12618.5257,
+        "y": 29372.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-12",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 29372.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-13",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 26972.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-14",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 3368.5207,
+        "y": 27600.3824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-15",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 3368.5207,
+        "y": 25247.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-16",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 4568.5207,
+        "y": 25247.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-17",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 10493.5207,
+        "y": 25247.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-18",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 7268.5207,
+        "y": 25247.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-19",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 4568.5207,
+        "y": 23035.3824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-3",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 4568.5207,
+        "y": 20822.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-20",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 10493.5207,
+        "y": 20822.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-21",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 9393.5207,
+        "y": 20822.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-22",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 5843.5207,
+        "y": 20822.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-23",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 10493.5207,
+        "y": 23035.3824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-24",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 20822.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-25",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 22322.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-26",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 25247.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-27",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 20343.5157,
+        "y": 25247.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-28",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 20343.5157,
+        "y": 22322.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-29",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 14943.5257,
+        "y": 26972.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-4",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 26972.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-30",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 25247.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-31",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 14943.5257,
+        "y": 25247.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-32",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 16593.5257,
+        "y": 25247.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-5",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 29372.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-33",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 31397.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-34",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 14943.5257,
+        "y": 31397.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-35",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 16593.5257,
+        "y": 31397.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-36",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 22322.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-37",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 16181.0257,
+        "y": 22322.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-6",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 18797.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-7",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 20822.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-8",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 16472.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-9",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 15422.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-38",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 14943.5257,
+        "y": 15422.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-10",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 14943.5257,
+        "y": 16472.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-39",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 16472.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-40",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 18797.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-41",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 13997.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-42",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 14943.5257,
+        "y": 13997.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-11",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 13997.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-43",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 18543.5157,
+        "y": 10772.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-44",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 14943.5257,
+        "y": 10772.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-45",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 19143.5157,
+        "y": 8822.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-46",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 19143.5157,
+        "y": 6347.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-47",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 6347.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-48",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 8147.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-49",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 13218.5257,
+        "y": 10772.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-50",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 8793.5207,
+        "y": 13997.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-51",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 11543.5257,
+        "y": 13997.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-52",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 8793.5207,
+        "y": 9872.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-12",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 11543.5257,
+        "y": 9872.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-53",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 8793.5207,
+        "y": 8822.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-54",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 9393.5207,
+        "y": 8822.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-55",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 9393.5207,
+        "y": 8147.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-56",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 8793.5207,
+        "y": 8147.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-57",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 11543.5257,
+        "y": 8147.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-58",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 8793.5207,
+        "y": 11772.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-13",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 4568.5207,
+        "y": 13997.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-59",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 5843.5207,
+        "y": 13997.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-14",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 4568.5207,
+        "y": 16472.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C2-15",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 4568.5207,
+        "y": 18797.8824
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-60",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 19143.5157,
+        "y": 10772.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "C1-61",
+      "member_type": "column",
+      "type": "column",
+      "start_point": null,
+      "end_point": null,
+      "center_point": {
+        "x": 16181.0257,
+        "y": 6347.8814
+      },
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b": 225,
+        "h": 225,
+        "L_clear": 3.0,
+        "end_condition": "fixed_fixed",
+        "N_uls": 1000.0,
+        "M_uls": 0.0
+      },
+      "spans": [],
+      "spans_m": []
+    },
+    {
+      "member_id": "S1",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 7268.5207,
+          "y": 31397.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 31397.8824
+        },
+        {
+          "x": 11943.5257,
+          "y": 31397.8824
+        },
+        {
+          "x": 11943.5257,
+          "y": 30797.8824
+        },
+        {
+          "x": 12618.5257,
+          "y": 30797.8824
+        },
+        {
+          "x": 12618.5257,
+          "y": 29372.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 29372.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 26972.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 26972.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 29972.8824
+        },
+        {
+          "x": 8793.5207,
+          "y": 29972.8824
+        },
+        {
+          "x": 7268.5207,
+          "y": 29972.8824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 4.425,
+        "Ly": 5.95
+      },
+      "spans_m": [
+        4.425,
+        5.95
+      ]
+    },
+    {
+      "member_id": "S2",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 12618.5257,
+          "y": 31397.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 31397.8824
+        },
+        {
+          "x": 16593.5257,
+          "y": 31397.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 31397.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 29372.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 26972.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 26972.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 26972.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 29372.8824
+        },
+        {
+          "x": 12618.5257,
+          "y": 29372.8824
+        },
+        {
+          "x": 12618.5257,
+          "y": 30797.8824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 4.425,
+        "Ly": 5.925
+      },
+      "spans_m": [
+        4.425,
+        5.925
+      ]
+    },
+    {
+      "member_id": "S3",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 3368.5207,
+          "y": 29972.8824
+        },
+        {
+          "x": 7268.5207,
+          "y": 29972.8824
+        },
+        {
+          "x": 8793.5207,
+          "y": 29972.8824
+        },
+        {
+          "x": 8793.5207,
+          "y": 26972.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 26972.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 25247.8824
+        },
+        {
+          "x": 7268.5207,
+          "y": 25247.8824
+        },
+        {
+          "x": 4568.5207,
+          "y": 25247.8824
+        },
+        {
+          "x": 3368.5207,
+          "y": 25247.8824
+        },
+        {
+          "x": 3368.5207,
+          "y": 27600.3824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 4.725,
+        "Ly": 7.125
+      },
+      "spans_m": [
+        4.725,
+        7.125
+      ]
+    },
+    {
+      "member_id": "S4",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 8793.5207,
+          "y": 29972.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 29972.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 26972.8824
+        },
+        {
+          "x": 8793.5207,
+          "y": 26972.8824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 1.7,
+        "Ly": 3.0
+      },
+      "spans_m": [
+        1.7,
+        3.0
+      ]
+    },
+    {
+      "member_id": "S5",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 4568.5207,
+          "y": 25247.8824
+        },
+        {
+          "x": 7268.5207,
+          "y": 25247.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 25247.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 23035.3824
+        },
+        {
+          "x": 10493.5207,
+          "y": 20822.8824
+        },
+        {
+          "x": 9393.5207,
+          "y": 20822.8824
+        },
+        {
+          "x": 5843.5207,
+          "y": 20822.8824
+        },
+        {
+          "x": 4568.5207,
+          "y": 20822.8824
+        },
+        {
+          "x": 4568.5207,
+          "y": 23035.3824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 4.425,
+        "Ly": 5.925
+      },
+      "spans_m": [
+        4.425,
+        5.925
+      ]
+    },
+    {
+      "member_id": "S6",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 10493.5207,
+          "y": 20822.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 23035.3824
+        },
+        {
+          "x": 10493.5207,
+          "y": 25247.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 26972.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 26972.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 26972.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 25247.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 25247.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 22322.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 20822.8824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 4.45,
+        "Ly": 6.15
+      },
+      "spans_m": [
+        4.45,
+        6.15
+      ]
+    },
+    {
+      "member_id": "S7",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 14943.5257,
+          "y": 26972.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 26972.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 25247.8824
+        },
+        {
+          "x": 16593.5257,
+          "y": 25247.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 25247.8824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 1.725,
+        "Ly": 3.6
+      },
+      "spans_m": [
+        1.725,
+        3.6
+      ]
+    },
+    {
+      "member_id": "S8",
+      "member_type": "void",
+      "type": "void",
+      "boundary_polygon": [
+        {
+          "x": 13218.5257,
+          "y": 25247.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 25247.8824
+        },
+        {
+          "x": 16593.5257,
+          "y": 25247.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 25247.8824
+        },
+        {
+          "x": 20343.5157,
+          "y": 25247.8824
+        },
+        {
+          "x": 20343.5157,
+          "y": 22322.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 22322.8824
+        },
+        {
+          "x": 16181.0257,
+          "y": 22322.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 22322.8824
+        }
+      ],
+      "meta": {
+        "slab_type": "opening_void",
+        "thickness_mm": 150,
+        "Lx": 2.925,
+        "Ly": 7.125
+      },
+      "spans_m": [
+        2.925,
+        7.125
+      ]
+    },
+    {
+      "member_id": "S9",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 4568.5207,
+          "y": 13997.8824
+        },
+        {
+          "x": 4568.5207,
+          "y": 16472.8824
+        },
+        {
+          "x": 4568.5207,
+          "y": 18797.8824
+        },
+        {
+          "x": 4568.5207,
+          "y": 20822.8824
+        },
+        {
+          "x": 5843.5207,
+          "y": 20822.8824
+        },
+        {
+          "x": 9393.5207,
+          "y": 20822.8824
+        },
+        {
+          "x": 10493.5207,
+          "y": 20822.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 20822.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 18797.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 16472.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 13997.8824
+        },
+        {
+          "x": 11543.5257,
+          "y": 13997.8824
+        },
+        {
+          "x": 8793.5207,
+          "y": 13997.8824
+        },
+        {
+          "x": 5843.5207,
+          "y": 13997.8824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 6.825,
+        "Ly": 8.65
+      },
+      "spans_m": [
+        6.825,
+        8.65
+      ]
+    },
+    {
+      "member_id": "S10",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 8793.5207,
+          "y": 13997.8824
+        },
+        {
+          "x": 11543.5257,
+          "y": 13997.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 13997.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 10772.8814
+        },
+        {
+          "x": 13218.5257,
+          "y": 8147.8814
+        },
+        {
+          "x": 11543.5257,
+          "y": 8147.8814
+        },
+        {
+          "x": 11543.5257,
+          "y": 9872.8814
+        },
+        {
+          "x": 8793.5207,
+          "y": 9872.8814
+        },
+        {
+          "x": 8793.5207,
+          "y": 11772.8814
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 4.425,
+        "Ly": 5.85
+      },
+      "spans_m": [
+        4.425,
+        5.85
+      ]
+    },
+    {
+      "member_id": "S11",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 13218.5257,
+          "y": 13997.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 13997.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 13997.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 10772.8814
+        },
+        {
+          "x": 14943.5257,
+          "y": 10772.8814
+        },
+        {
+          "x": 13218.5257,
+          "y": 10772.8814
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 3.225,
+        "Ly": 5.325
+      },
+      "spans_m": [
+        3.225,
+        5.325
+      ]
+    },
+    {
+      "member_id": "S12",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 14943.5257,
+          "y": 13997.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 13997.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 16472.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 16472.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 15422.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 15422.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 13997.8824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 2.475,
+        "Ly": 5.325
+      },
+      "spans_m": [
+        2.475,
+        5.325
+      ]
+    },
+    {
+      "member_id": "S13",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 18543.5157,
+          "y": 15422.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 15422.8824
+        },
+        {
+          "x": 14943.5257,
+          "y": 16472.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 16472.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 18797.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 20822.8824
+        },
+        {
+          "x": 13218.5257,
+          "y": 22322.8824
+        },
+        {
+          "x": 16181.0257,
+          "y": 22322.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 22322.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 20822.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 18797.8824
+        },
+        {
+          "x": 18543.5157,
+          "y": 16472.8824
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 5.325,
+        "Ly": 6.9
+      },
+      "spans_m": [
+        5.325,
+        6.9
+      ]
+    },
+    {
+      "member_id": "S14",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 8793.5207,
+          "y": 8822.8814
+        },
+        {
+          "x": 8793.5207,
+          "y": 9872.8814
+        },
+        {
+          "x": 11543.5257,
+          "y": 9872.8814
+        },
+        {
+          "x": 11543.5257,
+          "y": 8147.8814
+        },
+        {
+          "x": 9393.5207,
+          "y": 8147.8814
+        },
+        {
+          "x": 9393.5207,
+          "y": 8822.8814
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 1.725,
+        "Ly": 2.75
+      },
+      "spans_m": [
+        1.725,
+        2.75
+      ]
+    },
+    {
+      "member_id": "S15",
+      "member_type": "slab",
+      "type": "solid_slab",
+      "boundary_polygon": [
+        {
+          "x": 13218.5257,
+          "y": 6347.8814
+        },
+        {
+          "x": 13218.5257,
+          "y": 8147.8814
+        },
+        {
+          "x": 13218.5257,
+          "y": 10772.8814
+        },
+        {
+          "x": 14943.5257,
+          "y": 10772.8814
+        },
+        {
+          "x": 18543.5157,
+          "y": 10772.8814
+        },
+        {
+          "x": 19143.5157,
+          "y": 10772.8814
+        },
+        {
+          "x": 19143.5157,
+          "y": 8822.8814
+        },
+        {
+          "x": 19143.5157,
+          "y": 6347.8814
+        },
+        {
+          "x": 16181.0257,
+          "y": 6347.8814
+        }
+      ],
+      "meta": {
+        "slab_type": "solid_slab",
+        "thickness_mm": 150,
+        "Lx": 4.425,
+        "Ly": 5.925
+      },
+      "spans_m": [
+        4.425,
+        5.925
+      ]
+    },
+    {
+      "member_id": "1B1",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 7381.0207,
+        "y": 31397.8824
+      },
+      "end_point": {
+        "x": 10381.0207,
+        "y": 31397.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.0,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.0
+        }
+      ],
+      "spans_m": [
+        3.0
+      ]
+    },
+    {
+      "member_id": "1B2",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 10606.0207,
+        "y": 31397.8824
+      },
+      "end_point": {
+        "x": 11831.0257,
+        "y": 31397.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.225,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.225
+        }
+      ],
+      "spans_m": [
+        1.225
+      ]
+    },
+    {
+      "member_id": "1B3",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 12731.0257,
+        "y": 31397.8824
+      },
+      "end_point": {
+        "x": 14831.0257,
+        "y": 31397.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.1,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.1
+        }
+      ],
+      "spans_m": [
+        2.1
+      ]
+    },
+    {
+      "member_id": "1B4",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 15056.0257,
+        "y": 31397.8824
+      },
+      "end_point": {
+        "x": 16481.0257,
+        "y": 31397.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.425,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.425
+        }
+      ],
+      "spans_m": [
+        1.425
+      ]
+    },
+    {
+      "member_id": "1B5",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 16706.0257,
+        "y": 31397.8824
+      },
+      "end_point": {
+        "x": 18431.0157,
+        "y": 31397.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.725,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.725
+        }
+      ],
+      "spans_m": [
+        1.725
+      ]
+    },
+    {
+      "member_id": "1B8",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 11943.5257,
+        "y": 30910.3824
+      },
+      "end_point": {
+        "x": 11943.5257,
+        "y": 31285.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.375
+        }
+      ],
+      "spans_m": [
+        0.375
+      ]
+    },
+    {
+      "member_id": "1B7",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 12618.5257,
+        "y": 30910.3824
+      },
+      "end_point": {
+        "x": 12618.5257,
+        "y": 31285.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.375
+        }
+      ],
+      "spans_m": [
+        0.375
+      ]
+    },
+    {
+      "member_id": "1B6",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 12056.0257,
+        "y": 30797.8824
+      },
+      "end_point": {
+        "x": 12506.0257,
+        "y": 30797.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.45,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.45
+        }
+      ],
+      "spans_m": [
+        0.45
+      ]
+    },
+    {
+      "member_id": "1B7",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 12618.5257,
+        "y": 29485.3824
+      },
+      "end_point": {
+        "x": 12618.5257,
+        "y": 30685.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.2,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.2
+        }
+      ],
+      "spans_m": [
+        1.2
+      ]
+    },
+    {
+      "member_id": "1B10",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 12731.0257,
+        "y": 29372.8824
+      },
+      "end_point": {
+        "x": 13106.0257,
+        "y": 29372.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.375
+        }
+      ],
+      "spans_m": [
+        0.375
+      ]
+    },
+    {
+      "member_id": "1B11",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 7268.5207,
+        "y": 30085.3824
+      },
+      "end_point": {
+        "x": 7268.5207,
+        "y": 31285.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.2,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.2
+        }
+      ],
+      "spans_m": [
+        1.2
+      ]
+    },
+    {
+      "member_id": "1B12",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 3481.0207,
+        "y": 29972.8824
+      },
+      "end_point": {
+        "x": 7156.0207,
+        "y": 29972.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.675,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.675
+        }
+      ],
+      "spans_m": [
+        3.675
+      ]
+    },
+    {
+      "member_id": "1B13",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 7381.0207,
+        "y": 29972.8824
+      },
+      "end_point": {
+        "x": 8681.0207,
+        "y": 29972.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.3,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.3
+        }
+      ],
+      "spans_m": [
+        1.3
+      ]
+    },
+    {
+      "member_id": "1B14",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8906.0207,
+        "y": 29972.8824
+      },
+      "end_point": {
+        "x": 10381.0207,
+        "y": 29972.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.475,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.475
+        }
+      ],
+      "spans_m": [
+        1.475
+      ]
+    },
+    {
+      "member_id": "1B15",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8793.5207,
+        "y": 27085.3824
+      },
+      "end_point": {
+        "x": 8793.5207,
+        "y": 29860.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.775,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.775
+        }
+      ],
+      "spans_m": [
+        2.775
+      ]
+    },
+    {
+      "member_id": "1B16",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 10493.5207,
+        "y": 27085.3824
+      },
+      "end_point": {
+        "x": 10493.5207,
+        "y": 29860.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.775,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.775
+        }
+      ],
+      "spans_m": [
+        2.775
+      ]
+    },
+    {
+      "member_id": "1B17",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 3368.5207,
+        "y": 25360.3824
+      },
+      "end_point": {
+        "x": 3368.5207,
+        "y": 27487.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.1275,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.1275
+        }
+      ],
+      "spans_m": [
+        2.1275
+      ]
+    },
+    {
+      "member_id": "1B18",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 3368.5207,
+        "y": 27712.8824
+      },
+      "end_point": {
+        "x": 3368.5207,
+        "y": 29860.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.1475,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.1475
+        }
+      ],
+      "spans_m": [
+        2.1475
+      ]
+    },
+    {
+      "member_id": "1B19",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 3481.0207,
+        "y": 25247.8824
+      },
+      "end_point": {
+        "x": 4456.0207,
+        "y": 25247.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.975,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.975
+        }
+      ],
+      "spans_m": [
+        0.975
+      ]
+    },
+    {
+      "member_id": "1B20",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 4681.0207,
+        "y": 25247.8824
+      },
+      "end_point": {
+        "x": 7156.0207,
+        "y": 25247.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.475,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.475
+        }
+      ],
+      "spans_m": [
+        2.475
+      ]
+    },
+    {
+      "member_id": "1B21",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 7381.0207,
+        "y": 25247.8824
+      },
+      "end_point": {
+        "x": 10381.0207,
+        "y": 25247.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.0,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.0
+        }
+      ],
+      "spans_m": [
+        3.0
+      ]
+    },
+    {
+      "member_id": "1B22",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 10493.5207,
+        "y": 20935.3824
+      },
+      "end_point": {
+        "x": 10493.5207,
+        "y": 22922.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.9875,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.9875
+        }
+      ],
+      "spans_m": [
+        1.9875
+      ]
+    },
+    {
+      "member_id": "1B23",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 10493.5207,
+        "y": 23147.8824
+      },
+      "end_point": {
+        "x": 10493.5207,
+        "y": 25135.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.9875,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.9875
+        }
+      ],
+      "spans_m": [
+        1.9875
+      ]
+    },
+    {
+      "member_id": "1B24",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 10493.5207,
+        "y": 25360.3824
+      },
+      "end_point": {
+        "x": 10493.5207,
+        "y": 26860.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.5
+        }
+      ],
+      "spans_m": [
+        1.5
+      ]
+    },
+    {
+      "member_id": "1B25",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 10606.0207,
+        "y": 26972.8824
+      },
+      "end_point": {
+        "x": 13106.0257,
+        "y": 26972.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.5
+        }
+      ],
+      "spans_m": [
+        2.5
+      ]
+    },
+    {
+      "member_id": "1B26",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13331.0257,
+        "y": 26972.8824
+      },
+      "end_point": {
+        "x": 14831.0257,
+        "y": 26972.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.5
+        }
+      ],
+      "spans_m": [
+        1.5
+      ]
+    },
+    {
+      "member_id": "1B27",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 15056.0257,
+        "y": 26972.8824
+      },
+      "end_point": {
+        "x": 18431.0157,
+        "y": 26972.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.375
+        }
+      ],
+      "spans_m": [
+        3.375
+      ]
+    },
+    {
+      "member_id": "1B28",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13218.5257,
+        "y": 27085.3824
+      },
+      "end_point": {
+        "x": 13218.5257,
+        "y": 29260.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.175,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.175
+        }
+      ],
+      "spans_m": [
+        2.175
+      ]
+    },
+    {
+      "member_id": "1B29",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13331.0257,
+        "y": 25247.8824
+      },
+      "end_point": {
+        "x": 14831.0257,
+        "y": 25247.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.5
+        }
+      ],
+      "spans_m": [
+        1.5
+      ]
+    },
+    {
+      "member_id": "1B30",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 14943.5257,
+        "y": 25360.3824
+      },
+      "end_point": {
+        "x": 14943.5257,
+        "y": 26860.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.5
+        }
+      ],
+      "spans_m": [
+        1.5
+      ]
+    },
+    {
+      "member_id": "1B31",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18543.5157,
+        "y": 25360.3824
+      },
+      "end_point": {
+        "x": 18543.5157,
+        "y": 26860.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.5
+        }
+      ],
+      "spans_m": [
+        1.5
+      ]
+    },
+    {
+      "member_id": "1B32",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18543.5157,
+        "y": 27085.3824
+      },
+      "end_point": {
+        "x": 18543.5157,
+        "y": 29260.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.175,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.175
+        }
+      ],
+      "spans_m": [
+        2.175
+      ]
+    },
+    {
+      "member_id": "1B33",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18543.5157,
+        "y": 29485.3824
+      },
+      "end_point": {
+        "x": 18543.5157,
+        "y": 31285.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.8,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.8
+        }
+      ],
+      "spans_m": [
+        1.8
+      ]
+    },
+    {
+      "member_id": "1B34",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 15056.0257,
+        "y": 25247.8824
+      },
+      "end_point": {
+        "x": 16481.0257,
+        "y": 25247.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.425,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.425
+        }
+      ],
+      "spans_m": [
+        1.425
+      ]
+    },
+    {
+      "member_id": "1B35",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 16706.0257,
+        "y": 25247.8824
+      },
+      "end_point": {
+        "x": 18431.0157,
+        "y": 25247.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.725,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.725
+        }
+      ],
+      "spans_m": [
+        1.725
+      ]
+    },
+    {
+      "member_id": "1B36",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18656.0157,
+        "y": 25247.8824
+      },
+      "end_point": {
+        "x": 20231.0157,
+        "y": 25247.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.575,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.575
+        }
+      ],
+      "spans_m": [
+        1.575
+      ]
+    },
+    {
+      "member_id": "1B37",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 4568.5207,
+        "y": 14110.3824
+      },
+      "end_point": {
+        "x": 4568.5207,
+        "y": 16360.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.25,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.25
+        }
+      ],
+      "spans_m": [
+        2.25
+      ]
+    },
+    {
+      "member_id": "1B38",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 4568.5207,
+        "y": 16585.3824
+      },
+      "end_point": {
+        "x": 4568.5207,
+        "y": 18685.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.1,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.1
+        }
+      ],
+      "spans_m": [
+        2.1
+      ]
+    },
+    {
+      "member_id": "1B39",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 4568.5207,
+        "y": 18910.3824
+      },
+      "end_point": {
+        "x": 4568.5207,
+        "y": 20710.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.8,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.8
+        }
+      ],
+      "spans_m": [
+        1.8
+      ]
+    },
+    {
+      "member_id": "1B40",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 4568.5207,
+        "y": 20935.3824
+      },
+      "end_point": {
+        "x": 4568.5207,
+        "y": 22922.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.9875,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.9875
+        }
+      ],
+      "spans_m": [
+        1.9875
+      ]
+    },
+    {
+      "member_id": "1B41",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 4568.5207,
+        "y": 23147.8824
+      },
+      "end_point": {
+        "x": 4568.5207,
+        "y": 25135.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.9875,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.9875
+        }
+      ],
+      "spans_m": [
+        1.9875
+      ]
+    },
+    {
+      "member_id": "1B42",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 4681.0207,
+        "y": 13997.8824
+      },
+      "end_point": {
+        "x": 5731.0207,
+        "y": 13997.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.05,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.05
+        }
+      ],
+      "spans_m": [
+        1.05
+      ]
+    },
+    {
+      "member_id": "1B43",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 5956.0207,
+        "y": 13997.8824
+      },
+      "end_point": {
+        "x": 8681.0207,
+        "y": 13997.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.725,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.725
+        }
+      ],
+      "spans_m": [
+        2.725
+      ]
+    },
+    {
+      "member_id": "1B44",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8906.0207,
+        "y": 13997.8824
+      },
+      "end_point": {
+        "x": 11431.0257,
+        "y": 13997.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.525,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.525
+        }
+      ],
+      "spans_m": [
+        2.525
+      ]
+    },
+    {
+      "member_id": "1B45",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 11656.0257,
+        "y": 13997.8824
+      },
+      "end_point": {
+        "x": 13106.0257,
+        "y": 13997.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.45,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.45
+        }
+      ],
+      "spans_m": [
+        1.45
+      ]
+    },
+    {
+      "member_id": "1B46",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13331.0257,
+        "y": 13997.8824
+      },
+      "end_point": {
+        "x": 14831.0257,
+        "y": 13997.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.5
+        }
+      ],
+      "spans_m": [
+        1.5
+      ]
+    },
+    {
+      "member_id": "1B47",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 15056.0257,
+        "y": 13997.8824
+      },
+      "end_point": {
+        "x": 18431.0157,
+        "y": 13997.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.375
+        }
+      ],
+      "spans_m": [
+        3.375
+      ]
+    },
+    {
+      "member_id": "1B48",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 15056.0257,
+        "y": 15422.8824
+      },
+      "end_point": {
+        "x": 18431.0157,
+        "y": 15422.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.375
+        }
+      ],
+      "spans_m": [
+        3.375
+      ]
+    },
+    {
+      "member_id": "1B49",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 14943.5257,
+        "y": 15535.3824
+      },
+      "end_point": {
+        "x": 14943.5257,
+        "y": 16360.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.825,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.825
+        }
+      ],
+      "spans_m": [
+        0.825
+      ]
+    },
+    {
+      "member_id": "1B50",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13218.5257,
+        "y": 16585.3824
+      },
+      "end_point": {
+        "x": 13218.5257,
+        "y": 18685.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.1,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.1
+        }
+      ],
+      "spans_m": [
+        2.1
+      ]
+    },
+    {
+      "member_id": "1B51",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13218.5257,
+        "y": 18910.3824
+      },
+      "end_point": {
+        "x": 13218.5257,
+        "y": 20710.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.8,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.8
+        }
+      ],
+      "spans_m": [
+        1.8
+      ]
+    },
+    {
+      "member_id": "1B52",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13218.5257,
+        "y": 20935.3824
+      },
+      "end_point": {
+        "x": 13218.5257,
+        "y": 22210.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.275,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.275
+        }
+      ],
+      "spans_m": [
+        1.275
+      ]
+    },
+    {
+      "member_id": "1B53",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 4681.0207,
+        "y": 20822.8824
+      },
+      "end_point": {
+        "x": 5731.0207,
+        "y": 20822.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.05,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.05
+        }
+      ],
+      "spans_m": [
+        1.05
+      ]
+    },
+    {
+      "member_id": "1B54",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 5956.0207,
+        "y": 20822.8824
+      },
+      "end_point": {
+        "x": 9281.0207,
+        "y": 20822.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.325,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.325
+        }
+      ],
+      "spans_m": [
+        3.325
+      ]
+    },
+    {
+      "member_id": "1B55",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 9506.0207,
+        "y": 20822.8824
+      },
+      "end_point": {
+        "x": 10381.0207,
+        "y": 20822.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.875,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.875
+        }
+      ],
+      "spans_m": [
+        0.875
+      ]
+    },
+    {
+      "member_id": "1B56",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 10606.0207,
+        "y": 20822.8824
+      },
+      "end_point": {
+        "x": 13106.0257,
+        "y": 20822.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.5
+        }
+      ],
+      "spans_m": [
+        2.5
+      ]
+    },
+    {
+      "member_id": "1B60",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8793.5207,
+        "y": 8935.3814
+      },
+      "end_point": {
+        "x": 8793.5207,
+        "y": 9760.3814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.825,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.825
+        }
+      ],
+      "spans_m": [
+        0.825
+      ]
+    },
+    {
+      "member_id": "1B58",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8793.5207,
+        "y": 9985.3814
+      },
+      "end_point": {
+        "x": 8793.5207,
+        "y": 11660.3814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.675,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.675
+        }
+      ],
+      "spans_m": [
+        1.675
+      ]
+    },
+    {
+      "member_id": "1B59",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8793.5207,
+        "y": 11885.3814
+      },
+      "end_point": {
+        "x": 8793.5207,
+        "y": 13885.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.0,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.0
+        }
+      ],
+      "spans_m": [
+        2.0
+      ]
+    },
+    {
+      "member_id": "1B57",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8906.0207,
+        "y": 8822.8814
+      },
+      "end_point": {
+        "x": 9281.0207,
+        "y": 8822.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.375
+        }
+      ],
+      "spans_m": [
+        0.375
+      ]
+    },
+    {
+      "member_id": "1B61",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8906.0207,
+        "y": 8147.8814
+      },
+      "end_point": {
+        "x": 9281.0207,
+        "y": 8147.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.375
+        }
+      ],
+      "spans_m": [
+        0.375
+      ]
+    },
+    {
+      "member_id": "1B62",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 9506.0207,
+        "y": 8147.8814
+      },
+      "end_point": {
+        "x": 11431.0257,
+        "y": 8147.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.925,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.925
+        }
+      ],
+      "spans_m": [
+        1.925
+      ]
+    },
+    {
+      "member_id": "1B63",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 11656.0257,
+        "y": 8147.8814
+      },
+      "end_point": {
+        "x": 13106.0257,
+        "y": 8147.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.45,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.45
+        }
+      ],
+      "spans_m": [
+        1.45
+      ]
+    },
+    {
+      "member_id": "1B57",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 9393.5207,
+        "y": 8260.3814
+      },
+      "end_point": {
+        "x": 9393.5207,
+        "y": 8710.3814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.45,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.45
+        }
+      ],
+      "spans_m": [
+        0.45
+      ]
+    },
+    {
+      "member_id": "1B65",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8906.0207,
+        "y": 9872.8814
+      },
+      "end_point": {
+        "x": 11431.0257,
+        "y": 9872.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.525,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.525
+        }
+      ],
+      "spans_m": [
+        2.525
+      ]
+    },
+    {
+      "member_id": "1B66",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 11543.5257,
+        "y": 8260.3814
+      },
+      "end_point": {
+        "x": 11543.5257,
+        "y": 9760.3814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.5
+        }
+      ],
+      "spans_m": [
+        1.5
+      ]
+    },
+    {
+      "member_id": "1B67",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13218.5257,
+        "y": 6460.3814
+      },
+      "end_point": {
+        "x": 13218.5257,
+        "y": 8035.3814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.575,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.575
+        }
+      ],
+      "spans_m": [
+        1.575
+      ]
+    },
+    {
+      "member_id": "1B68",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13218.5257,
+        "y": 8260.3814
+      },
+      "end_point": {
+        "x": 13218.5257,
+        "y": 10660.3814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.4,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.4
+        }
+      ],
+      "spans_m": [
+        2.4
+      ]
+    },
+    {
+      "member_id": "1B69",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13218.5257,
+        "y": 10885.3814
+      },
+      "end_point": {
+        "x": 13218.5257,
+        "y": 13885.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.0,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.0
+        }
+      ],
+      "spans_m": [
+        3.0
+      ]
+    },
+    {
+      "member_id": "1B70",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13331.0257,
+        "y": 22322.8824
+      },
+      "end_point": {
+        "x": 16068.5257,
+        "y": 22322.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.7375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.7375
+        }
+      ],
+      "spans_m": [
+        2.7375
+      ]
+    },
+    {
+      "member_id": "1B71",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 16293.5257,
+        "y": 22322.8824
+      },
+      "end_point": {
+        "x": 18431.0157,
+        "y": 22322.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.1375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.1375
+        }
+      ],
+      "spans_m": [
+        2.1375
+      ]
+    },
+    {
+      "member_id": "1B72",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18656.0157,
+        "y": 22322.8824
+      },
+      "end_point": {
+        "x": 20231.0157,
+        "y": 22322.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.575,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.575
+        }
+      ],
+      "spans_m": [
+        1.575
+      ]
+    },
+    {
+      "member_id": "1B73",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18543.5157,
+        "y": 10885.3814
+      },
+      "end_point": {
+        "x": 18543.5157,
+        "y": 13885.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.0,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.0
+        }
+      ],
+      "spans_m": [
+        3.0
+      ]
+    },
+    {
+      "member_id": "1B74",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18543.5157,
+        "y": 14110.3824
+      },
+      "end_point": {
+        "x": 18543.5157,
+        "y": 15310.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.2,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.2
+        }
+      ],
+      "spans_m": [
+        1.2
+      ]
+    },
+    {
+      "member_id": "1B75",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18543.5157,
+        "y": 15535.3824
+      },
+      "end_point": {
+        "x": 18543.5157,
+        "y": 16360.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.825,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.825
+        }
+      ],
+      "spans_m": [
+        0.825
+      ]
+    },
+    {
+      "member_id": "1B76",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18543.5157,
+        "y": 16585.3824
+      },
+      "end_point": {
+        "x": 18543.5157,
+        "y": 18685.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.1,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.1
+        }
+      ],
+      "spans_m": [
+        2.1
+      ]
+    },
+    {
+      "member_id": "1B77",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18543.5157,
+        "y": 18910.3824
+      },
+      "end_point": {
+        "x": 18543.5157,
+        "y": 20710.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.8,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.8
+        }
+      ],
+      "spans_m": [
+        1.8
+      ]
+    },
+    {
+      "member_id": "1B78",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18543.5157,
+        "y": 20935.3824
+      },
+      "end_point": {
+        "x": 18543.5157,
+        "y": 22210.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.275,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.275
+        }
+      ],
+      "spans_m": [
+        1.275
+      ]
+    },
+    {
+      "member_id": "1B79",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13331.0257,
+        "y": 10772.8814
+      },
+      "end_point": {
+        "x": 14831.0257,
+        "y": 10772.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.5
+        }
+      ],
+      "spans_m": [
+        1.5
+      ]
+    },
+    {
+      "member_id": "1B80",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 15056.0257,
+        "y": 10772.8814
+      },
+      "end_point": {
+        "x": 18431.0157,
+        "y": 10772.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 3.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 3.375
+        }
+      ],
+      "spans_m": [
+        3.375
+      ]
+    },
+    {
+      "member_id": "1B81",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 18656.0157,
+        "y": 10772.8814
+      },
+      "end_point": {
+        "x": 19031.0157,
+        "y": 10772.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 0.375,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 0.375
+        }
+      ],
+      "spans_m": [
+        0.375
+      ]
+    },
+    {
+      "member_id": "1B82",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 19143.5157,
+        "y": 6460.3814
+      },
+      "end_point": {
+        "x": 19143.5157,
+        "y": 8710.3814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.25,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.25
+        }
+      ],
+      "spans_m": [
+        2.25
+      ]
+    },
+    {
+      "member_id": "1B83",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 19143.5157,
+        "y": 8935.3814
+      },
+      "end_point": {
+        "x": 19143.5157,
+        "y": 10660.3814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.725,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.725
+        }
+      ],
+      "spans_m": [
+        1.725
+      ]
+    },
+    {
+      "member_id": "1B84",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13331.0257,
+        "y": 6347.8814
+      },
+      "end_point": {
+        "x": 16181.0257,
+        "y": 6347.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.85,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.85
+        }
+      ],
+      "spans_m": [
+        2.85
+      ]
+    },
+    {
+      "member_id": "1B85",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 16181.0257,
+        "y": 6347.8814
+      },
+      "end_point": {
+        "x": 19031.0157,
+        "y": 6347.8814
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.85,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.85
+        }
+      ],
+      "spans_m": [
+        2.85
+      ]
+    },
+    {
+      "member_id": "1B86",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 20343.5157,
+        "y": 22435.3824
+      },
+      "end_point": {
+        "x": 20343.5157,
+        "y": 25135.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.7,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.7
+        }
+      ],
+      "spans_m": [
+        2.7
+      ]
+    },
+    {
+      "member_id": "1B87",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13218.5257,
+        "y": 22435.3824
+      },
+      "end_point": {
+        "x": 13218.5257,
+        "y": 25135.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.7,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.7
+        }
+      ],
+      "spans_m": [
+        2.7
+      ]
+    },
+    {
+      "member_id": "1B88",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13331.0257,
+        "y": 16472.8824
+      },
+      "end_point": {
+        "x": 14831.0257,
+        "y": 16472.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.5,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.5
+        }
+      ],
+      "spans_m": [
+        1.5
+      ]
+    },
+    {
+      "member_id": "1B89",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 8906.0207,
+        "y": 26972.8824
+      },
+      "end_point": {
+        "x": 10381.0207,
+        "y": 26972.8824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 1.475,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 1.475
+        }
+      ],
+      "spans_m": [
+        1.475
+      ]
+    },
+    {
+      "member_id": "1B90",
+      "member_type": "beam",
+      "type": "beam",
+      "start_point": {
+        "x": 13218.5257,
+        "y": 14110.3824
+      },
+      "end_point": {
+        "x": 13218.5257,
+        "y": 16360.3824
+      },
+      "center_point": null,
+      "boundary_polygon": null,
+      "is_void": false,
+      "meta": {
+        "b_mm": 225.0,
+        "h_mm": 450.0,
+        "L_clear": 2.25,
+        "E": 30000000.0,
+        "I": 0.001709
+      },
+      "spans": [
+        {
+          "span_id": "S1",
+          "length_m": 2.25
+        }
+      ],
+      "spans_m": [
+        2.25
+      ]
+    }
+  ],
+  "scale": {
+    "factor": 0.001,
+    "unit": "mm",
+    "detected": true,
+    "confirmed": true
+  },
+  "raw_entity_count": 678,
+  "parse_warnings": [
+    "Unit auto-detected as millimetres."
+  ],
+  "filenames": {
+    "dxf": "Floor-beam.dxf",
+    "pdf": null
+  },
+  "parsed_at": "2026-06-10T00:21:38.032952+00:00"
+}

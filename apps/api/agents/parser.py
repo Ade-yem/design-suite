@@ -557,17 +557,30 @@ async def _run_llm_slab_void_extraction(
     list[dict]
         Slab panel and void member dicts ready to merge into the main list.
     """
-    if not pdf_path or not os.path.exists(pdf_path):
-        logger.info("No PDF available — skipping slab/void extraction for project %s", project_id)
+    # Check if the PDF has at least one page.
+    pdf_is_valid = False
+    if pdf_path and os.path.exists(pdf_path):
+        try:
+            import fitz
+            doc = fitz.open(pdf_path)
+            if doc.page_count > 0:
+                pdf_is_valid = True
+            else:
+                logger.warning("PDF file at '%s' has 0 pages; ignoring it as invalid.", pdf_path)
+        except Exception as err:
+            logger.warning("Failed to open PDF file at '%s': %s; ignoring it as invalid.", pdf_path, err)
+
+    if not pdf_path or not os.path.exists(pdf_path) or not pdf_is_valid:
+        logger.info("No valid PDF available — skipping slab/void extraction for project %s", project_id)
         return []
 
     col_summary = [
         {
             "id": c.get("member_id"),
-            "x": round(c.get("center_point", {}).get("x", 0), 1),
-            "y": round(c.get("center_point", {}).get("y", 0), 1),
-            "b_mm": c.get("meta", {}).get("b", 225),
-            "h_mm": c.get("meta", {}).get("h", 225),
+            "x": round((c.get("center_point") or {}).get("x", 0), 1),
+            "y": round((c.get("center_point") or {}).get("y", 0), 1),
+            "b_mm": (c.get("meta") or {}).get("b", 225),
+            "h_mm": (c.get("meta") or {}).get("h", 225),
         }
         for c in column_members
     ]
@@ -576,14 +589,14 @@ async def _run_llm_slab_void_extraction(
         {
             "id": b.get("member_id"),
             "start": {
-                "x": round(b.get("start_point", {}).get("x", 0), 1),
-                "y": round(b.get("start_point", {}).get("y", 0), 1),
+                "x": round((b.get("start_point") or {}).get("x", 0), 1),
+                "y": round((b.get("start_point") or {}).get("y", 0), 1),
             },
             "end": {
-                "x": round(b.get("end_point", {}).get("x", 0), 1),
-                "y": round(b.get("end_point", {}).get("y", 0), 1),
+                "x": round((b.get("end_point") or {}).get("x", 0), 1),
+                "y": round((b.get("end_point") or {}).get("y", 0), 1),
             },
-            "span_m": round(b.get("spans_m", [0])[0], 3),
+            "span_m": round((b.get("spans_m") or [0])[0], 3),
         }
         for b in beam_members
     ]
@@ -885,7 +898,20 @@ Schema:
         llm = _get_llm()
         content: list = [{"type": "text", "text": prompt}]
 
+        # Check if the PDF has at least one page.
+        pdf_is_valid = False
         if pdf_path and os.path.exists(pdf_path):
+            try:
+                import fitz
+                doc = fitz.open(pdf_path)
+                if doc.page_count > 0:
+                    pdf_is_valid = True
+                else:
+                    logger.warning("PDF file at '%s' has 0 pages; ignoring it as invalid.", pdf_path)
+            except Exception as err:
+                logger.warning("Failed to open PDF file at '%s': %s; ignoring it as invalid.", pdf_path, err)
+
+        if pdf_path and pdf_is_valid:
             try:
                 import base64
                 with open(pdf_path, "rb") as f:
