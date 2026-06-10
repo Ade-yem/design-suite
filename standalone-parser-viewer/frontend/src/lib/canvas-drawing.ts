@@ -483,7 +483,8 @@ export function drawSlab(
   isSelected: boolean,
   isHovered: boolean
 ): void {
-  let x: number, y: number, w: number, h: number;
+  let cx: number, cy: number;
+  let xMin: number, yMin: number, w: number, h: number;
 
   if (member.boundary_polygon && member.boundary_polygon.length >= 3) {
     const pts = member.boundary_polygon.map((p) => worldToScreen(p, zoom, pan, canvasHeight));
@@ -500,32 +501,80 @@ export function drawSlab(
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // Extract outer bounding geometry for size filtering thresholds
     const xs = pts.map((p) => p.x);
     const ys = pts.map((p) => p.y);
-    x = Math.min(...xs); y = Math.min(...ys);
-    w = Math.max(...xs) - x; h = Math.max(...ys) - y;
+    xMin = Math.min(...xs); yMin = Math.min(...ys);
+    w = Math.max(...xs) - xMin; h = Math.max(...ys) - yMin;
+
+    // --- FIX: Anchor the visual arrow center to the backend's true center_point ---
+    // Falls back to bounding box midpoint only if center_point is omitted
+    const rawCenter = (member as any).center_point ?? { x: (member.start.x + member.end.x) / 2, y: (member.start.y + member.end.y) / 2 };
+    const screenCenter = worldToScreen(rawCenter, zoom, pan, canvasHeight);
+    cx = screenCenter.x;
+    cy = screenCenter.y;
   } else {
     const s = worldToScreen(member.start, zoom, pan, canvasHeight);
     const e = worldToScreen(member.end, zoom, pan, canvasHeight);
-    x = Math.min(s.x, e.x); y = Math.min(s.y, e.y);
+    xMin = Math.min(s.x, e.x); yMin = Math.min(s.y, e.y);
     w = Math.abs(e.x - s.x); h = Math.abs(e.y - s.y);
     if (w < 2 && h < 2) return;
 
     ctx.fillStyle = isHovered ? SLAB_FILL_HOVER : SLAB_FILL;
-    ctx.fillRect(x, y, w, h);
+    ctx.fillRect(xMin, yMin, w, h);
     ctx.strokeStyle = SLAB_STROKE;
     ctx.lineWidth = isSelected ? 2 : 1;
     ctx.setLineDash([6, 4]);
-    ctx.strokeRect(x, y, w, h);
+    ctx.strokeRect(xMin, yMin, w, h);
     ctx.setLineDash([]);
+
+    cx = xMin + w / 2;
+    cy = yMin + h / 2;
   }
 
+  // Draw spanning text arrows using the true interior coordinate anchor
   if (w > 30 && h > 30) {
-    drawSpanningArrows(ctx, x, y, w, h, member);
+    const arrowLen = Math.min(w, h) * 0.35;
+    ctx.strokeStyle = SLAB_STROKE;
+    ctx.fillStyle = SLAB_STROKE;
+    ctx.lineWidth = 1.2;
+
+    const isHorizontalShort = w <= h;
+    if (isHorizontalShort) {
+      ctx.beginPath(); ctx.moveTo(cx - arrowLen, cy); ctx.lineTo(cx + arrowLen, cy); ctx.stroke();
+      drawArrowHead(ctx, cx + arrowLen, cy, 0); drawArrowHead(ctx, cx - arrowLen, cy, Math.PI);
+    } else {
+      ctx.beginPath(); ctx.moveTo(cx, cy - arrowLen); ctx.lineTo(cx, cy + arrowLen); ctx.stroke();
+      drawArrowHead(ctx, cx, cy + arrowLen, Math.PI / 2); drawArrowHead(ctx, cx, cy - arrowLen, -Math.PI / 2);
+    }
+
+    const lx = member.meta.Lx;
+    const ly = member.meta.Ly;
+    if (lx || ly) {
+      ctx.font = "10px monospace";
+      ctx.fillStyle = "rgba(16, 185, 129, 0.70)";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(lx ? `Lx=${lx.toFixed(1)}m` : `Ly=${(ly ?? 0).toFixed(1)}m`, cx, cy + 8);
+    }
   }
+
   if (isSelected) {
-    drawSelectionGlow(ctx, x, y, w, h);
+    drawSelectionGlow(ctx, xMin, yMin, w, h);
   }
+}
+
+function pointInCustomPolygon(x: number, y: number, points: Point[]): boolean {
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const xi = points[i].x, yi = points[i].y;
+        const xj = points[j].x, yj = points[j].y;
+        
+        const intersect = ((yi > y) !== (yj > y))
+            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
 }
 
 export function drawVoid(
@@ -708,11 +757,12 @@ export function drawMemberLabel(
 ): void {
   if (zoom < 0.02) return;
 
-  const worldCenter: Point = {
+  // --- FIX: Render text badges exactly over true centroids ---
+  const rawCenter = (member as any).center_point ?? {
     x: (member.start.x + member.end.x) / 2,
     y: (member.start.y + member.end.y) / 2,
   };
-  const screen = worldToScreen(worldCenter, zoom, pan, canvasHeight);
+  const screen = worldToScreen(rawCenter, zoom, pan, canvasHeight);
 
   const idText = member.member_id;
   const b = member.meta.b_mm;
@@ -851,13 +901,14 @@ function hitTestMember(
     case "slab":
     case "void":
     case "staircase": {
+      if (member.boundary_polygon && member.boundary_polygon.length >= 3) {
+        // --- FIX: Test mouse click precisely against the true polygon bounds ---
+        const pts = member.boundary_polygon.map((p) => worldToScreen(p, zoom, pan, canvasHeight));
+        return pointInCustomPolygon(mx, my, pts);
+      }
       const s = worldToScreen(member.start, zoom, pan, canvasHeight);
       const e = worldToScreen(member.end, zoom, pan, canvasHeight);
-      const rx = Math.min(s.x, e.x);
-      const ry = Math.min(s.y, e.y);
-      const rw = Math.abs(e.x - s.x);
-      const rh = Math.abs(e.y - s.y);
-      return pointInRect(mx, my, rx, ry, rw, rh, HIT_TOLERANCE_PX);
+      return pointInRect(mx, my, Math.min(s.x, e.x), Math.min(s.y, e.y), Math.abs(e.x - s.x), Math.abs(e.y - s.y), HIT_TOLERANCE_PX);
     }
 
     case "wall": {

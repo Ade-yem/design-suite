@@ -29,9 +29,7 @@ Units convention (mirrors FastAPI schema convention)
 from __future__ import annotations
 
 from operator import add
-from typing import Annotated, Any, Optional
-
-from typing_extensions import TypedDict
+from typing import Annotated, Any, Optional, TypedDict
 
 
 class StructuralDesignState(TypedDict, total=False):

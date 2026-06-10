@@ -39,8 +39,7 @@ class _GeometryStore:
     Thread-safe in-memory store for parsed geometry and scale data.
 
     Keyed by ``project_id``.  Replace with a database-backed store when
-    ``PROJECT_STORE_BACKEND=postgres`` is active (migrate
-    ``_parsed`` → ``ProjectGeometry`` table).
+    ``PROJECT_STORE_BACKEND=postgres`` is active.
 
     Attributes
     ----------
@@ -625,7 +624,6 @@ class FileService:
                         _store.set_scale(project_id, json.loads(row.scale_json))
         except Exception as exc:
             logger.warning("DB geometry load for project %s failed: %s", project_id, exc)
-
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
 file_service = FileService()

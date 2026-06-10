@@ -38,7 +38,7 @@ function pointInRect(
   ry: number,
   rw: number,
   rh: number,
-  tolerance: number
+  tolerance: number,
 ): boolean {
   return (
     px >= rx - tolerance &&
@@ -65,7 +65,7 @@ function pointToLineDistance(
   x1: number,
   y1: number,
   x2: number,
-  y2: number
+  y2: number,
 ): number {
   const dx = x2 - x1;
   const dy = y2 - y1;
@@ -97,7 +97,7 @@ function beamHitRect(
   member: GeometricMember,
   zoom: number,
   pan: Point,
-  canvasHeight: number
+  canvasHeight: number,
 ): { x: number; y: number; w: number; h: number } {
   const s = worldToScreen(member.start, zoom, pan, canvasHeight);
   const e = worldToScreen(member.end, zoom, pan, canvasHeight);
@@ -134,14 +134,22 @@ function hitTestMember(
   member: GeometricMember,
   zoom: number,
   pan: Point,
-  canvasHeight: number
+  canvasHeight: number,
 ): boolean {
   const { x: mx, y: my } = mouseScreen;
 
   switch (member.member_type) {
     case "beam": {
       const rect = beamHitRect(member, zoom, pan, canvasHeight);
-      return pointInRect(mx, my, rect.x, rect.y, rect.w, rect.h, HIT_TOLERANCE_PX);
+      return pointInRect(
+        mx,
+        my,
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        HIT_TOLERANCE_PX,
+      );
     }
 
     case "column":
@@ -149,12 +157,28 @@ function hitTestMember(
       const center = worldToScreen(member.start, zoom, pan, canvasHeight);
       const w = Math.max(member.meta.b_mm * zoom, 4);
       const h = Math.max(member.meta.h_mm * zoom, 4);
-      return pointInRect(mx, my, center.x - w / 2, center.y - h / 2, w, h, HIT_TOLERANCE_PX);
+      return pointInRect(
+        mx,
+        my,
+        center.x - w / 2,
+        center.y - h / 2,
+        w,
+        h,
+        HIT_TOLERANCE_PX,
+      );
     }
 
     case "slab":
     case "void":
     case "staircase": {
+      if (member.boundary_polygon && member.boundary_polygon.length >= 3) {
+        const pts = member.boundary_polygon.map((p) =>
+          worldToScreen(p, zoom, pan, canvasHeight),
+        );
+        return pointInCustomPolygon(mx, my, pts);
+      }
+
+      // Fallback bounding box logic for generic blocks
       const s = worldToScreen(member.start, zoom, pan, canvasHeight);
       const e = worldToScreen(member.end, zoom, pan, canvasHeight);
       const rx = Math.min(s.x, e.x);
@@ -202,7 +226,7 @@ export function hitTestMembers(
   members: GeometricMember[],
   zoom: number,
   pan: Point,
-  canvasHeight: number
+  canvasHeight: number,
 ): string | null {
   // Priority buckets: columns first, then beams, walls, then area elements
   const priorityOrder: Record<string, number> = {
@@ -218,7 +242,7 @@ export function hitTestMembers(
   // Sort by priority (highest priority = lowest number = tested first)
   const sorted = [...members].sort(
     (a, b) =>
-      (priorityOrder[a.member_type] ?? 9) - (priorityOrder[b.member_type] ?? 9)
+      (priorityOrder[a.member_type] ?? 9) - (priorityOrder[b.member_type] ?? 9),
   );
 
   for (const member of sorted) {
@@ -228,4 +252,19 @@ export function hitTestMembers(
   }
 
   return null;
+}
+
+function pointInCustomPolygon(x: number, y: number, points: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x,
+      yi = points[i].y;
+    const xj = points[j].x,
+      yj = points[j].y;
+
+    const intersect =
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }

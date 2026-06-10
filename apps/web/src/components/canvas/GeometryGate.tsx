@@ -51,6 +51,8 @@ export const GeometryGate: React.FC<GeometryGateProps> = ({
     return null;
   }
 
+  // if (verificationStatus === "verified") return null;
+
   return (
     <div className="absolute bottom-0 inset-x-0 z-20 border-t border-amber-500/30 bg-amber-500/5 backdrop-blur-md">
       <div className="flex items-stretch divide-x divide-amber-500/20">

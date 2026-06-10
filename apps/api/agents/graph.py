@@ -33,6 +33,7 @@ from agents.gates import (
     drawing_review_gate, drawing_gate_router
 )
 
+# pyrefly: ignore [bad-specialization]
 workflow = StateGraph(StructuralDesignState)
 
 # Nodes

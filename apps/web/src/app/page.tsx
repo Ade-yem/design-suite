@@ -140,10 +140,6 @@ export default function WorkspacePage(): JSX.Element {
     };
     const next = gateStatusMap[gate];
     if (next) updateActiveProjectStatus(next.status, next.ordinal);
-
-    // The reached gate's approval is hosted by the always-visible pipeline rail
-    // (the pending-gate identity is written to the UI store by the chat socket
-    // handler). No need to force the chat panel open any more.
   };
 
   const handleCreated = (project: Project) => {
@@ -152,14 +148,16 @@ export default function WorkspacePage(): JSX.Element {
     setShowUploadNudge(true);
   };
 
+  if (isLoading || isRefreshing) {
+    return <WorkspaceLoadingPlaceholder />;
+  }
+
   return (
     <div className="h-screen flex overflow-hidden">
       <ProjectSidebar />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {isLoading || isRefreshing ? (
-          <WorkspaceLoadingPlaceholder />
-        ) : activeProject ? (
+        {activeProject ? (
           <>
             <WorkspaceHeader />
 
