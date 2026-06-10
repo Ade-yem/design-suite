@@ -164,7 +164,7 @@ export const CanvasViewport = forwardRef<
         setUploadState("idle");
         return;
       }
-      setUploadState((prev) => (prev === "done" ? "done" : "parsing"));
+      setUploadState((prev) => (prev === "done" ? "done" : "not ready"));
       const { data } = await apiClient.get<ParsedGeometry>(
         `/api/v1/files/${projectId}/parsed`,
       );

@@ -128,6 +128,10 @@ async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | Non
     Run or resume the LangGraph agent pipeline for the project,
     broadcasting all events to all active WebSocket connections.
 
+    Ensures that ``project_id`` and ``pipeline_status`` are always present in the
+    running state dictionary, preventing KeyErrors when initiating or resuming
+    the graph.
+
     Parameters
     ----------
     project_id : str
@@ -139,8 +143,13 @@ async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | Non
     stored_status = await project_store.get_status(project_id)
     pipeline_status = stored_status.label() if stored_status is not None else "created"
     
-    state_to_run = input_state
-    if state_to_run is not None:
+    if input_state is None:
+        state_to_run = {
+            "project_id": project_id,
+            "pipeline_status": pipeline_status,
+        }
+    else:
+        state_to_run = input_state
         state_to_run.update({
             "project_id": project_id,
             "pipeline_status": pipeline_status,

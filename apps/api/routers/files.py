@@ -343,8 +343,14 @@ async def reparse_project_files(
         )
 
     saved_path = await file_handler.get_url(project_id, dxf_file)
+    if not saved_path:
+        raise StructuralError(
+            "FILE_NOT_FOUND",
+            stage="reparse",
+            details={"reason": "Could not retrieve the DXF drawing file for this project. Please try uploading it again."},
+            status_code=404,
+        )
     saved_pdf_path = await file_handler.get_url(project_id, pdf_file) if pdf_file else None
-
     # Clear cached geometry in service
     await file_service.clear(project_id)
 
@@ -500,6 +506,29 @@ async def verify_geometry(
 
         # Freeze an immutable snapshot of the verified geometry (audit trail).
         from db.models.artifact import ArtifactStage
+
+        # Clean up any existing verification snapshots for this project first
+        # to prevent duplicate/stale artifacts from retry attempts.
+        if hasattr(artifact_store, "_artifacts"):
+            # MemoryArtifactStore
+            for k in list(artifact_store._artifacts.keys()):
+                art = artifact_store._artifacts[k]
+                if art.project_id == project_id and art.stage == ArtifactStage.VERIFICATION.value:
+                    del artifact_store._artifacts[k]
+        else:
+            # PostgresArtifactStore
+            from db.session import get_session_maker
+            from db.models.artifact import Artifact
+            from sqlalchemy import delete
+            
+            session_maker = get_session_maker()
+            async with session_maker() as session:
+                stmt = delete(Artifact).where(
+                    Artifact.project_id == project_id,
+                    Artifact.stage == ArtifactStage.VERIFICATION
+                )
+                await session.execute(stmt)
+                await session.commit()
 
         parsed_geometry = await file_service.get_parsed(project_id)
         if parsed_geometry:
