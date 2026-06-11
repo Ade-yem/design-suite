@@ -11,6 +11,14 @@ export interface AgentMessage {
   /** True when this is a complete, discrete message rather than a streamed chunk. */
   final?: boolean;
 }
+export interface ChatHistoryMessage {
+  type: "chat_history";
+  messages: Array<{
+    role: "user" | "assistant";
+    content: string;
+    timestamp?: string;
+  }>;
+}
 export interface StatusLog { type: "status_log"; tool: string; status: string }
 export interface GateReached { type: "gate_reached"; gate: string; action_required: string }
 export interface DrawingCommands { type: "drawing_commands"; data: unknown }
@@ -29,6 +37,7 @@ export interface SocketError { type: "error"; message: string }
 
 export type SocketMessage =
   | AgentMessage
+  | ChatHistoryMessage
   | StatusLog
   | GateReached
   | DrawingCommands
@@ -38,6 +47,7 @@ export type SocketMessage =
 
 export interface SocketCallbacks {
   onAgentMessage?: (msg: AgentMessage) => void;
+  onChatHistory?: (msg: ChatHistoryMessage) => void;
   onStatusLog?: (msg: StatusLog) => void;
   onGateReached?: (msg: GateReached) => void;
   onDrawingCommands?: (msg: DrawingCommands) => void;
@@ -79,6 +89,9 @@ export function useProjectSocket(
         switch (msg.type) {
           case "agent_message":
             callbacksRef.current.onAgentMessage?.(msg);
+            break;
+          case "chat_history":
+            callbacksRef.current.onChatHistory?.(msg as ChatHistoryMessage);
             break;
           case "status_log":
             callbacksRef.current.onStatusLog?.(msg);

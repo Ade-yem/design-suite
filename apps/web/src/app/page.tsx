@@ -148,9 +148,9 @@ export default function WorkspacePage(): JSX.Element {
     setShowUploadNudge(true);
   };
 
-  if (isLoading || isRefreshing) {
-    return <WorkspaceLoadingPlaceholder />;
-  }
+  // if (isLoading || isRefreshing) {
+  //   return <WorkspaceLoadingPlaceholder />;
+  // }
 
   return (
     <div className="h-screen flex overflow-hidden">

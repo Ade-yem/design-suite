@@ -51,7 +51,7 @@ export const GeometryGate: React.FC<GeometryGateProps> = ({
     return null;
   }
 
-  // if (verificationStatus === "verified") return null;
+  if (verificationStatus === "verified") return null;
 
   return (
     <div className="absolute bottom-0 inset-x-0 z-20 border-t border-amber-500/30 bg-amber-500/5 backdrop-blur-md">
@@ -116,17 +116,6 @@ export const GeometryGate: React.FC<GeometryGateProps> = ({
 
         {/* Step 3: Sign Off */}
         <div className="flex-1 flex flex-col gap-3 px-4 py-3">
-          <div className="flex items-center gap-2">
-            {verificationStatus === "verified" ? (
-              <Check className="h-4 w-4 text-green-400" />
-            ) : (
-              <div className="h-4 w-4 rounded-full border border-amber-400" />
-            )}
-            <span className="text-xs font-semibold text-amber-200">
-              Step 3: Sign Off
-            </span>
-          </div>
-
           <div className="flex items-center gap-2">
             <button
               onClick={() => onResetGeometry()}

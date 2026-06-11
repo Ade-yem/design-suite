@@ -81,6 +81,17 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
   };
 
   const { sendMessage } = useProjectSocket(projectId, {
+    onChatHistory: ({ messages }) => {
+      setMessages([
+        WELCOME,
+        ...messages.map((m, idx) => ({
+          id: `hist-${idx}-${Date.now()}`,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+        })),
+      ]);
+    },
     onAgentMessage: ({ content, requires_input, final }) => {
       // A decision-required message must surface the chat even when it is
       // collapsed — every chat-based engineer decision lives in this column.
