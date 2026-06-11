@@ -123,6 +123,56 @@ def _extract_agent_texts(output: Any) -> list[str]:
     return texts
 
 
+def serialize_message(msg: Any) -> dict[str, str] | None:
+    """
+    Serialize a LangChain message object or message dictionary to a standardized frontend format.
+
+    Parameters
+    ----------
+    msg : Any
+        The message object or dictionary to serialize.
+
+    Returns
+    -------
+    dict[str, str] | None
+        A dictionary with 'role' and 'content' keys, or None if the message is a system message or invalid.
+    """
+    if hasattr(msg, "content"):
+        content = msg.content
+    elif isinstance(msg, dict):
+        content = msg.get("content", "")
+    else:
+        return None
+
+    if not isinstance(content, str) or not content.strip():
+        return None
+
+    msg_type = getattr(msg, "type", None)
+    if msg_type == "system":
+        return None
+    elif msg_type == "human":
+        role = "user"
+    elif msg_type == "ai":
+        role = "assistant"
+    elif isinstance(msg, dict):
+        if msg.get("type") == "system" or msg.get("role") == "system":
+            return None
+        r = msg.get("role")
+        if r in ("user", "human"):
+            role = "user"
+        elif r in ("assistant", "ai"):
+            role = "assistant"
+        else:
+            role = "assistant"
+    else:
+        role = "assistant"
+
+    return {
+        "role": role,
+        "content": content
+    }
+
+
 async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | None) -> None:
     """
     Run or resume the LangGraph agent pipeline for the project,
@@ -144,10 +194,14 @@ async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | Non
     pipeline_status = stored_status.label() if stored_status is not None else "created"
     
     if input_state is None:
-        state_to_run = {
-            "project_id": project_id,
-            "pipeline_status": pipeline_status,
-        }
+        state = await _agent_graph.app.aget_state(config)
+        if state and state.next:
+            state_to_run = None
+        else:
+            state_to_run = {
+                "project_id": project_id,
+                "pipeline_status": pipeline_status,
+            }
     else:
         state_to_run = input_state
         state_to_run.update({
@@ -269,6 +323,34 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
 
     await manager.connect(project_id, websocket)
     logger.info("WebSocket connected for project %s", project_id)
+
+    # Fetch and send existing chat history and active gate status upon connection
+    try:
+        config = {"configurable": {"thread_id": project_id}}
+        state = await _agent_graph.app.aget_state(config)
+        if state and state.values:
+            messages = state.values.get("messages", [])
+            serialized_messages = []
+            for m in messages:
+                serialized = serialize_message(m)
+                if serialized:
+                    serialized_messages.append(serialized)
+            if serialized_messages:
+                await websocket.send_json({
+                    "type": "chat_history",
+                    "messages": serialized_messages
+                })
+        
+        if state and state.next:
+            for node in state.next:
+                if node in ("geometry_gate", "loading_gate", "design_gate", "drawing_gate"):
+                    await websocket.send_json({
+                        "type": "gate_reached",
+                        "gate": node,
+                        "action_required": "confirm"
+                    })
+    except Exception as e:
+        logger.error("Error retrieving existing chat history / gate status: %s", str(e), exc_info=True)
 
     try:
         while True:
