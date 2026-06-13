@@ -47,7 +47,8 @@ def mock_llm_calls(monkeypatch):
     def mock_get_llm():
         return mock_llm
 
-    monkeypatch.setattr("agents.parser._get_llm", mock_get_llm)
+    # agents.parser does not use LLM, hence doesn't define _get_llm
+    # monkeypatch.setattr("agents.parser._get_llm", mock_get_llm)
     monkeypatch.setattr("agents.analyst._get_llm", mock_get_llm)
     monkeypatch.setattr("agents.designer._get_llm", mock_get_llm)
 

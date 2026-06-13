@@ -4,7 +4,7 @@
 PROJECT_ROOT=$(pwd)
 API_DIR="$PROJECT_ROOT/apps/api"
 WEB_DIR="$PROJECT_ROOT/apps/web"
-VENV_PATH="$PROJECT_ROOT/.venv"
+VENV_PATH="$PROJECT_ROOT/venv"
 
 # Function to open a new terminal tab and run a command
 # Adjust 'gnome-terminal' to your preferred emulator if necessary

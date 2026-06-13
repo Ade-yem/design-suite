@@ -1,0 +1,84 @@
+<svg class="eng-ai-icon concept-cursor working" xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 120 120" width="100" height="100">
+  <style>
+    .concept-cursor {
+      --brand-primary: #10b981;   /* CAD Green / Emerald Precise */
+      --brand-glow: rgba(16, 185, 129, 0.4);
+      --axis-color: #334155;       /* Grid Line Dark */
+      background: #0b1329;
+      border-radius: 24%;
+    }
+
+    /* Infinite Coordinate System Crosshairs */
+    .axis-line {
+      stroke: var(--axis-color);
+      stroke-width: 1.2;
+    }
+    
+    /* Bounding Ring */
+    .survey-ring {
+      stroke: #1e293b;
+      stroke-width: 1.5;
+      fill: none;
+      transform-origin: 50px 50px;
+    }
+
+    /* Sharp Vector Elements */
+    .chevron-cursor {
+      fill: none;
+      stroke: var(--brand-primary);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 0 4px var(--brand-glow));
+      transform-origin: 50px 50px;
+    }
+
+    /* ANIMATION: THINKING (Axis Crosshair Pulsing Calibration) */
+    .concept-cursor.thinking .axis-line {
+      animation: axisExtend 2s ease-in-out infinite alternate;
+    }
+    .concept-cursor.thinking .survey-ring {
+      stroke: var(--brand-primary);
+      animation: ringPulse 1s ease-in-out infinite alternate;
+    }
+
+    /* ANIMATION: WORKING (High-Speed Vector Processing Sweep) */
+    .concept-cursor.working .chevron-cursor {
+      animation: cursorSpin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .concept-cursor.working .survey-ring {
+      stroke: var(--brand-primary);
+      stroke-dasharray: 40 100;
+      animation: ringRotate 1.5s linear infinite;
+    }
+
+    @keyframes axisExtend {
+      0% { opacity: 0.4; stroke-width: 1; }
+      100% { opacity: 1; stroke-width: 1.8; stroke: #475569; }
+    }
+    @keyframes ringPulse {
+      0% { transform: scale(0.9); opacity: 0.3; }
+      100% { transform: scale(1.05); opacity: 0.8; }
+    }
+    @keyframes cursorSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes ringRotate {
+      100% { transform: rotate(-360deg); }
+    }
+  </style>
+
+  <g class="coordinate-axes">
+    <line class="axis-line" x1="50" y1="0" x2="50" y2="100" />
+    <line class="axis-line" x1="0" y1="50" x2="100" y2="50" />
+  </g>
+
+  <circle class="survey-ring" cx="50" cy="50" r="32" />
+  <circle class="survey-ring" cx="50" cy="50" r="22" style="opacity: 0.3; stroke-dasharray: 4 4;" />
+
+  <rect x="46" y="46" width="8" height="8" fill="none" stroke="var(--axis-color)" stroke-width="1" />
+
+  <path class="chevron-cursor" d="M 40,38 L 50,50 L 40,62" />
+  <path class="chevron-cursor" d="M 60,62 L 50,50 L 60,38" style="opacity: 0.5;" />
+</svg>

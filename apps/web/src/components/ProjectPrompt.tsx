@@ -8,6 +8,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { apiClient } from "@/lib/api";
 import { getPipelineStatus } from "@/lib/pipelineStatus";
 import { NewProjectModal } from "./NewProjectModal";
+import { BlueprintIcon } from "./BlueprintIcon";
 import type { Project, ProjectListItem } from "@/types/project";
 
 // ── Greeting ──────────────────────────────────────────────────────────────────
@@ -119,10 +120,9 @@ function ProjectCard({
       disabled={!!openingId}
       className="group w-full flex items-center gap-4 px-4 py-3.5 rounded-xl bg-card border border-border hover:border-border/80 hover:bg-card/60 transition-all text-left disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
     >
-      {/* Icon */}
       <div className="shrink-0 h-9 w-9 rounded-lg bg-muted flex items-center justify-center group-hover:bg-muted/60 transition-colors">
         {isOpening ? (
-          <Loader2 className="h-4 w-4 text-primary animate-spin" />
+          <BlueprintIcon className="h-6 w-6" state="working" />
         ) : (
           <Folder className="h-4 w-4 text-muted-foreground" />
         )}

@@ -7,12 +7,16 @@ import { cn } from "@/lib/utils";
 import { useProjectSocket } from "@/hooks/useProjectSocket";
 import { GATE_LABELS } from "@/lib/pipelineStatus";
 import { PRODUCT_NAME } from "@/lib/brand";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import { QuestionnaireForm } from "./QuestionnaireForm";
+import { BlueprintIcon } from "./BlueprintIcon";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  questionnaire?: any;
 }
 
 interface ChatSidebarProps {
@@ -21,11 +25,11 @@ interface ChatSidebarProps {
   onClose?: () => void;
 }
 
-function TypingIndicator() {
+function TypingIndicator({ state }: { state: "" | "thinking" | "working" }) {
   return (
     <div className="flex items-start gap-3 animate-fade-in-up">
-      <div className="h-7 w-7 rounded-md bg-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-        <Bot className="h-4 w-4 text-primary" />
+      <div className="h-7 w-7 rounded-md bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+        <BlueprintIcon className="h-5 w-5" state={state || "thinking"} />
       </div>
       <div className="flex items-center gap-1.5 py-3">
         <div className="h-2 w-2 rounded-full bg-primary typing-dot" />
@@ -50,9 +54,79 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [agentState, setAgentState] = useState<"" | "thinking" | "working">("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Accumulate streaming chunks into a single assistant message
   const streamingIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+  }, [input]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+      return;
+    }
+
+    if (e.key === "Enter" && e.shiftKey) {
+      e.preventDefault();
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+
+      const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+      const currentLine = text.substring(lineStart, start);
+
+      const unorderedMatch = currentLine.match(/^(\s*[-*])\s+(.*)/);
+      const orderedMatch = currentLine.match(/^(\s*(\d+)\.)\s+(.*)/);
+
+      let continuation = "\n";
+
+      if (unorderedMatch) {
+        const marker = unorderedMatch[1];
+        const content = unorderedMatch[2];
+        if (content.trim() === "") {
+          const newLineText = text.substring(0, lineStart) + text.substring(start);
+          setInput(newLineText);
+          setTimeout(() => {
+            textarea.selectionStart = textarea.selectionEnd = lineStart;
+          }, 0);
+          return;
+        } else {
+          continuation += marker + " ";
+        }
+      } else if (orderedMatch) {
+        const num = parseInt(orderedMatch[2], 10);
+        const content = orderedMatch[3];
+        if (content.trim() === "") {
+          const newLineText = text.substring(0, lineStart) + text.substring(start);
+          setInput(newLineText);
+          setTimeout(() => {
+            textarea.selectionStart = textarea.selectionEnd = lineStart;
+          }, 0);
+          return;
+        } else {
+          continuation += `${num + 1}. `;
+        }
+      }
+
+      const newText = text.substring(0, start) + continuation + text.substring(end);
+      setInput(newText);
+
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + continuation.length;
+      }, 0);
+    }
+  };
 
   const appendAssistantAndNotify = (content: string) => {
     if (!chatOpen) incrementUnread();
@@ -89,10 +163,11 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
           role: m.role,
           content: m.content,
           timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+          questionnaire: m.questionnaire,
         })),
       ]);
     },
-    onAgentMessage: ({ content, requires_input, final }) => {
+    onAgentMessage: ({ content, requires_input, final, questionnaire }) => {
       // A decision-required message must surface the chat even when it is
       // collapsed — every chat-based engineer decision lives in this column.
       if (requires_input) setChatOpen(true);
@@ -101,25 +176,62 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
       // its own bubble. Chunks (no `final`) accumulate into the streaming one.
       if (final || !streamingIdRef.current) {
         setIsTyping(false);
-        appendAssistantAndNotify(content);
+        setAgentState("");
+        const id = `msg-${Date.now()}`;
+        streamingIdRef.current = id;
+        if (!chatOpen) incrementUnread();
+        setMessages((prev) => [
+          ...prev,
+          { id, role: "assistant", content, timestamp: new Date(), questionnaire },
+        ]);
         if (final) streamingIdRef.current = null;
       } else {
+        setAgentState("thinking");
+        setIsTyping(true);
         appendChunk(content);
       }
     },
-    onStatusLog: ({ tool }) => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `log-${Date.now()}`,
-          role: "assistant",
-          content: `✓ ${tool} complete`,
-          timestamp: new Date(),
-        },
-      ]);
+    onStatusLog: ({ tool, status }) => {
+      const toolName = tool.replace(/_/, " ");
+      if (status === "running") {
+        setAgentState("working");
+        setIsTyping(true);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `log-run-${Date.now()}`,
+            role: "assistant",
+            content: `🔧 Analyst is running ${toolName}...`,
+            timestamp: new Date(),
+          },
+        ]);
+      } else {
+        setAgentState("");
+        setIsTyping(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `log-end-${Date.now()}`,
+            role: "assistant",
+            content: `✓ ${toolName} complete`,
+            timestamp: new Date(),
+          },
+        ]);
+      }
+    },
+    onJobUpdate: ({ status }) => {
+      if (status === "running") {
+        setAgentState("working");
+        setIsTyping(true);
+      } else if (status === "complete" || status === "failed" || status === "cancelled") {
+        setAgentState("");
+        setIsTyping(false);
+      }
     },
     onGateReached: ({ gate }) => {
       streamingIdRef.current = null;
+      setAgentState("");
+      setIsTyping(false);
       // A gate is a decision point — surface the chat even when collapsed.
       setChatOpen(true);
       // The gate identity is shared via the UI store so the always-visible
@@ -177,14 +289,20 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
         },
       ]);
     }
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
   };
 
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
       {/* Header */}
-      <div className="h-8 px-3 border-b border-border flex items-center gap-2 flex-shrink-0">
-        <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-        <span className="text-xs text-muted-foreground font-mono flex-1">Connected</span>
+      <div className="h-8 px-3 border-b border-border flex items-center gap-2 shrink-0">
+        <BlueprintIcon className="h-4.5 w-4.5 shrink-0" state={agentState} />
+        <span className="text-xs text-muted-foreground font-mono flex-1 truncate">
+          {agentState === "working" ? "Analyst calculating..." : agentState === "thinking" ? "Analyst thinking..." : "Connected"}
+        </span>
         {onClose && (
           <button
             onClick={onClose}
@@ -201,7 +319,7 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
       >
-        {messages.map((msg) => {
+        {messages.map((msg, index) => {
           // Detect status events: messages that start with ✓ or 🔧
           const isStatusEvent =
             msg.role === "assistant" &&
@@ -221,45 +339,78 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
           }
 
           return (
-            <div
-              key={msg.id}
-              className={cn(
-                "flex items-start gap-3 animate-fade-in-up",
-                msg.role === "user" && "flex-row-reverse"
-              )}
-            >
+            <div key={msg.id} className="space-y-3">
               <div
                 className={cn(
-                  "h-7 w-7 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5",
-                  msg.role === "assistant" ? "bg-primary/15" : "bg-secondary"
+                  "flex items-start gap-3 animate-fade-in-up",
+                  msg.role === "user" && "flex-row-reverse"
                 )}
               >
-                {msg.role === "assistant" ? (
-                  <Bot className="h-4 w-4 text-primary" />
-                ) : (
-                  <User className="h-4 w-4 text-muted-foreground" />
-                )}
+                <div
+                  className={cn(
+                    "h-7 w-7 rounded-md flex items-center justify-center shrink-0 mt-0.5",
+                    msg.role === "assistant" ? "bg-primary/15" : "bg-secondary"
+                  )}
+                >
+                  {msg.role === "assistant" ? (
+                    <BlueprintIcon className="h-5 w-5" />
+                  ) : (
+                    <User className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </div>
+                <div
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-sm leading-relaxed max-w-[85%]",
+                    msg.role === "assistant"
+                      ? "bg-muted text-foreground"
+                      : "bg-primary text-primary-foreground"
+                  )}
+                >
+                  {msg.role === "user" ? (
+                    msg.content
+                  ) : (
+                    <MarkdownRenderer content={msg.content} />
+                  )}
+                </div>
               </div>
-              <div
-                className={cn(
-                  "rounded-lg px-3 py-2 text-sm leading-relaxed max-w-[85%]",
-                  msg.role === "assistant"
-                    ? "bg-muted text-foreground"
-                    : "bg-primary text-primary-foreground"
+
+              {/* Dynamic questionnaire form if it is the active/latest assistant message */}
+              {msg.role === "assistant" &&
+                msg.questionnaire?.fields &&
+                index === messages.length - 1 && (
+                  <div className="pl-10 pr-2 animate-fade-in-up">
+                    <QuestionnaireForm
+                      title={msg.questionnaire.title}
+                      description={msg.questionnaire.description}
+                      fields={msg.questionnaire.fields}
+                      onSubmit={(formattedResponse) => {
+                        // Append the formatted user message to state local log
+                        const userMsgId = `msg-${Date.now()}`;
+                        setMessages((prev) => [
+                          ...prev,
+                          {
+                            id: userMsgId,
+                            role: "user",
+                            content: formattedResponse,
+                            timestamp: new Date(),
+                          },
+                        ]);
+                        setIsTyping(true);
+                        sendMessage(formattedResponse);
+                      }}
+                    />
+                  </div>
                 )}
-              >
-                {msg.content}
-              </div>
             </div>
           );
         })}
-        {isTyping && <TypingIndicator />}
+        {isTyping && <TypingIndicator state={agentState} />}
 
         {/* Gate pointer — the approval itself lives in the pipeline rail. */}
         {pendingGate && (
           <div className="rounded-lg border border-primary/40 bg-primary/5 px-3 py-3 space-y-2 animate-fade-in-up">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
+              <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
               <p className="text-xs font-medium text-primary">Review Required</p>
             </div>
             <p className="text-xs text-muted-foreground">{pendingGate.label}</p>
@@ -274,20 +425,21 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
 
       {/* Input */}
       <div className="p-3 border-t border-border">
-        <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
-          <input
-            type="text"
+        <div className="flex items-start gap-2 bg-muted rounded-lg px-3 py-2">
+          <textarea
+            ref={textareaRef}
+            rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            onKeyDown={handleKeyDown}
             placeholder="Ask about structural elements…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground resize-none py-1 max-h-[200px] overflow-y-auto scrollbar-thin"
           />
           <button
             onClick={handleSend}
             disabled={!input.trim()}
             className={cn(
-              "p-1.5 rounded-md transition-colors",
+              "p-1.5 rounded-md transition-colors shrink-0 mt-0.5",
               input.trim()
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "text-muted-foreground"

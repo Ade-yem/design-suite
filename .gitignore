@@ -5,3 +5,7 @@ apps/api/uploads/*
 logs
 standalone-parser-viewer/backend/.env
 standalone-parser-viewer/backend/output0.png
+.agents/
+.claude/
+.vscode/
+.pytest_cache/
