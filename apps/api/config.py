@@ -159,7 +159,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str =os.getenv("GOOGLE_CLIENT_ID") or ""
     GOOGLE_CLIENT_SECRET: str =os.getenv("GOOGLE_CLIENT_SECRET") or ""
     THINKING_MODEL: str = "gemini-3.1-flash-lite"
-    ACTION_MODEL: str = "gemini-3.1-flash-lite"
+    ACTION_MODEL: str = "gemini-2.5-flash-lite"
     RESEND_API_KEY: str =os.getenv("RESEND_API_KEY") or ""
     SENDER_EMAIL: str =os.getenv("SENDER_EMAIL") or ""
     RESEND_API_KEY: str = os.getenv("RESEND_API_KEY") or ""

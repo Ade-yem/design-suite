@@ -20,6 +20,7 @@ import { useArtifactStore } from "@/stores/artifactStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/project";
+import { ProjectSocketProvider } from "@/hooks/useProjectSocket";
 
 /**
  * UploadNudge component props.
@@ -68,28 +69,6 @@ function UploadNudge({
   );
 }
 
-import { BlueprintIcon } from "@/components/BlueprintIcon";
-
-/**
- * WorkspaceLoadingPlaceholder component.
- * Renders a high-fidelity, blueprint-themed engineering CAD canvas loader
- * to display while the application is in a loading state.
- *
- * @returns {JSX.Element} The rendered CAD workspace loader placeholder component.
- */
-function WorkspaceLoadingPlaceholder(): JSX.Element {
-  return (
-    <div className="fixed inset-0 bg-canvas-bg flex items-center justify-center z-100">
-      <div className="flex flex-col items-center space-y-4">
-        <BlueprintIcon className="w-16 h-16" state="working" />
-        <p className="text-muted-foreground text-sm font-mono tracking-wider">
-          LOADING ENVIRONMENT...
-        </p>
-      </div>
-    </div>
-  );
-}
-
 /**
  * WorkspacePage root client component.
  * Sets up the multi-agent integrated development environment, isolating
@@ -103,14 +82,12 @@ export default function WorkspacePage(): JSX.Element {
     refreshActiveProject,
     updateActiveProjectStatus,
     setActiveProject,
-    isLoading,
   } = useProjectStore();
   const { chatOpen, setChatOpen } = useUIStore();
   const { fetchArtifacts } = useArtifactStore();
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showUploadNudge, setShowUploadNudge] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const canvasRef = useRef<CanvasViewportHandle>(null);
 
@@ -147,9 +124,7 @@ export default function WorkspacePage(): JSX.Element {
 
   useEffect(() => {
     if (activeProject) {
-      setIsRefreshing(true);
       refreshActiveProject().finally(() => {
-        setIsRefreshing(false);
       });
       fetchArtifacts(activeProject.project_id);
     }
@@ -183,7 +158,7 @@ export default function WorkspacePage(): JSX.Element {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {activeProject ? (
-          <>
+          <ProjectSocketProvider projectId={activeProject.project_id}>
             <WorkspaceHeader />
 
             {/* Upload nudge — shown immediately after project creation */}
@@ -241,7 +216,7 @@ export default function WorkspacePage(): JSX.Element {
                 </div>
               </div>
             </div>
-          </>
+          </ProjectSocketProvider>
         ) : (
           <ProjectPrompt />
         )}

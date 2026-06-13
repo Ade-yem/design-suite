@@ -99,10 +99,12 @@ export interface MemberMeta {
 export interface GeometricMember {
   member_id: string;
   member_type: MemberType;
-  start: Point;
-  end: Point;
-  boundary_polygon?: Point[];
+  start_point?: Point | null;
+  end_point?: Point | null;
+  center_point?: Point | null;
+  boundary_polygon?: Point[] | null;
   meta: MemberMeta;
+  spans_m?: number[];
 }
 
 // ── Scale & Parsing Metadata ────────────────────────────────────────────────

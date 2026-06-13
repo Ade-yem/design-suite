@@ -52,8 +52,10 @@ function beamScreenRect(
   pan: Point,
   canvasHeight: number
 ): { x: number; y: number; w: number; h: number } {
-  const s = worldToScreen(member.start, zoom, pan, canvasHeight);
-  const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+  const startPoint = member.start_point ?? { x: 0, y: 0 };
+  const endPoint = member.end_point ?? startPoint;
+  const s = worldToScreen(startPoint, zoom, pan, canvasHeight);
+  const e = worldToScreen(endPoint, zoom, pan, canvasHeight);
   const halfWidth = (member.meta.b_mm * zoom) / 2;
 
   const dx = Math.abs(e.x - s.x);
@@ -107,7 +109,8 @@ export function drawColumn(
   isSelected: boolean,
   isHovered: boolean
 ): void {
-  const center = worldToScreen(member.start, zoom, pan, canvasHeight);
+  const centerPoint = member.center_point ?? { x: 0, y: 0 };
+  const center = worldToScreen(centerPoint, zoom, pan, canvasHeight);
   const w = member.meta.b_mm * zoom;
   const h = member.meta.h_mm * zoom;
 
@@ -239,14 +242,19 @@ export function drawSlab(
     w = Math.max(...xs) - xMin; h = Math.max(...ys) - yMin;
 
     // FIX: Anchor arrows exactly to the backend calculated center mass
-    const rawCenter = (member as any).center_point ?? { x: (member.start.x + member.end.x) / 2, y: (member.start.y + member.end.y) / 2 };
+    const rawCenter = member.center_point ?? {
+      x: (Math.min(...member.boundary_polygon.map(p => p.x)) + Math.max(...member.boundary_polygon.map(p => p.x))) / 2,
+      y: (Math.min(...member.boundary_polygon.map(p => p.y)) + Math.max(...member.boundary_polygon.map(p => p.y))) / 2,
+    };
     const screenCenter = worldToScreen(rawCenter, zoom, pan, canvasHeight);
     cx = screenCenter.x;
     cy = screenCenter.y;
   } else {
     // Fallback block configuration
-    const s = worldToScreen(member.start, zoom, pan, canvasHeight);
-    const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+    const startPoint = member.start_point ?? { x: 0, y: 0 };
+    const endPoint = member.end_point ?? startPoint;
+    const s = worldToScreen(startPoint, zoom, pan, canvasHeight);
+    const e = worldToScreen(endPoint, zoom, pan, canvasHeight);
     xMin = Math.min(s.x, e.x); yMin = Math.min(s.y, e.y);
     w = Math.abs(e.x - s.x); h = Math.abs(e.y - s.y);
     if (w < 2 && h < 2) return;
@@ -297,8 +305,10 @@ export function drawVoid(
     xMin = Math.min(...xs); yMin = Math.min(...ys);
     w = Math.max(...xs) - xMin; h = Math.max(...ys) - yMin;
   } else {
-    const s = worldToScreen(member.start, zoom, pan, canvasHeight);
-    const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+    const startPoint = member.start_point ?? { x: 0, y: 0 };
+    const endPoint = member.end_point ?? startPoint;
+    const s = worldToScreen(startPoint, zoom, pan, canvasHeight);
+    const e = worldToScreen(endPoint, zoom, pan, canvasHeight);
     xMin = Math.min(s.x, e.x); yMin = Math.min(s.y, e.y);
     w = Math.abs(e.x - s.x); h = Math.abs(e.y - s.y);
     if (w < 2 && h < 2) return;
@@ -335,8 +345,10 @@ export function drawWall(
   isSelected: boolean,
   isHovered: boolean
 ): void {
-  const s = worldToScreen(member.start, zoom, pan, canvasHeight);
-  const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+  const startPoint = member.start_point ?? { x: 0, y: 0 };
+  const endPoint = member.end_point ?? startPoint;
+  const s = worldToScreen(startPoint, zoom, pan, canvasHeight);
+  const e = worldToScreen(endPoint, zoom, pan, canvasHeight);
   const thickness = Math.max(member.meta.b_mm * zoom, 3);
 
   ctx.strokeStyle = isHovered ? "rgba(100, 116, 139, 0.90)" : WALL_STROKE;
@@ -368,7 +380,8 @@ export function drawFooting(
   isSelected: boolean,
   isHovered: boolean
 ): void {
-  const center = worldToScreen(member.start, zoom, pan, canvasHeight);
+  const centerPoint = member.center_point ?? { x: 0, y: 0 };
+  const center = worldToScreen(centerPoint, zoom, pan, canvasHeight);
   const w = Math.max(member.meta.b_mm * zoom, 6);
   const h = Math.max(member.meta.h_mm * zoom, 6);
 

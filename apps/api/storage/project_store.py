@@ -67,6 +67,34 @@ class MemoryProjectStore:
     def __init__(self) -> None:
         self._projects: dict[str, dict] = {}
         self._members: dict[str, set[str]] = {}
+        self._loads: dict[str, tuple[dict, dict | None]] = {}
+
+    async def save_loads(self, project_id: str, definition: dict, output: dict | None) -> None:
+        """
+        Store the load definition and output for a project in memory.
+
+        Parameters
+        ----------
+        project_id : str
+        definition : dict
+        output : dict | None
+        """
+        self._loads[project_id] = (definition, output)
+
+    async def get_loads(self, project_id: str) -> tuple[dict | None, dict | None]:
+        """
+        Retrieve the stored load definition and output for a project from memory.
+
+        Parameters
+        ----------
+        project_id : str
+
+        Returns
+        -------
+        tuple[dict | None, dict | None]
+            (definition, output)
+        """
+        return self._loads.get(project_id, (None, None))
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
@@ -264,10 +292,14 @@ class PostgresProjectStore:
     """
     PostgreSQL-backed project repository using async SQLAlchemy.
 
-    Each method opens its own session via ``get_session_maker()``.
+    Uses a cached session maker retrieved once in constructor.
     The ``pipeline_status`` ORM column is an int; this class converts to/from
     the ``ProjectStatus`` IntEnum.
     """
+
+    def __init__(self) -> None:
+        from db.session import get_session_maker
+        self.session_maker = get_session_maker()
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
@@ -277,14 +309,12 @@ class PostgresProjectStore:
         organisation_id: str | None = None,
         user_id: uuid.UUID | None = None,
     ) -> ProjectResponse:
-        from db.session import get_session_maker
         from db.models.project import Project
 
         project_id = f"PRJ-{uuid.uuid4().hex[:8].upper()}"
         now = datetime.now(timezone.utc)
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             row = Project(
                 project_id=project_id,
                 name=data.name,
@@ -308,12 +338,10 @@ class PostgresProjectStore:
         organisation_id: str | None = None,
         bypass_tenant_check: bool = False,
     ) -> Optional[ProjectResponse]:
-        from db.session import get_session_maker
         from db.models.project import Project, ProjectMember
         from sqlalchemy import select, func
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             stmt = select(Project).where(Project.project_id == project_id)
             if not bypass_tenant_check:
                 if organisation_id is None:
@@ -347,12 +375,10 @@ class PostgresProjectStore:
     async def list_all(
         self, organisation_id: str | None = None, bypass_tenant_check: bool = False
     ) -> list[ProjectListItem]:
-        from db.session import get_session_maker
         from db.models.project import Project
         from sqlalchemy import select
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             stmt = select(Project)
             if not bypass_tenant_check:
                 if organisation_id is None:
@@ -380,12 +406,10 @@ class PostgresProjectStore:
         organisation_id: str | None = None,
         bypass_tenant_check: bool = False,
     ) -> Optional[ProjectResponse]:
-        from db.session import get_session_maker
         from db.models.project import Project, ProjectMember
         from sqlalchemy import select, func
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             stmt = select(Project).where(Project.project_id == project_id)
             if not bypass_tenant_check:
                 if organisation_id is None:
@@ -418,12 +442,10 @@ class PostgresProjectStore:
         organisation_id: str | None = None,
         bypass_tenant_check: bool = False,
     ) -> bool:
-        from db.session import get_session_maker
         from db.models.project import Project
         from sqlalchemy import select
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             stmt = select(Project).where(Project.project_id == project_id)
             if not bypass_tenant_check:
                 if organisation_id is None:
@@ -439,12 +461,10 @@ class PostgresProjectStore:
     # ── Status machine ────────────────────────────────────────────────────────
 
     async def advance_status(self, project_id: str, new_status: ProjectStatus) -> ProjectResponse:
-        from db.session import get_session_maker
         from db.models.project import Project, ProjectMember
         from sqlalchemy import select, func
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             row = (
                 await session.execute(
                     select(Project).where(Project.project_id == project_id)
@@ -468,12 +488,10 @@ class PostgresProjectStore:
             return self._to_response(row, member_count=count)
 
     async def get_status(self, project_id: str) -> Optional[ProjectStatus]:
-        from db.session import get_session_maker
         from db.models.project import Project
         from sqlalchemy import select
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             row = (
                 await session.execute(
                     select(Project.pipeline_status).where(Project.project_id == project_id)
@@ -486,12 +504,10 @@ class PostgresProjectStore:
     # ── Member tracking ───────────────────────────────────────────────────────
 
     async def register_member(self, project_id: str, member_id: str) -> None:
-        from db.session import get_session_maker
         from db.models.project import ProjectMember
         from sqlalchemy import select
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             existing = (
                 await session.execute(
                     select(ProjectMember).where(
@@ -534,12 +550,10 @@ class PostgresProjectStore:
         member_ids : list[str]
             List of member identifiers to register.
         """
-        from db.session import get_session_maker
         from db.models.project import ProjectMember
         from sqlalchemy import select, delete
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             # 1. Fetch all existing member IDs for this project in one query
             stmt = select(ProjectMember.member_id).where(ProjectMember.project_id == project_id)
             existing_rows = (await session.execute(stmt)).scalars().all()
@@ -592,12 +606,10 @@ class PostgresProjectStore:
             )
 
     async def remove_member(self, project_id: str, member_id: str) -> None:
-        from db.session import get_session_maker
         from db.models.project import ProjectMember
         from sqlalchemy import select
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             row = (
                 await session.execute(
                     select(ProjectMember).where(
@@ -611,12 +623,10 @@ class PostgresProjectStore:
                 await session.commit()
 
     async def get_member_ids(self, project_id: str) -> list[str]:
-        from db.session import get_session_maker
         from db.models.project import ProjectMember
         from sqlalchemy import select
 
-        session_maker = get_session_maker()
-        async with session_maker() as session:
+        async with self.session_maker() as session:
             rows = (
                 await session.execute(
                     select(ProjectMember.member_id).where(
@@ -625,6 +635,69 @@ class PostgresProjectStore:
                 )
             ).scalars().all()
             return sorted(rows)
+
+    # ── Load persistence ──────────────────────────────────────────────────────
+
+    async def save_loads(self, project_id: str, definition: dict, output: dict | None) -> None:
+        """
+        Upsert the load definition and output for a project to the database.
+
+        Parameters
+        ----------
+        project_id : str
+        definition : dict
+        output : dict | None
+        """
+        import json
+        from db.models.project import ProjectLoad
+        from sqlalchemy import select
+
+        async with self.session_maker() as session:
+            row = (await session.execute(
+                select(ProjectLoad).where(ProjectLoad.project_id == project_id)
+            )).scalar_one_or_none()
+
+            def_str = json.dumps(definition)
+            out_str = json.dumps(output) if output is not None else None
+
+            if row:
+                row.definition = def_str
+                if out_str is not None:
+                    row.output = out_str
+            else:
+                session.add(ProjectLoad(
+                    project_id=project_id,
+                    definition=def_str,
+                    output=out_str,
+                ))
+            await session.commit()
+
+    async def get_loads(self, project_id: str) -> tuple[dict | None, dict | None]:
+        """
+        Retrieve the stored load definition and output for a project from the database.
+
+        Parameters
+        ----------
+        project_id : str
+
+        Returns
+        -------
+        tuple[dict | None, dict | None]
+            (definition, output)
+        """
+        import json
+        from db.models.project import ProjectLoad
+        from sqlalchemy import select
+
+        async with self.session_maker() as session:
+            row = (await session.execute(
+                select(ProjectLoad).where(ProjectLoad.project_id == project_id)
+            )).scalar_one_or_none()
+            if row:
+                definition = json.loads(row.definition) if row.definition else None
+                output = json.loads(row.output) if row.output else None
+                return definition, output
+            return None, None
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

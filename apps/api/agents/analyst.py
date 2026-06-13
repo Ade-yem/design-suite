@@ -33,18 +33,11 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from agents.state import StructuralDesignState
-from config import settings
+from agents import _get_llm
 
 
 logger = logging.getLogger(__name__)
 
-
-def _get_llm():
-    return ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro",
-        temperature=0,
-        google_api_key=settings.GEMINI_API_KEY,
-    )
 
 # Required design considerations, gathered before loads are assembled.
 # Nothing here is assumed — every field is asked of the engineer.  Each entry is
@@ -256,7 +249,7 @@ def _build_considerations_prompt(design_code: str) -> str:
         Markdown questionnaire for the IDE chat panel.
     """
     return (
-        "✅ **Geometry confirmed.** Before I assemble the loads I need the full "
+        "**Geometry confirmed.** Before I assemble the loads I need the full "
         f"design brief so nothing is assumed on your behalf (basis: **{design_code}**).\n\n"
         "**1 · Building & use**\n"
         "- Building type / purpose (residential, office, retail, school, car park, …)\n"
@@ -670,6 +663,8 @@ async def analyst_node(state: StructuralDesignState) -> dict:
     # ── Run combinations ──────────────────────────────────────────────────────
     try:
         from services.loading import loading_service
+        if state.get("load_definition"):
+            await loading_service.define(project_id, state["load_definition"])
         await loading_service.run_combinations(project_id)
         logs.append({**log_entry, "status": "combinations_run"})
     except Exception as exc:

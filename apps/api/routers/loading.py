@@ -83,7 +83,7 @@ async def define_loads(
 
 
 @router.get("/{project_id}")
-def get_load_definitions(
+async def get_load_definitions(
     project_id: str,
     project: ProjectResponse = Depends(require_geometry_verified),
 ) -> dict:
@@ -102,6 +102,7 @@ def get_load_definitions(
     dict
         Stored load definition dict, or empty if not yet defined.
     """
+    await loading_service.ensure_cached(project_id)
     return loading_service.get_definition(project_id)
 
 

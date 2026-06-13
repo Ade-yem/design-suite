@@ -1,22 +1,23 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, CheckCircle2, X } from "lucide-react";
+import { Send, User, CheckCircle2, X } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { cn } from "@/lib/utils";
 import { useProjectSocket } from "@/hooks/useProjectSocket";
 import { GATE_LABELS } from "@/lib/pipelineStatus";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { MarkdownRenderer } from "./MarkdownRenderer";
-import { QuestionnaireForm } from "./QuestionnaireForm";
+import { QuestionnaireForm, type Questionnaire } from "./QuestionnaireForm";
 import { BlueprintIcon } from "./BlueprintIcon";
+import { useAuthStore } from "@/stores/authStore";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
-  questionnaire?: any;
+  questionnaire?: Questionnaire;
 }
 
 interface ChatSidebarProps {
@@ -40,18 +41,20 @@ function TypingIndicator({ state }: { state: "" | "thinking" | "working" }) {
   );
 }
 
-const WELCOME: Message = {
+const WELCOME = (name?: string | null): Message => ({
   id: "welcome",
   role: "assistant",
   content:
-    `Welcome to ${PRODUCT_NAME}. Upload a DXF or PDF file to begin structural analysis. I'll parse the geometry, identify members, and guide you through each stage.`,
+    `Welcome ${name ? name : ""} to ${PRODUCT_NAME}.`,
   timestamp: new Date(),
-};
+});
 
 export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarProps) {
   const { chatOpen, setChatOpen, incrementUnread, pendingGate, setPendingGate } =
     useUIStore();
-  const [messages, setMessages] = useState<Message[]>([WELCOME]);
+  const {user} = useAuthStore();
+  const message: Message = WELCOME(user?.full_name);
+  const [messages, setMessages] = useState<Message[]>([message]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [agentState, setAgentState] = useState<"" | "thinking" | "working">("");
@@ -128,10 +131,7 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
     }
   };
 
-  const appendAssistantAndNotify = (content: string) => {
-    if (!chatOpen) incrementUnread();
-    appendAssistant(content);
-  };
+
 
   const appendAssistant = (content: string) => {
     const id = `msg-${Date.now()}`;
@@ -157,13 +157,12 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
   const { sendMessage } = useProjectSocket(projectId, {
     onChatHistory: ({ messages }) => {
       setMessages([
-        WELCOME,
         ...messages.map((m, idx) => ({
           id: `hist-${idx}-${Date.now()}`,
           role: m.role,
           content: m.content,
           timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
-          questionnaire: m.questionnaire,
+          questionnaire: m.questionnaire as Questionnaire | undefined,
         })),
       ]);
     },
@@ -182,7 +181,7 @@ export function ChatSidebar({ projectId, onGateReached, onClose }: ChatSidebarPr
         if (!chatOpen) incrementUnread();
         setMessages((prev) => [
           ...prev,
-          { id, role: "assistant", content, timestamp: new Date(), questionnaire },
+          { id, role: "assistant", content, timestamp: new Date(), questionnaire: questionnaire as Questionnaire | undefined },
         ]);
         if (final) streamingIdRef.current = null;
       } else {

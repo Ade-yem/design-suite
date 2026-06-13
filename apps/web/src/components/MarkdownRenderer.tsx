@@ -32,35 +32,35 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps):
         remarkPlugins={[remarkGfm]}
         components={{
           // Custom heading styles matching the UI theme
-          h1: ({ node, ...props }) => <h1 className="text-base font-bold text-foreground mt-3 mb-1.5" {...props} />,
-          h2: ({ node, ...props }) => <h2 className="text-sm font-bold text-foreground mt-2.5 mb-1.5" {...props} />,
-          h3: ({ node, ...props }) => <h3 className="text-xs font-bold text-foreground/80 mt-2 mb-1" {...props} />,
+          h1: ({ ...props }) => <h1 className="text-base font-bold text-foreground mt-3 mb-1.5" {...props} />,
+          h2: ({ ...props }) => <h2 className="text-sm font-bold text-foreground mt-2.5 mb-1.5" {...props} />,
+          h3: ({ ...props }) => <h3 className="text-xs font-bold text-foreground/80 mt-2 mb-1" {...props} />,
           
           // Bold styling
-          strong: ({ node, ...props }) => <strong className="font-bold text-primary dark:text-primary-light" {...props} />,
+          strong: ({ ...props }) => <strong className="font-bold text-primary dark:text-primary-light" {...props} />,
           
           // Block level elements
-          p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+          p: ({ ...props }) => <p className="mb-2 last:mb-0" {...props} />,
           
           // Unordered & ordered lists
-          ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2.5 space-y-1" {...props} />,
-          ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2.5 space-y-1" {...props} />,
-          li: ({ node, ...props }) => <li className="text-xs" {...props} />,
+          ul: ({ ...props }) => <ul className="list-disc pl-5 mb-2.5 space-y-1" {...props} />,
+          ol: ({ ...props }) => <ol className="list-decimal pl-5 mb-2.5 space-y-1" {...props} />,
+          li: ({ ...props }) => <li className="text-xs" {...props} />,
 
           // GFM Tables styled to match the dark/light engineering grid theme
-          table: ({ node, ...props }) => (
+          table: ({ ...props }) => (
             <div className="my-3 overflow-x-auto rounded-lg border border-border/40 bg-card/30">
               <table className="min-w-full divide-y divide-border/30 text-xs text-left" {...props} />
             </div>
           ),
-          thead: ({ node, ...props }) => <thead className="bg-muted/50 font-semibold text-foreground/80" {...props} />,
-          tbody: ({ node, ...props }) => <tbody className="divide-y divide-border/20" {...props} />,
-          tr: ({ node, ...props }) => <tr className="hover:bg-muted/10 transition-colors" {...props} />,
-          th: ({ node, ...props }) => <th className="px-3 py-1.5 font-medium border-b border-border/30" {...props} />,
-          td: ({ node, ...props }) => <td className="px-3 py-1.5 text-muted-foreground align-top" {...props} />,
+          thead: ({ ...props }) => <thead className="bg-muted/50 font-semibold text-foreground/80" {...props} />,
+          tbody: ({ ...props }) => <tbody className="divide-y divide-border/20" {...props} />,
+          tr: ({ ...props }) => <tr className="hover:bg-muted/10 transition-colors" {...props} />,
+          th: ({ ...props }) => <th className="px-3 py-1.5 font-medium border-b border-border/30" {...props} />,
+          td: ({ ...props }) => <td className="px-3 py-1.5 text-muted-foreground align-top" {...props} />,
 
           // Inline and block code formatting
-          code: ({ node, className, children, ...props }) => {
+          code: ({ className, children, ...props }) => {
             const match = /language-(\w+)/.exec(className || "");
             const inline = !match;
             return inline ? (

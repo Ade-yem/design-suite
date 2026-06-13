@@ -13,6 +13,11 @@ the User who created it.
 
 from __future__ import annotations
 
+from db.models import Artifact
+from db.models import ProjectDrawing
+from db.models import ProjectDesign
+from db.models import ProjectAnalysis
+
 from db.models.user import User
 from db.models.organisation import Organisation
 
@@ -173,8 +178,8 @@ class ProjectLoad(Base):
     project_id: Mapped[str] = mapped_column(
         String, ForeignKey("projects.project_id", ondelete="CASCADE"), unique=True, nullable=False
     )
-    definition: Mapped[dict | None] = mapped_column(Text, nullable=True)   # stored as JSON string
-    output: Mapped[dict | None] = mapped_column(Text, nullable=True)       # stored as JSON string
+    definition: Mapped[str | None] = mapped_column(Text, nullable=True)   # stored as JSON string
+    output: Mapped[str | None] = mapped_column(Text, nullable=True)       # stored as JSON string
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

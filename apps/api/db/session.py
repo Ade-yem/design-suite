@@ -81,7 +81,7 @@ def _get_engine():
 
         _engine = create_async_engine(
             url,
-            echo=(settings.APP_ENV == "development"),
+            echo=False,
             pool_pre_ping=True,
             connect_args=connect_args,
         )
