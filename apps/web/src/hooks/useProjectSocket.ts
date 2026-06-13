@@ -10,6 +10,8 @@ export interface AgentMessage {
   requires_input?: boolean;
   /** True when this is a complete, discrete message rather than a streamed chunk. */
   final?: boolean;
+  /** Optional questionnaire form payload */
+  questionnaire?: any;
 }
 export interface ChatHistoryMessage {
   type: "chat_history";
@@ -17,6 +19,7 @@ export interface ChatHistoryMessage {
     role: "user" | "assistant";
     content: string;
     timestamp?: string;
+    questionnaire?: any;
   }>;
 }
 export interface StatusLog { type: "status_log"; tool: string; status: string }

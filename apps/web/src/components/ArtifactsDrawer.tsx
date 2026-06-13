@@ -21,17 +21,8 @@ const STATUS_STYLES: Record<Artifact["status"], { bg: string; text: string }> = 
 export const ArtifactsDrawer: React.FC = () => {
   const { artifacts, isDrawerExpanded, setDrawerExpanded } = useArtifactStore();
 
-  // Collapsed state: show a collapse/expand button rail
   if (!isDrawerExpanded) {
-    return (
-      <button
-        onClick={() => setDrawerExpanded(true)}
-        className="w-12 flex items-center justify-center bg-muted/40 border-l border-border hover:bg-muted/60 transition-colors shrink-0"
-        title="Expand Artifacts"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </button>
-    );
+    return null;
   }
 
   return (

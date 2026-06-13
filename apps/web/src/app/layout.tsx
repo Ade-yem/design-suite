@@ -19,6 +19,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: PRODUCT_NAME,
   description: "Next-generation multi-agent AI system for structural engineering details and calculations.",
+  icons: {
+    icon: "/blueprint.svg",
+  },
 };
 
 export default function RootLayout({

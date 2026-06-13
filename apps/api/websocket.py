@@ -123,7 +123,30 @@ def _extract_agent_texts(output: Any) -> list[str]:
     return texts
 
 
-def serialize_message(msg: Any) -> dict[str, str] | None:
+def _extract_agent_messages(output: Any) -> list[dict[str, Any]]:
+    """Return the human-facing message dicts (with content and optional questionnaire) appended this turn."""
+    if not isinstance(output, dict):
+        return []
+    res: list[dict[str, Any]] = []
+    for msg in output.get("messages", []) or []:
+        msg_type = getattr(msg, "type", None)
+        if msg_type == "ai":
+            content = getattr(msg, "content", "")
+            additional_kwargs = getattr(msg, "additional_kwargs", {})
+        elif isinstance(msg, dict) and msg.get("role") == "assistant":
+            content = msg.get("content", "")
+            additional_kwargs = msg.get("additional_kwargs", {})
+        else:
+            continue
+        if isinstance(content, str) and content.strip():
+            msg_dict = {"content": content}
+            if additional_kwargs and "questionnaire" in additional_kwargs:
+                msg_dict["questionnaire"] = additional_kwargs["questionnaire"]
+            res.append(msg_dict)
+    return res
+
+
+def serialize_message(msg: Any) -> dict[str, Any] | None:
     """
     Serialize a LangChain message object or message dictionary to a standardized frontend format.
 
@@ -134,8 +157,9 @@ def serialize_message(msg: Any) -> dict[str, str] | None:
 
     Returns
     -------
-    dict[str, str] | None
-        A dictionary with 'role' and 'content' keys, or None if the message is a system message or invalid.
+    dict[str, Any] | None
+        A dictionary with 'role' and 'content' keys, and optional 'questionnaire',
+        or None if the message is a system message or invalid.
     """
     if hasattr(msg, "content"):
         content = msg.content
@@ -167,10 +191,22 @@ def serialize_message(msg: Any) -> dict[str, str] | None:
     else:
         role = "assistant"
 
-    return {
+    res = {
         "role": role,
         "content": content
     }
+
+    # Extract dynamic questionnaire if present in metadata
+    additional_kwargs = getattr(msg, "additional_kwargs", {})
+    if isinstance(msg, dict) and "additional_kwargs" in msg:
+        additional_kwargs = msg["additional_kwargs"]
+    elif isinstance(msg, dict) and "questionnaire" in msg:
+        additional_kwargs = {"questionnaire": msg["questionnaire"]}
+
+    if additional_kwargs and "questionnaire" in additional_kwargs:
+        res["questionnaire"] = additional_kwargs["questionnaire"]
+
+    return res
 
 
 async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | None) -> None:
@@ -234,15 +270,25 @@ async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | Non
             ):
                 output = event.get("data", {}).get("output")
                 requires_input = _node_requires_input(output)
-                for text in _extract_agent_texts(output):
-                    await manager.broadcast(project_id, {
+                for msg_dict in _extract_agent_messages(output):
+                    payload = {
                         "type": "agent_message",
-                        "content": text,
+                        "content": msg_dict["content"],
                         "requires_input": requires_input,
                         "final": True,
-                    })
+                    }
+                    if "questionnaire" in msg_dict:
+                        payload["questionnaire"] = msg_dict["questionnaire"]
+                    await manager.broadcast(project_id, payload)
 
             # Stream status log updates
+            if event["event"] == "on_tool_start":
+                await manager.broadcast(project_id, {
+                    "type": "status_log",
+                    "tool": event["name"],
+                    "status": "running"
+                })
+
             if event["event"] == "on_tool_end":
                 await manager.broadcast(project_id, {
                     "type": "status_log",
@@ -299,8 +345,10 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
     try:
         async with session_maker() as session:
             user_db = SQLAlchemyUserDatabase(session, User, OAuthAccount)
+            # pyrefly: ignore [bad-argument-type]
             user_manager = UserManager(user_db)
             strategy = auth_backend.get_strategy()
+            # pyrefly: ignore [missing-attribute]
             user = await strategy.read_token(token, user_manager)
     except Exception as e:
         logger.error("Error reading token during WS handshake: %s", str(e), exc_info=True)

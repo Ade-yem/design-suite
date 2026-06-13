@@ -99,6 +99,98 @@ _GEOTECH_FIELD = (
     "Allowable / safe soil bearing capacity (kN/m²)",
 )
 
+_FIELD_METADATA: dict[str, dict[str, Any]] = {
+    "design_working_life_years": {
+        "type": "number",
+        "label": "Design working life (years)",
+        "default": 50,
+    },
+    "num_storeys": {
+        "type": "number",
+        "label": "Number of storeys",
+        "default": 1,
+    },
+    "storey_height_m": {
+        "type": "number",
+        "label": "Typical clear storey height (m)",
+        "default": 3.0,
+    },
+    "is_braced": {
+        "type": "boolean",
+        "label": "Braced stability?",
+        "default": True,
+    },
+    "materials.concrete_grade": {
+        "type": "select",
+        "label": "Concrete grade",
+        "options": ["C20/25", "C25/30", "C30/37", "C32/40", "C35/45", "C40/50"],
+        "default": "C30/37",
+    },
+    "materials.fy_main_MPa": {
+        "type": "number",
+        "label": "Main bar yield fy (MPa)",
+        "default": 500,
+    },
+    "materials.fy_link_MPa": {
+        "type": "number",
+        "label": "Link yield fyv (MPa)",
+        "default": 500,
+    },
+    "materials.unit_weight_kNm3": {
+        "type": "number",
+        "label": "RC unit weight (kN/m³)",
+        "default": 25,
+    },
+    "durability.exposure_class": {
+        "type": "select",
+        "label": "Exposure class / condition",
+        "options": ["XC1", "XC2", "XC3", "XC4", "XD1", "XD2", "XD3", "XS1", "XS2", "XS3", "Mild", "Moderate", "Severe"],
+        "default": "XC1",
+    },
+    "durability.fire_resistance_min": {
+        "type": "select",
+        "label": "Fire resistance (min)",
+        "options": [30, 60, 90, 120, 180, 240],
+        "default": 60,
+    },
+    "durability.nominal_cover_mm": {
+        "type": "number",
+        "label": "Nominal cover c_nom (mm)",
+        "default": 25,
+    },
+    "occupancy_category": {
+        "type": "select",
+        "label": "Occupancy / building use",
+        "options": ["residential", "office", "retail", "roof_accessible", "roof_non_accessible", "stairs", "custom"],
+        "default": "office",
+    },
+    "dead_loads.finishes_kNm2": {
+        "type": "number",
+        "label": "Finishes dead load (kN/m²)",
+        "default": 1.0,
+    },
+    "dead_loads.screed_kNm2": {
+        "type": "number",
+        "label": "Screed dead load (kN/m²)",
+        "default": 0.0,
+    },
+    "dead_loads.services_kNm2": {
+        "type": "number",
+        "label": "Services dead load (kN/m²)",
+        "default": 0.5,
+    },
+    "dead_loads.partitions_kNm2": {
+        "type": "number",
+        "label": "Partitions dead load (kN/m²)",
+        "default": 1.0,
+    },
+    "geotech.bearing_capacity_kPa": {
+        "type": "number",
+        "label": "Soil bearing capacity (kN/m²)",
+        "default": 150,
+    }
+}
+
 # Nested dict keys that are deep-merged across dialogue turns.
 _NESTED_GROUPS: tuple[str, ...] = ("materials", "durability", "dead_loads", "geotech")
 
@@ -207,8 +299,8 @@ def _considerations_extraction_prompt(message: str, design_code: str) -> str:
         Extraction prompt instructing the model to extract, never invent.
     """
     return (
-        "You are a junior structural engineer extracting a project brief from the "
-        f"senior engineer's description. The design code is {design_code}.\n"
+        "You are a senior structural engineer extracting a project brief from the "
+        f"client engineer's description. The design code is {design_code}.\n"
         "Return ONLY a valid JSON object. Set any value not explicitly stated or "
         "clearly implied to null — do NOT invent, default or assume.\n\n"
         "Map the building usage to the closest occupancy_category from this set:\n"
@@ -337,7 +429,7 @@ def _build_load_definition_from_parameters(
     dead = params.get("dead_loads") or {}
     dead_loads = {k: dead[k] for k in _DEAD_LOAD_KEYS if dead.get(k) is not None}
 
-    imposed: dict[str, Any] = {"floor_qk_kNm2": float(qk)}
+    imposed: dict[str, Any] = {"floor_qk_kNm2": qk}
     if params.get("roof_qk_kNm2") is not None:
         imposed["roof_qk_kNm2"] = float(params["roof_qk_kNm2"])
 
@@ -578,7 +670,7 @@ async def analyst_node(state: StructuralDesignState) -> dict:
     # ── Run combinations ──────────────────────────────────────────────────────
     try:
         from services.loading import loading_service
-        loading_service.run_combinations(project_id)
+        await loading_service.run_combinations(project_id)
         logs.append({**log_entry, "status": "combinations_run"})
     except Exception as exc:
         return {
@@ -681,8 +773,40 @@ async def _collect_design_considerations(
 
     # ── Step 1: open the dialogue if the engineer hasn't replied yet ──────────
     if not isinstance(last, HumanMessage):
+        fields = []
+        for path, domain, q in _REQUIRED_FIELDS:
+            meta = _FIELD_METADATA.get(path, {})
+            fields.append({
+                "path": path,
+                "domain": domain,
+                "label": meta.get("label", path),
+                "type": meta.get("type", "number"),
+                "options": meta.get("options"),
+                "default": meta.get("default"),
+                "description": q,
+            })
+        parsed_json = state.get("parsed_structural_json") or {}
+        if _has_footings(parsed_json):
+            meta = _FIELD_METADATA.get(_GEOTECH_FIELD[0], {})
+            fields.append({
+                "path": _GEOTECH_FIELD[0],
+                "domain": _GEOTECH_FIELD[1],
+                "label": meta.get("label", _GEOTECH_FIELD[0]),
+                "type": meta.get("type", "number"),
+                "options": meta.get("options"),
+                "default": meta.get("default"),
+                "description": _GEOTECH_FIELD[2],
+            })
         return {
-            "messages": [AIMessage(content=_build_considerations_prompt(design_code))],
+            "messages": [AIMessage(
+                content=_build_considerations_prompt(design_code),
+                additional_kwargs={
+                    "questionnaire": {
+                        "title": "Design Parameters",
+                        "description": "Please fill in the project parameters below.",
+                        "fields": fields
+                        }}
+            )],
             "agent_logs": [{**log_entry, "status": "awaiting_design_considerations"}],
         }
 
@@ -703,9 +827,26 @@ async def _collect_design_considerations(
     parsed_json = state.get("parsed_structural_json") or {}
     missing = _extract_missing_consideration_fields(params, parsed_json)
     if missing:
+        fields = []
+        lookup = {path: (domain, q) for path, domain, q in (*_REQUIRED_FIELDS, _GEOTECH_FIELD)}
+        for path in missing:
+            domain, q = lookup.get(path, ("Other", path))
+            meta = _FIELD_METADATA.get(path, {})
+            fields.append({
+                "path": path,
+                "domain": domain,
+                "label": meta.get("label", path),
+                "type": meta.get("type", "number"),
+                "options": meta.get("options"),
+                "default": meta.get("default"),
+                "description": q,
+            })
         return {
             "project_parameters": params,
-            "messages": [AIMessage(content=_build_missing_consideration_question(missing))],
+            "messages": [AIMessage(
+                content=_build_missing_consideration_question(missing),
+                additional_kwargs={"questionnaire": {"fields": fields}}
+            )],
             "agent_logs": [
                 {**log_entry, "status": "design_considerations_incomplete", "detail": missing}
             ],

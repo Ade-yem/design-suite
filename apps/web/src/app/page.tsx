@@ -68,6 +68,8 @@ function UploadNudge({
   );
 }
 
+import { BlueprintIcon } from "@/components/BlueprintIcon";
+
 /**
  * WorkspaceLoadingPlaceholder component.
  * Renders a high-fidelity, blueprint-themed engineering CAD canvas loader
@@ -79,7 +81,7 @@ function WorkspaceLoadingPlaceholder(): JSX.Element {
   return (
     <div className="fixed inset-0 bg-canvas-bg flex items-center justify-center z-100">
       <div className="flex flex-col items-center space-y-4">
-        <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin glow-blue" />
+        <BlueprintIcon className="w-16 h-16" state="working" />
         <p className="text-muted-foreground text-sm font-mono tracking-wider">
           LOADING ENVIRONMENT...
         </p>
@@ -111,6 +113,33 @@ export default function WorkspacePage(): JSX.Element {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const canvasRef = useRef<CanvasViewportHandle>(null);
+
+  const [chatWidth, setChatWidth] = useState(320);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth >= 280 && newWidth <= 700) {
+        setChatWidth(newWidth);
+      }
+    };
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
 
   useKeyboardShortcuts({
     onNewProject: () => setShowNewProjectModal(true),
@@ -148,10 +177,6 @@ export default function WorkspacePage(): JSX.Element {
     setShowUploadNudge(true);
   };
 
-  // if (isLoading || isRefreshing) {
-  //   return <WorkspaceLoadingPlaceholder />;
-  // }
-
   return (
     <div className="h-screen flex overflow-hidden">
       <ProjectSidebar />
@@ -188,16 +213,25 @@ export default function WorkspacePage(): JSX.Element {
                 />
               </div>
               {/* Right side: Artifacts drawer + Chat sidebar */}
-              <div className="flex shrink-0 overflow-hidden">
+              <div className="flex shrink-0 overflow-hidden relative">
                 <ArtifactsDrawer />
+                {chatOpen && (
+                  <div
+                    onMouseDown={startResize}
+                    className={cn(
+                      "w-1 h-full cursor-ew-resize hover:bg-primary/50 active:bg-primary transition-colors z-50",
+                      isResizing ? "bg-primary" : "bg-transparent border-l border-border/40"
+                    )}
+                  />
+                )}
                 <div
                   className={cn(
-                    "shrink-0 overflow-hidden",
-                    "transition-[width] duration-200 ease-out",
-                    chatOpen ? "w-80" : "w-0",
+                    "shrink-0 overflow-hidden h-full",
+                    !isResizing && "transition-[width] duration-200 ease-out"
                   )}
+                  style={{ width: chatOpen ? `${chatWidth}px` : "0px" }}
                 >
-                  <div className="w-80 h-full">
+                  <div className="h-full" style={{ width: `${chatWidth}px` }}>
                     <ChatSidebar
                       projectId={activeProject.project_id}
                       onGateReached={handleGateReached}
