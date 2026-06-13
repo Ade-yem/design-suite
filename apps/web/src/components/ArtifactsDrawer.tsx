@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Download, Eye, Lock } from "lucide-react";
+import Image from "next/image";
+import { ChevronRight, Download, Eye, Lock } from "lucide-react";
 import { useArtifactStore, type Artifact } from "@/stores/artifactStore";
 
 const STAGE_LABELS: Record<Artifact["stage"], string> = {
@@ -95,11 +96,13 @@ const ArtifactCard: React.FC<ArtifactCardProps> = ({ artifact }) => {
 
       {/* Preview */}
       {artifact.preview && (
-        <div className="mb-3 bg-muted/40 rounded aspect-video overflow-hidden flex items-center justify-center">
-          <img
+        <div className="mb-3 bg-muted/40 rounded aspect-video overflow-hidden relative">
+          <Image
             src={artifact.preview}
             alt={stageLabel}
-            className="w-full h-full object-cover"
+            fill
+            className="object-cover"
+            unoptimized
           />
         </div>
       )}

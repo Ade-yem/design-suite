@@ -46,6 +46,7 @@ import { GeometryGate } from "./GeometryGate";
 import { useProjectSocket } from "@/hooks/useProjectSocket";
 import { Loader2 } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
+import { CanvasLoading } from "./CanvasLoading";
 
 export interface CanvasViewportHandle {
   /** Public API: lets parent elements trigger DXF file browsing */
@@ -439,9 +440,12 @@ export const CanvasViewport = forwardRef<
       const corrections = members.map((m) => ({
         member_id: m.member_id,
         member_type: m.member_type,
-        start: m.start,
-        end: m.end,
+        start_point: m.start_point,
+        end_point: m.end_point,
+        center_point: m.center_point,
+        boundary_polygon: m.boundary_polygon,
         meta: m.meta,
+        spans_m: m.spans_m,
       }));
 
       await apiClient.put(`/api/v1/files/${projectId}/verify`, {
@@ -600,12 +604,7 @@ export const CanvasViewport = forwardRef<
               )}
             </>
           ) : uploadState === "not ready" ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0b0f19] z-10">
-              <Loader2 className="h-8 w-8 text-primary animate-spin" />
-              <p className="text-xs text-muted-foreground font-mono mt-2">
-                Loading workspace...
-              </p>
-            </div>
+            <CanvasLoading />
           ) : (
             <CanvasUploader
               ref={uploaderRef}

@@ -5,24 +5,33 @@ import { cn } from "@/lib/utils";
 /**
  * Definition of a single questionnaire field passed from the backend.
  */
-interface QuestionnaireField {
+export interface QuestionnaireField {
   path: string;
   domain: string;
   label: string;
   type: "number" | "boolean" | "select" | "text";
   options?: Array<string | number>;
-  default?: any;
-  description: string;
+  default?: string | number | boolean;
+  description?: string;
+}
+
+/**
+ * Questionnaire structure matching the backend state.
+ */
+export interface Questionnaire {
+  title: string;
+  description?: string;
+  fields: QuestionnaireField[];
 }
 
 /**
  * Props definition for the QuestionnaireForm component.
  */
 interface QuestionnaireFormProps {
-  /** Title of questionaire */
+  /** Title of questionnaire */
   title: string;
-  /** Description of questionaire */
-  description: string;
+  /** Description of questionnaire */
+  description?: string;
   /** The list of fields to render in the form. */
   fields: QuestionnaireField[];
   /** Callback triggered when the form is validated and submitted. */
@@ -41,8 +50,8 @@ interface QuestionnaireFormProps {
  */
 export function QuestionnaireForm({ title, description, fields, onSubmit, className }: QuestionnaireFormProps): React.JSX.Element {
   // Initialize form state with backend defaults or sensible fallbacks
-  const [formData, setFormData] = useState<Record<string, any>>(() => {
-    const initial: Record<string, any> = {};
+  const [formData, setFormData] = useState<Record<string, string | number | boolean>>(() => {
+    const initial: Record<string, string | number | boolean> = {};
     fields.forEach((f) => {
       initial[f.path] = f.default !== undefined ? f.default : f.type === "boolean" ? false : "";
     });
@@ -58,7 +67,7 @@ export function QuestionnaireForm({ title, description, fields, onSubmit, classN
   /**
    * Handle field change and clear active validation errors.
    */
-  const handleChange = (path: string, value: any) => {
+  const handleChange = (path: string, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [path]: value }));
     if (errors[path]) {
       setErrors((prev) => {
@@ -144,9 +153,11 @@ export function QuestionnaireForm({ title, description, fields, onSubmit, classN
         <h4 className="text-xs font-semibold uppercase tracking-wider text-primary">
           {title}
         </h4>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
-          {description}
-        </p>
+        {description && (
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            {description}
+          </p>
+        )}
       </div>
 
       <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
@@ -200,7 +211,7 @@ export function QuestionnaireForm({ title, description, fields, onSubmit, classN
                         </div>
                       ) : field.type === "select" && field.options ? (
                         <select
-                          value={formData[field.path]}
+                          value={formData[field.path] as string | number}
                           onChange={(e) => handleChange(field.path, e.target.value)}
                           className={cn(
                             "w-full h-8 px-2 rounded-md bg-muted/60 border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all",
@@ -217,14 +228,14 @@ export function QuestionnaireForm({ title, description, fields, onSubmit, classN
                         <input
                           type={field.type === "number" ? "number" : "text"}
                           step="any"
-                          value={formData[field.path]}
+                          value={formData[field.path] as string | number}
                           onChange={(e) =>
                             handleChange(
                               field.path,
                               field.type === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value
                             )
                           }
-                          placeholder={field.description}
+                          placeholder={field.description ?? ""}
                           className={cn(
                             "w-full h-8 px-2 rounded-md bg-muted/60 border border-border text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all",
                             hasError && "border-destructive/80 focus:ring-destructive focus:border-destructive"

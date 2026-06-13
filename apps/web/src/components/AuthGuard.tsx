@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/authStore";
+import { CanvasLoading } from "./canvas/CanvasLoading";
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -61,14 +62,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   if (!isReady || redirectPending) {
     return (
-      <div className="min-h-screen bg-canvas-bg flex items-center justify-center">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin glow-blue" />
-          <p className="text-muted-foreground text-sm font-mono tracking-wider">
-            LOADING ENVIRONMENT...
-          </p>
-        </div>
-      </div>
+      <CanvasLoading />
     );
   }
 

@@ -47,26 +47,13 @@ import { computeBounds, computeFitTransform } from "@/lib/canvas/transform";
  * `boundary_polygon` array; their `start`/`end` are derived as AABB corners so
  * that bounding-box logic (fit-to-view, hit test fallback) still works.
  */
-export function normalizeBackendMember(raw: any): GeometricMember {
-  const m = raw as Record<string, any>;
+export function normalizeBackendMember(raw: unknown): GeometricMember {
+  const m = raw as Record<string, unknown>;
   const polygon = Array.isArray(m.boundary_polygon)
     ? (m.boundary_polygon as Point[])
     : undefined;
 
-  let startRaw: Point;
-  let endRaw: Point;
-
-  if (polygon && polygon.length >= 2) {
-    const xs = polygon.map((p) => p.x);
-    const ys = polygon.map((p) => p.y);
-    startRaw = { x: Math.min(...xs), y: Math.min(...ys) };
-    endRaw = { x: Math.max(...xs), y: Math.max(...ys) };
-  } else {
-    startRaw = (m.start ?? m.start_point ?? m.center_point ?? { x: 0, y: 0 }) as Point;
-    endRaw = (m.end ?? m.end_point ?? m.center_point ?? startRaw) as Point;
-  }
-
-  const rawMeta = (m.meta ?? {}) as Record<string, any>;
+  const rawMeta = (m.meta ?? {}) as Record<string, unknown>;
   const meta = {
     ...rawMeta,
     b_mm: Number(rawMeta.b_mm ?? rawMeta.b ?? 300),
@@ -74,12 +61,14 @@ export function normalizeBackendMember(raw: any): GeometricMember {
   } as MemberMeta;
 
   return {
-    member_id: (m.member_id ?? m.id ?? "Unknown") as string,
+    member_id: String(m.member_id ?? m.id ?? "Unknown"),
     member_type: (m.member_type ?? m.type ?? "beam") as MemberType,
-    start: startRaw,
-    end: endRaw,
+    start_point: (m.start_point ?? null) as Point | null,
+    end_point: (m.end_point ?? null) as Point | null,
+    center_point: (m.center_point ?? null) as Point | null,
     boundary_polygon: polygon,
     meta,
+    spans_m: Array.isArray(m.spans_m) ? (m.spans_m as number[]) : undefined,
   };
 }
 

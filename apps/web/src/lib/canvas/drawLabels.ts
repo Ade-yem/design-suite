@@ -23,6 +23,26 @@ const LABEL_COLOR = "rgba(213, 219, 228, 0.85)";
 /** Label background for readability. */
 const LABEL_BG = "rgba(11, 15, 25, 0.75)";
 
+function getMemberCenter(member: GeometricMember): Point {
+  if (member.center_point) {
+    return member.center_point;
+  }
+  if (member.boundary_polygon && member.boundary_polygon.length > 0) {
+    const xs = member.boundary_polygon.map((p) => p.x);
+    const ys = member.boundary_polygon.map((p) => p.y);
+    return {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      y: (Math.min(...ys) + Math.max(...ys)) / 2,
+    };
+  }
+  const startPoint = member.start_point ?? { x: 0, y: 0 };
+  const endPoint = member.end_point ?? startPoint;
+  return {
+    x: (startPoint.x + endPoint.x) / 2,
+    y: (startPoint.y + endPoint.y) / 2,
+  };
+}
+
 /**
  * Draw the ID label and dimension annotation for a member.
  *
@@ -43,10 +63,7 @@ export function drawMemberLabel(
   if (zoom < 0.02) return;
 
   // Compute screen-space center of the member
-  const worldCenter: Point = {
-    x: (member.start.x + member.end.x) / 2,
-    y: (member.start.y + member.end.y) / 2,
-  };
+  const worldCenter = getMemberCenter(member);
   const screen = worldToScreen(worldCenter, zoom, pan, canvasHeight);
 
   // Build label text
@@ -108,10 +125,7 @@ export function drawAllLabels(
   canvasHeight: number
 ): void {
   for (const member of members) {
-    const worldCenter: Point = {
-      x: (member.start.x + member.end.x) / 2,
-      y: (member.start.y + member.end.y) / 2,
-    };
+    const worldCenter = getMemberCenter(member);
     const screen = worldToScreen(worldCenter, zoom, pan, canvasHeight);
 
     // Skip labels outside the visible viewport (with buffer)

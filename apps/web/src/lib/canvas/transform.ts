@@ -102,21 +102,45 @@ export function computeBounds(
   };
 
   for (const m of members) {
-    expand(m.start.x, m.start.y);
-    expand(m.end.x, m.end.y);
+    let sx = 0;
+    let sy = 0;
+    let ex = 0;
+    let ey = 0;
+
+    if (m.boundary_polygon && m.boundary_polygon.length > 0) {
+      const xs = m.boundary_polygon.map((p) => p.x);
+      const ys = m.boundary_polygon.map((p) => p.y);
+      sx = Math.min(...xs);
+      sy = Math.min(...ys);
+      ex = Math.max(...xs);
+      ey = Math.max(...ys);
+    } else if (m.center_point) {
+      sx = m.center_point.x;
+      sy = m.center_point.y;
+      ex = m.center_point.x;
+      ey = m.center_point.y;
+    } else {
+      sx = m.start_point?.x ?? 0;
+      sy = m.start_point?.y ?? 0;
+      ex = m.end_point?.x ?? sx;
+      ey = m.end_point?.y ?? sy;
+    }
+
+    expand(sx, sy);
+    expand(ex, ey);
 
     // Columns: expand by their section dimensions
     if (m.member_type === "column" && m.meta.b_mm && m.meta.h_mm) {
       const halfB = m.meta.b_mm / 2;
       const halfH = m.meta.h_mm / 2;
-      expand(m.start.x - halfB, m.start.y - halfH);
-      expand(m.start.x + halfB, m.start.y + halfH);
+      expand(sx - halfB, sy - halfH);
+      expand(sx + halfB, sy + halfH);
     }
 
     // Slabs: expand by their full extent
     if (m.member_type === "slab" && m.meta.Lx && m.meta.Ly) {
-      const cx = (m.start.x + m.end.x) / 2;
-      const cy = (m.start.y + m.end.y) / 2;
+      const cx = (sx + ex) / 2;
+      const cy = (sy + ey) / 2;
       expand(cx - m.meta.Lx / 2, cy - m.meta.Ly / 2);
       expand(cx + m.meta.Lx / 2, cy + m.meta.Ly / 2);
     }
@@ -124,8 +148,8 @@ export function computeBounds(
     // Beams: expand by their cross-section width perpendicular to span
     if (m.member_type === "beam" && m.meta.b_mm) {
       const halfB = m.meta.b_mm / 2;
-      expand(m.start.x - halfB, m.start.y - halfB);
-      expand(m.end.x + halfB, m.end.y + halfB);
+      expand(sx - halfB, sy - halfB);
+      expand(ex + halfB, ey + halfB);
     }
   }
 

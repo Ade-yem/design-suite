@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Folder, Loader2, ChevronRight, Layers } from "lucide-react";
+import { Plus, Folder, ChevronRight, Layers } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";

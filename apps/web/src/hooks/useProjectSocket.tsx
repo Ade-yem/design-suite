@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useRef, useCallback } from "react";
 import { useAuthStore } from "@/stores/authStore";
 
 export interface AgentMessage {
@@ -11,7 +11,7 @@ export interface AgentMessage {
   /** True when this is a complete, discrete message rather than a streamed chunk. */
   final?: boolean;
   /** Optional questionnaire form payload */
-  questionnaire?: any;
+  questionnaire?: unknown;
 }
 export interface ChatHistoryMessage {
   type: "chat_history";
@@ -19,7 +19,7 @@ export interface ChatHistoryMessage {
     role: "user" | "assistant";
     content: string;
     timestamp?: string;
-    questionnaire?: any;
+    questionnaire?: unknown;
   }>;
 }
 export interface StatusLog { type: "status_log"; tool: string; status: string }
@@ -58,21 +58,35 @@ export interface SocketCallbacks {
   onError?: (msg: SocketError) => void;
 }
 
+interface ProjectSocketContextType {
+  sendMessage: (content: string) => boolean;
+  registerCallbacks: (callbacks: SocketCallbacks) => () => void;
+}
+
+const ProjectSocketContext = createContext<ProjectSocketContextType | null>(null);
+
 const WS_BASE =
   typeof window !== "undefined"
     ? (process.env.NEXT_PUBLIC_WS_URL ?? `ws://${window.location.hostname}:5000`)
     : "ws://localhost:5000";
 
-export function useProjectSocket(
-  projectId: string | null,
-  callbacks: SocketCallbacks
-) {
+/**
+ * ProjectSocketProvider - wraps a workspace page to provide a single, shared
+ * WebSocket connection across all child components (Chat, Canvas, Uploader).
+ */
+export function ProjectSocketProvider({
+  projectId,
+  children,
+}: {
+  projectId: string | null;
+  children: React.ReactNode;
+}) {
   const wsRef = useRef<WebSocket | null>(null);
-  const callbacksRef = useRef(callbacks);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectDelayRef = useRef(1000);
   const unmountedRef = useRef(false);
   const connectRef = useRef<() => void>(() => {});
+  const listenersRef = useRef<Set<SocketCallbacks>>(new Set());
 
   const connect = useCallback(() => {
     if (!projectId || unmountedRef.current) return;
@@ -89,30 +103,32 @@ export function useProjectSocket(
     ws.onmessage = (event) => {
       try {
         const msg: SocketMessage = JSON.parse(event.data as string);
-        switch (msg.type) {
-          case "agent_message":
-            callbacksRef.current.onAgentMessage?.(msg);
-            break;
-          case "chat_history":
-            callbacksRef.current.onChatHistory?.(msg as ChatHistoryMessage);
-            break;
-          case "status_log":
-            callbacksRef.current.onStatusLog?.(msg);
-            break;
-          case "gate_reached":
-            callbacksRef.current.onGateReached?.(msg);
-            break;
-          case "drawing_commands":
-          case "drawing_update":
-            callbacksRef.current.onDrawingCommands?.(msg as DrawingCommands);
-            break;
-          case "job_update":
-            callbacksRef.current.onJobUpdate?.(msg as JobUpdate);
-            break;
-          case "error":
-            callbacksRef.current.onError?.(msg);
-            break;
-        }
+        listenersRef.current.forEach((cb) => {
+          switch (msg.type) {
+            case "agent_message":
+              cb.onAgentMessage?.(msg);
+              break;
+            case "chat_history":
+              cb.onChatHistory?.(msg as ChatHistoryMessage);
+              break;
+            case "status_log":
+              cb.onStatusLog?.(msg);
+              break;
+            case "gate_reached":
+              cb.onGateReached?.(msg);
+              break;
+            case "drawing_commands":
+            case "drawing_update":
+              cb.onDrawingCommands?.(msg as DrawingCommands);
+              break;
+            case "job_update":
+              cb.onJobUpdate?.(msg as JobUpdate);
+              break;
+            case "error":
+              cb.onError?.(msg);
+              break;
+          }
+        });
       } catch {
         // ignore malformed frames
       }
@@ -145,10 +161,16 @@ export function useProjectSocket(
     return false;
   }, []);
 
+  const registerCallbacks = useCallback((callbacks: SocketCallbacks) => {
+    listenersRef.current.add(callbacks);
+    return () => {
+      listenersRef.current.delete(callbacks);
+    };
+  }, []);
+
   useEffect(() => {
-    callbacksRef.current = callbacks;
     connectRef.current = connect;
-  }, [callbacks, connect]);
+  }, [connect]);
 
   useEffect(() => {
     unmountedRef.current = false;
@@ -160,5 +182,48 @@ export function useProjectSocket(
     };
   }, [connect]);
 
-  return { sendMessage };
+  return (
+    <ProjectSocketContext.Provider value={{ sendMessage, registerCallbacks }}>
+      {children}
+    </ProjectSocketContext.Provider>
+  );
+}
+
+/**
+ * useProjectSocket - Custom hook to consume the shared WebSocket connection context.
+ */
+export function useProjectSocket(
+  projectId: string | null, // Kept for backward compatibility with hook signatures
+  callbacks: SocketCallbacks
+) {
+  const context = useContext(ProjectSocketContext);
+  if (!context) {
+    throw new Error("useProjectSocket must be used within a ProjectSocketProvider");
+  }
+
+  const callbacksRef = useRef(callbacks);
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+  }, [callbacks]);
+
+  useEffect(() => {
+    const proxyCallbacks: SocketCallbacks = {
+      onAgentMessage: (msg) => callbacksRef.current.onAgentMessage?.(msg),
+      onChatHistory: (msg) => callbacksRef.current.onChatHistory?.(msg),
+      onStatusLog: (msg) => callbacksRef.current.onStatusLog?.(msg),
+      onGateReached: (msg) => callbacksRef.current.onGateReached?.(msg),
+      onDrawingCommands: (msg) => callbacksRef.current.onDrawingCommands?.(msg),
+      onJobUpdate: (msg) => callbacksRef.current.onJobUpdate?.(msg),
+      onError: (msg) => callbacksRef.current.onError?.(msg),
+    };
+
+    const unsubscribe = context.registerCallbacks(proxyCallbacks);
+    return () => {
+      unsubscribe();
+    };
+  }, [context]);
+
+  return {
+    sendMessage: context.sendMessage,
+  };
 }

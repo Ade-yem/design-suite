@@ -22,7 +22,6 @@ PIPELINE    : status, gates, confirm gate, reset
 JOBS        : poll, cancel
 """
 
-from schemas.loading import LoadValidationResult
 from __future__ import annotations
 
 import asyncio
@@ -31,6 +30,8 @@ from datetime import datetime, timezone
 from typing import Any, Optional, Literal
 
 from langchain_core.tools import tool
+
+from schemas.loading import LoadValidationResult
 
 from services.files import file_service
 from services.loading import loading_service

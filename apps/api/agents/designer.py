@@ -26,13 +26,11 @@ from typing import Any, Optional
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from agents import _get_llm
 from agents.state import StructuralDesignState
 
 logger = logging.getLogger(__name__)
 
-
-def _get_llm():
-    return ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0)
 
 # Self-weight change that triggers a re-analysis feedback
 _SELF_WEIGHT_THRESHOLD_PCT = 5.0

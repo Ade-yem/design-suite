@@ -99,8 +99,10 @@ function beamHitRect(
   pan: Point,
   canvasHeight: number,
 ): { x: number; y: number; w: number; h: number } {
-  const s = worldToScreen(member.start, zoom, pan, canvasHeight);
-  const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+  const startPoint = member.start_point ?? { x: 0, y: 0 };
+  const endPoint = member.end_point ?? startPoint;
+  const s = worldToScreen(startPoint, zoom, pan, canvasHeight);
+  const e = worldToScreen(endPoint, zoom, pan, canvasHeight);
   const halfWidth = (member.meta.b_mm * zoom) / 2;
 
   const dx = Math.abs(e.x - s.x);
@@ -154,7 +156,8 @@ function hitTestMember(
 
     case "column":
     case "footing": {
-      const center = worldToScreen(member.start, zoom, pan, canvasHeight);
+      const centerPoint = member.center_point ?? { x: 0, y: 0 };
+      const center = worldToScreen(centerPoint, zoom, pan, canvasHeight);
       const w = Math.max(member.meta.b_mm * zoom, 4);
       const h = Math.max(member.meta.h_mm * zoom, 4);
       return pointInRect(
@@ -179,8 +182,10 @@ function hitTestMember(
       }
 
       // Fallback bounding box logic for generic blocks
-      const s = worldToScreen(member.start, zoom, pan, canvasHeight);
-      const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+      const startPoint = member.start_point ?? { x: 0, y: 0 };
+      const endPoint = member.end_point ?? startPoint;
+      const s = worldToScreen(startPoint, zoom, pan, canvasHeight);
+      const e = worldToScreen(endPoint, zoom, pan, canvasHeight);
       const rx = Math.min(s.x, e.x);
       const ry = Math.min(s.y, e.y);
       const rw = Math.abs(e.x - s.x);
@@ -189,8 +194,10 @@ function hitTestMember(
     }
 
     case "wall": {
-      const s = worldToScreen(member.start, zoom, pan, canvasHeight);
-      const e = worldToScreen(member.end, zoom, pan, canvasHeight);
+      const startPoint = member.start_point ?? { x: 0, y: 0 };
+      const endPoint = member.end_point ?? startPoint;
+      const s = worldToScreen(startPoint, zoom, pan, canvasHeight);
+      const e = worldToScreen(endPoint, zoom, pan, canvasHeight);
       const thickness = Math.max(member.meta.b_mm * zoom, 3);
       const dist = pointToLineDistance(mx, my, s.x, s.y, e.x, e.y);
       return dist <= thickness / 2 + HIT_TOLERANCE_PX;

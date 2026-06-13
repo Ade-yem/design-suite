@@ -9,7 +9,7 @@ from services.files import file_service
 
 async def geometry_verification_gate(state: StructuralDesignState) -> dict:
     if state.get("geometry_verified"):
-        file_service.verify_geometry(
+        await file_service.verify_geometry(
             state['project_id'],
             corrections=state.get("geometry_corrections", []),
             notes="Gate 1 manual confirmation"
