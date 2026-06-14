@@ -12,7 +12,7 @@ import asyncio
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.parsing.dxf_parser import extract_geometry
-from agents.parser import _run_member_extraction
+from core.parsing.extractor import _run_member_extraction
 def parse_dxf_entities(file_path: str):
     """
     Parses the given DXF file, prints details about its entities,

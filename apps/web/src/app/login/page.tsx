@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuthStore } from "@/stores/authStore";
 import { apiClient, ApiError, getFriendlyErrorMessage } from "@/lib/api";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import {
   ShieldCheck,
   Mail,
@@ -255,8 +255,6 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen bg-canvas-bg dot-grid flex items-center justify-center p-4 overflow-hidden">
-      <Toaster position="top-right" theme="dark" closeButton richColors />
-
       {/* Visual background ambient glow highlights */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-[100px] pointer-events-none" />

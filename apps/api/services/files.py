@@ -29,7 +29,6 @@ from typing import Any, Optional
 from core.parsing import parse_file
 from storage.project_store import project_store
 from schemas.project import ProjectStatus
-from db.models.project import ProjectGeometry
 
 logger = logging.getLogger(__name__)
 
@@ -37,84 +36,38 @@ logger = logging.getLogger(__name__)
 class _GeometryStore:
     """
     Thread-safe in-memory store for parsed geometry and scale data.
-
-    Keyed by ``project_id``.  Replace with a database-backed store when
-    ``PROJECT_STORE_BACKEND=postgres`` is active.
-
-    Attributes
-    ----------
-    _parsed : dict[str, dict]
-        Parsed structural JSON per project.
-    _scale : dict[str, dict]
-        Scale / unit info per project.
+    Delegates internally to stage_result_store.
     """
 
     def __init__(self) -> None:
-        self._parsed: dict[str, dict[str, Any]] = {}
-        self._scale: dict[str, dict[str, Any]] = {}
+        pass
 
     def set_parsed(self, project_id: str, data: dict) -> None:
-        """
-        Store parsed structural JSON for a project.
-
-        Parameters
-        ----------
-        project_id : str
-        data : dict
-            Structural JSON schema output from the parser.
-        """
-        self._parsed[project_id] = data
+        """Store parsed structural JSON."""
+        from storage.stage_result_store import stage_result_store
+        payload = stage_result_store._memory_store.setdefault((project_id, "geometry"), {})
+        payload["geometry"] = data
 
     def get_parsed(self, project_id: str) -> Optional[dict]:
-        """
-        Retrieve parsed structural JSON.
-
-        Parameters
-        ----------
-        project_id : str
-
-        Returns
-        -------
-        dict | None
-        """
-        return self._parsed.get(project_id)
+        """Retrieve parsed structural JSON."""
+        from storage.stage_result_store import stage_result_store
+        return stage_result_store._memory_store.get((project_id, "geometry"), {}).get("geometry")
 
     def set_scale(self, project_id: str, scale: dict) -> None:
-        """
-        Store scale / unit information.
-
-        Parameters
-        ----------
-        project_id : str
-        scale : dict
-            ``{factor, unit, detected, confirmed}``
-        """
-        self._scale[project_id] = scale
+        """Store scale / unit info."""
+        from storage.stage_result_store import stage_result_store
+        payload = stage_result_store._memory_store.setdefault((project_id, "geometry"), {})
+        payload["scale"] = scale
 
     def get_scale(self, project_id: str) -> Optional[dict]:
-        """
-        Retrieve scale info.
-
-        Parameters
-        ----------
-        project_id : str
-
-        Returns
-        -------
-        dict | None
-        """
-        return self._scale.get(project_id)
+        """Retrieve scale / unit info."""
+        from storage.stage_result_store import stage_result_store
+        return stage_result_store._memory_store.get((project_id, "geometry"), {}).get("scale")
 
     def clear(self, project_id: str) -> None:
-        """
-        Remove all geometry and scale data for a project.
-
-        Parameters
-        ----------
-        project_id : str
-        """
-        self._parsed.pop(project_id, None)
-        self._scale.pop(project_id, None)
+        """Clear geometry and scale for a project."""
+        from storage.stage_result_store import stage_result_store
+        stage_result_store._memory_store.pop((project_id, "geometry"), None)
 
 
 _store = _GeometryStore()
@@ -517,84 +470,34 @@ class FileService:
         from storage.project_store import project_store
         await project_store.register_members_batch(project_id, [])
 
-        from config import settings
-        if settings.PROJECT_STORE_BACKEND != "postgres":
-            return
-        try:
-            from db.session import get_session_maker
-            from db.models.project import ProjectGeometry
-            from sqlalchemy import delete
-
-            session_maker = get_session_maker()
-            async with session_maker() as session:
-                stmt = delete(ProjectGeometry).where(ProjectGeometry.project_id == project_id)
-                await session.execute(stmt)
-                await session.commit()
-        except RuntimeError:
-            pass  # DATABASE_URL not configured
-        except Exception as exc:
-            logger.warning("DB geometry clear failed for project %s: %s", project_id, exc)
+        from storage.stage_result_store import stage_result_store
+        await stage_result_store.clear(project_id, "geometry")
 
     # ── DB persistence helpers ────────────────────────────────────────────────
 
     async def _db_save_geometry(self, project_id: str, geometry: dict, scale: dict, verified_at: datetime | None = None,) -> None:
-        """Upsert parsed geometry and scale to ProjectGeometry. Silent no-op if DB unavailable."""
-        from config import settings
-        if settings.PROJECT_STORE_BACKEND != "postgres":
-            return
-        try:
-            from db.session import get_session_maker
-            from db.models.project import ProjectGeometry
-            from sqlalchemy import select
+        """Upsert parsed geometry and scale. Silent no-op if DB unavailable."""
+        payload = {
+            "geometry": geometry,
+            "scale": scale,
+            "verified_at": verified_at.isoformat() if verified_at else None
+        }
+        from storage.stage_result_store import stage_result_store
+        await stage_result_store.save(project_id, "geometry", payload)
 
-            session_maker = get_session_maker()
-            async with session_maker() as session:
-                row = (await session.execute(
-                    select(ProjectGeometry).where(ProjectGeometry.project_id == project_id)
-                )).scalar_one_or_none()
+    async def _db_get_geometry(self, project_id: str) -> Any:
+        """Obtains parsed geometry and scale. Silent no-op if DB unavailable."""
+        from storage.stage_result_store import stage_result_store
+        payload = await stage_result_store.get(project_id, "geometry")
+        if not payload:
+            return None
 
-                geo_str = json.dumps(geometry)
-                scale_str = json.dumps(scale)
-                now = datetime.now(timezone.utc)
-
-                if row:
-                    row.geometry = geo_str
-                    row.scale_json = scale_str
-                    row.updated_at = now
-                    if verified_at is not None:
-                        row.verified_at = verified_at
-                else:
-                    session.add(ProjectGeometry(
-                        project_id=project_id,
-                        geometry=geo_str,
-                        scale_json=scale_str,
-                        verified_at=verified_at,
-                    ))
-                await session.commit()
-        except RuntimeError:
-            pass  # DATABASE_URL not configured
-        except Exception as exc:
-            logger.warning("DB geometry save failed for project %s: %s", project_id, exc)
-    
-    
-    async def _db_get_geometry(self, project_id: str) -> ProjectGeometry | None:
-        """Obtains parsed geometry and scale from ProjectGeometry. Silent no-op if DB unavailable."""
-        from config import settings
-        if settings.PROJECT_STORE_BACKEND != "postgres":
-            return
-        try:
-            from db.session import get_session_maker
-            from sqlalchemy import select
-            session_maker = get_session_maker()
-            async with session_maker() as session:
-                return (await session.execute(
-                    select(ProjectGeometry).where(ProjectGeometry.project_id == project_id)
-                )).scalar_one_or_none()
-
-        except RuntimeError:
-            pass  # DATABASE_URL not configured
-        except Exception as exc:
-            logger.warning("DB geometry save failed for project %s: %s", project_id, exc)
+        class MockRow:
+            def __init__(self, p: dict):
+                self.geometry = p.get("geometry")
+                self.scale_json = p.get("scale")
+                self.verified_at = p.get("verified_at")
+        return MockRow(payload)
 
     async def ensure_cached(self, project_id: str) -> None:
         """Load geometry from DB into the in-memory cache if it is missing.
@@ -602,28 +505,11 @@ class FileService:
         Called by routers and agent tools before any sync cache read so that
         data survives server restarts and load-balanced deployments.
         """
-        if _store.get_parsed(project_id) is not None:
-            return
-        from config import settings
-        if settings.PROJECT_STORE_BACKEND != "postgres":
-            return
-        try:
-            from db.session import get_session_maker
-            from db.models.project import ProjectGeometry
-            from sqlalchemy import select
-
-            session_maker = get_session_maker()
-            async with session_maker() as session:
-                row = (await session.execute(
-                    select(ProjectGeometry).where(ProjectGeometry.project_id == project_id)
-                )).scalar_one_or_none()
-                if row:
-                    geometry = json.loads(row.geometry)
-                    _store.set_parsed(project_id, geometry)
-                    if row.scale_json:
-                        _store.set_scale(project_id, json.loads(row.scale_json))
-        except Exception as exc:
-            logger.warning("DB geometry load for project %s failed: %s", project_id, exc)
+        from storage.stage_result_store import stage_result_store
+        payload = await stage_result_store.get(project_id, "geometry")
+        if payload:
+            _store.set_parsed(project_id, payload.get("geometry") or {})
+            _store.set_scale(project_id, payload.get("scale") or {})
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
 file_service = FileService()

@@ -1,7 +1,7 @@
 import asyncio
 import os
 
-from agents.parser import _run_member_extraction
+from core.parsing.extractor import _run_member_extraction
 from config import settings
 from schemas.project import ProjectCreate
 from services.files import file_service

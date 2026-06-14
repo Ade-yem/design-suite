@@ -17,12 +17,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import pytest
-
-from agents.parser import (
+from core.parsing.extractor import (
     _detect_unit_ambiguity,
     _prepare_candidates_summary,
     _run_member_extraction,
-    parser_node
 )
 from services.files import file_service
 from storage.project_store import project_store
@@ -179,72 +177,6 @@ class TestVisionAgentProduction:
                 assert "end_condition" in meta
                 assert "N_uls" in meta
                 assert "M_uls" in meta
-
-    async def test_real_parser_node_end_to_end(self) -> None:
-        """
-        Verify the end-to-end execution of the vision agent parser node on the real DXF.
-        Asserts that drawing units are resolved, the LLM classifies members,
-        the parsed structural members are registered with project storage,
-        and a detailed markdown summary is delivered for engineer confirmation.
-        """
-        dxf_path = str(DXF_PATH)
-        if not os.path.exists(dxf_path):
-            pytest.skip(f"Real drawing file not found at: {dxf_path}")
-
-        # Create active project
-        project = await project_store.create(
-            ProjectCreate(
-                name="End-to-End Parser Project",
-                reference="REF-E2E",
-                client="Client A",
-                design_code="BS8110"
-            )
-        )
-        project_id = project.project_id
-
-        state = {
-            "project_id": project_id,
-            "uploaded_file_path": dxf_path
-        }
-
-        # Run parser node end-to-end
-        result = await parser_node(state)
-
-        # 1. State returns parsed JSON
-        assert "parsed_structural_json" in result
-        parsed = result["parsed_structural_json"]
-
-        # 2. State returns detected units
-        assert "unit_confirmation" in result
-        unit_check = result["unit_confirmation"]
-        assert unit_check["detected_unit"] == "millimetres"
-
-        # 3. State returns structural members
-        assert "members" in parsed
-        members = parsed["members"]
-        assert len(members) > 0
-
-        # 4. Storage registers all unique member IDs
-        registered_ids = await project_store.get_member_ids(project_id)
-        unique_member_ids = {m["member_id"] for m in members if "member_id" in m}
-        assert len(registered_ids) == len(unique_member_ids)
-        for m in members:
-            assert m["member_id"] in registered_ids
-
-        # 5. AIMessage returned contains a comprehensive structural summary
-        assert "messages" in result
-        messages = result["messages"]
-        assert len(messages) == 1
-        summary_msg = messages[0].content
-        
-        # Verify markdown headings and details are in the summary
-        assert "Structural Member Summary" in summary_msg
-        assert "Beams detected:" in summary_msg
-        assert "Columns detected:" in summary_msg
-        assert "Detected units" in summary_msg
-        assert "millimetres" in summary_msg
-        assert "Scale factor:" in summary_msg
-        assert "Confirm Geometry" in summary_msg
 
     async def test_real_llm_dual_input_parsing(self) -> None:
         """

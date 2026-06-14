@@ -35,8 +35,9 @@ logger = logging.getLogger("init_db")
 
 async def init_database() -> None:
     """
-    Establish connection to the async database engine and create all missing
-    tables registered under the declarative Base.metadata.
+    Establish connection to the async database engine, create all missing
+    tables registered under the declarative Base.metadata, and initialize
+    LangGraph checkpointer tables if using a Postgres backend.
     """
     logger.info("Initializing database schemas...")
     
@@ -47,6 +48,7 @@ async def init_database() -> None:
     engine = _get_engine()
     
     try:
+        # 1. Initialize SQLAlchemy ORM tables
         async with engine.begin() as conn:
             logger.info("Database connection established successfully.")
             
@@ -59,6 +61,26 @@ async def init_database() -> None:
             await conn.run_sync(Base.metadata.create_all)
             
             logger.info("Database tables initialized/synchronized successfully.")
+            
+        # 2. Initialize LangGraph checkpoints tables
+        if settings.PROJECT_STORE_BACKEND == "postgres":
+            logger.info("Initializing LangGraph checkpointer tables...")
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+            from psycopg_pool import AsyncConnectionPool
+            from psycopg.rows import dict_row
+            
+            async with AsyncConnectionPool(
+                conninfo=settings.DATABASE_URL,
+                min_size=1,
+                max_size=2,
+                open=True,
+                kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row}
+            ) as pool:
+                # pyrefly: ignore [bad-argument-type]
+                postgres_saver = AsyncPostgresSaver(pool)
+                await postgres_saver.setup()
+            logger.info("LangGraph checkpointer tables initialized successfully.")
+            
     except Exception as e:
         logger.exception("An error occurred during database table initialization: %s", str(e))
         sys.exit(1)

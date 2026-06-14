@@ -12,16 +12,27 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { apiClient, ApiError, getFriendlyErrorMessage } from "@/lib/api";
-import { toast, Toaster } from "sonner";
-import { UserPlus, User, Mail, Lock, RefreshCw, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
+import {
+  UserPlus,
+  User,
+  Mail,
+  Lock,
+  RefreshCw,
+  ArrowRight,
+} from "lucide-react";
 import { RegisterPayload, UserProfile } from "@/types/auth";
 import { GoogleSsoButton } from "@/components/auth/GoogleSsoButton";
 
 // Form validation schemas
 const registerSchema = z.object({
-  fullName: z.string().min(2, "Full display name must be at least 2 characters."),
+  fullName: z
+    .string()
+    .min(2, "Full display name must be at least 2 characters."),
   email: z.email("Please enter a valid active email address."),
-  password: z.string().min(8, "Security key must be at least 8 characters long."),
+  password: z
+    .string()
+    .min(8, "Security key must be at least 8 characters long."),
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -54,7 +65,7 @@ export default function RegisterPage() {
       await apiClient.post<UserProfile>("/api/auth/register", payload);
 
       toast.success("Account successfully initialized!");
-      
+
       // Redirect user to verify-pending page
       router.push(`/verify-pending?email=${encodeURIComponent(data.email)}`);
     } catch (err: unknown) {
@@ -67,15 +78,12 @@ export default function RegisterPage() {
 
   return (
     <div className="relative min-h-screen bg-canvas-bg dot-grid flex items-center justify-center p-4 overflow-hidden">
-      <Toaster position="top-right" theme="dark" closeButton richColors />
-
       {/* Dynamic graphic highlights */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Main Glassmorphic Card */}
       <div className="w-full max-w-md bg-card/45 backdrop-blur-md border border-border rounded-xl p-8 shadow-2xl relative z-10 animate-fade-in-up">
-        
         {/* Onboarding Profile Head */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-12 h-12 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-center mb-3 glow-blue">
@@ -91,7 +99,6 @@ export default function RegisterPage() {
 
         {/* Credentials Form */}
         <form onSubmit={handleSubmit(onRegisterSubmit)} className="space-y-5">
-          
           {/* Full Name field */}
           <div className="space-y-1.5">
             <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider block">
@@ -191,7 +198,10 @@ export default function RegisterPage() {
           </div>
 
           {/* Google OAuth Button */}
-          <GoogleSsoButton label="Sign up with Google Account" disabled={isLoading} />
+          <GoogleSsoButton
+            label="Sign up with Google Account"
+            disabled={isLoading}
+          />
 
           {/* Navigation Footer */}
           <div className="text-center mt-6">

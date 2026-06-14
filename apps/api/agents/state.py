@@ -232,7 +232,28 @@ class StructuralDesignState(TypedDict, total=False):
     report_complete: bool
     """True once the final report has been successfully generated."""
 
-    # ── 10. Error handling ────────────────────────────────────────────────────
+    # ── 10. Supervisor routing ────────────────────────────────────────────────
+
+    next_node: str
+    """
+    Routing target written by the LLM Supervisor on each graph tick.
+
+    The ``supervisor_router`` reads this field to decide which downstream
+    node to activate.  Valid values:
+    ``"geometry"`` | ``"analyst"`` | ``"designer"`` | ``"drafting"`` | ``"end"``.
+
+    Initialised to ``"geometry"`` so a cold project immediately enters the
+    geometry stage.  The supervisor overwrites it on every cycle.
+    """
+
+    supervisor_reason: str
+    """
+    Short human-readable explanation of why the Supervisor chose ``next_node``.
+    Appended to ``agent_logs`` for transparency; never broadcast directly to
+    the chat panel (the LLM call is tagged ``"utility"``).
+    """
+
+    # ── 11. Error handling ────────────────────────────────────────────────────
 
     current_error: Optional[str]
     """
@@ -298,6 +319,8 @@ def initial_state(project_id: str, design_code: str = "BS8110") -> StructuralDes
         revert_drawing=None,
         report_id=None,
         report_complete=False,
+        next_node="geometry",
+        supervisor_reason="",
         current_error=None,
         retry_count=0,
     )

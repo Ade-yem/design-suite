@@ -37,27 +37,26 @@ _SELF_WEIGHT_THRESHOLD_PCT = 5.0
 class _DesignStore:
     """
     In-memory store for design results.
-
-    Attributes
-    ----------
-    _results : dict[str, dict]
-        Design output per project.
+    Delegates internally to stage_result_store.
     """
 
     def __init__(self) -> None:
-        self._results: dict[str, dict[str, Any]] = {}
+        pass
 
     def set(self, project_id: str, data: dict) -> None:
         """Store design results for a project."""
-        self._results[project_id] = data
+        from storage.stage_result_store import stage_result_store
+        stage_result_store._memory_store[(project_id, "design")] = data
 
     def get(self, project_id: str) -> Optional[dict]:
         """Return design results or None."""
-        return self._results.get(project_id)
+        from storage.stage_result_store import stage_result_store
+        return stage_result_store._memory_store.get((project_id, "design"))
 
     def clear(self, project_id: str) -> None:
         """Remove results for a project."""
-        self._results.pop(project_id, None)
+        from storage.stage_result_store import stage_result_store
+        stage_result_store._memory_store.pop((project_id, "design"), None)
 
 
 _store = _DesignStore()
@@ -111,6 +110,7 @@ class DesignService:
         all_ids = member_ids or await project_store.get_member_ids(project_id)
 
         from services.analysis import analysis_service
+        await analysis_service.ensure_cached(project_id)
         try:
             analysis_results = analysis_service.get_results(project_id)
         except KeyError as exc:
@@ -261,6 +261,7 @@ class DesignService:
         KeyError
             If the member is not found in the design store.
         """
+        await self.ensure_cached(project_id)
         store = _store.get(project_id)
         if store is None:
             raise KeyError(
@@ -332,7 +333,7 @@ class DesignService:
         """
         return await self.run(project_id, member_ids=[member_id])
 
-    def clear(self, project_id: str) -> None:
+    async def clear(self, project_id: str) -> None:
         """
         Clear design results for a project.
 
@@ -341,64 +342,22 @@ class DesignService:
         project_id : str
         """
         _store.clear(project_id)
+        from storage.stage_result_store import stage_result_store
+        await stage_result_store.clear(project_id, "design")
 
     # ── DB persistence helpers ────────────────────────────────────────────────
 
     async def ensure_cached(self, project_id: str) -> None:
         """Load design results from DB into cache if missing."""
-        if _store.get(project_id) is not None:
-            return
-        from config import settings
-        if settings.PROJECT_STORE_BACKEND != "postgres":
-            return
-        try:
-            from db.session import get_session_maker
-            from db.models.pipeline import ProjectDesign
-            from sqlalchemy import select
-
-            session_maker = get_session_maker()
-            async with session_maker() as session:
-                row = (await session.execute(
-                    select(ProjectDesign).where(ProjectDesign.project_id == project_id)
-                )).scalar_one_or_none()
-                if row and row.output:
-                    _store.set(project_id, json.loads(row.output))
-        except Exception as exc:
-            logger.warning("DB design fetch for project %s failed: %s", project_id, exc)
+        from storage.stage_result_store import stage_result_store
+        payload = await stage_result_store.get(project_id, "design")
+        if payload:
+            _store.set(project_id, payload)
 
     async def _db_save_design(self, project_id: str, output: dict) -> None:
-        """Upsert design output to ProjectDesign. Silent no-op if DB unavailable."""
-        try:
-            from db.session import get_session_maker
-            from db.models.pipeline import ProjectDesign
-            from sqlalchemy import select
-
-            session_maker = get_session_maker()
-            async with session_maker() as session:
-                row = (await session.execute(
-                    select(ProjectDesign).where(ProjectDesign.project_id == project_id)
-                )).scalar_one_or_none()
-
-                out_str = json.dumps(output)
-                design_id = output.get("design_id", "")
-                design_code = output.get("design_code", "BS8110")
-
-                if row:
-                    row.output = out_str
-                    row.design_id = design_id
-                    row.design_code = design_code
-                else:
-                    session.add(ProjectDesign(
-                        project_id=project_id,
-                        design_id=design_id,
-                        design_code=design_code,
-                        output=out_str,
-                    ))
-                await session.commit()
-        except RuntimeError:
-            pass  # DATABASE_URL not configured
-        except Exception as exc:
-            logger.warning("DB design save failed for project %s: %s", project_id, exc)
+        """Upsert design output. Silent no-op if DB unavailable."""
+        from storage.stage_result_store import stage_result_store
+        await stage_result_store.save(project_id, "design", output)
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

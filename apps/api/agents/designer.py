@@ -286,7 +286,10 @@ async def handle_design_override(
     )
 
     try:
-        raw = await _get_llm().ainvoke(extraction_prompt)
+        raw = await _get_llm().ainvoke(
+            extraction_prompt,
+            config={"tags": ["utility"]}
+        )
         content = raw.text.replace("```json", "").replace("```", "").strip()
         override_data: dict = json.loads(content)
     except Exception:

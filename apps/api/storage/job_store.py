@@ -74,6 +74,7 @@ class MemoryJobStore:
         job_id = f"JOB-{uuid.uuid4().hex[:8].upper()}"
         job = JobStatus(
             job_id=job_id,
+            project_id=project_id,
             job_type=job_type if job_type in ("parsing", "analysis", "design", "reporting", "drawings") else "analysis",
             status="queued",
             progress_pct=0.0,
@@ -249,6 +250,7 @@ class RedisJobStore:
         job_id = f"JOB-{uuid.uuid4().hex[:8].upper()}"
         job = JobStatus(
             job_id=job_id,
+            project_id=project_id,
             job_type=safe_type,
             status="queued",
             progress_pct=0.0,

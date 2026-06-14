@@ -36,8 +36,11 @@ import type {
   VerificationStatus,
   ParsedGeometry,
   MemberMeta,
+  AnalysisStatus,
+  MemberAnalysisResult,
 } from "@/types/canvas";
 import { computeBounds, computeFitTransform } from "@/lib/canvas/transform";
+
 
 /**
  * Normalize a raw backend member to the frontend GeometricMember shape.
@@ -116,6 +119,35 @@ interface CanvasState {
 
   /** The most recently deleted member, retained so the delete can be undone. */
   lastDeleted: GeometricMember | null;
+
+  // ── Analysis overlay state ────────────────────────────────────────────────
+
+  /**
+   * When true, members on the canvas are colour-coded by their analysis
+   * result (green = pass, red = fail, dashed neutral = skipped).
+   * Toggled by the BarChart2 icon in the toolbar.
+   */
+  analysisOverlay: boolean;
+
+  /**
+   * Lookup map from member_id → AnalysisStatus, populated once per
+   * session from `GET /api/v1/analysis/{project_id}/results`.
+   * The draw loop reads this map to colour-code each member in O(1).
+   */
+  memberAnalysisMap: Map<string, AnalysisStatus>;
+
+  /**
+   * Set of MemberType strings whose ID labels are currently hidden.
+   * When a type is in this set, `drawAllLabels` skips every member of
+   * that type, regardless of individual overrides.
+   */
+  hiddenLabelTypes: Set<MemberType>;
+
+  /**
+   * Set of individual member IDs whose ID labels are hidden.
+   * Takes effect even when the member's type is not in `hiddenLabelTypes`.
+   */
+  hiddenLabelIds: Set<string>;
 }
 
 /**
@@ -238,6 +270,43 @@ interface CanvasActions {
    * @param memberId - The member ID to focus on.
    */
   focusMember: (memberId: string, canvasW: number, canvasH: number) => void;
+
+  // ── Analysis overlay actions ──────────────────────────────────────────────
+
+  /**
+   * Load analysis results from the backend into the store.
+   * Builds the `memberAnalysisMap` lookup and keeps `analysisOverlay` at
+   * whatever the engineer last set.
+   *
+   * @param results - Array of `MemberAnalysisResult` from the API.
+   */
+  setAnalysisResults: (results: MemberAnalysisResult[]) => void;
+
+  /**
+   * Toggle the analysis colour-coding overlay on/off.
+   * No-op if no analysis results have been loaded.
+   */
+  toggleAnalysisOverlay: () => void;
+
+  /**
+   * Toggle label visibility for an entire member type.
+   * If the type is currently hidden, it becomes visible; vice-versa.
+   *
+   * @param type - The `MemberType` to toggle.
+   */
+  toggleLabelType: (type: MemberType) => void;
+
+  /**
+   * Toggle label visibility for a single member by ID.
+   *
+   * @param id - The member ID whose label to toggle.
+   */
+  toggleLabelMember: (id: string) => void;
+
+  /**
+   * Reset all label visibility overrides so every member label is visible.
+   */
+  resetLabelVisibility: () => void;
 }
 
 export type CanvasStore = CanvasState & CanvasActions;
@@ -258,6 +327,11 @@ const INITIAL_STATE: CanvasState = {
   verifyError: null,
   mouseWorldPos: { x: 0, y: 0 },
   lastDeleted: null,
+  // Analysis overlay
+  analysisOverlay: false,
+  memberAnalysisMap: new Map(),
+  hiddenLabelTypes: new Set(),
+  hiddenLabelIds: new Set(),
 };
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -383,4 +457,53 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
       zoom: transform.zoom,
     });
   },
+
+  // ── Analysis overlay action implementations ───────────────────────────────
+
+  setAnalysisResults: (results) => {
+    const map = new Map<string, AnalysisStatus>();
+    for (const r of results) {
+      map.set(r.member_id, r.status);
+    }
+    set({
+      memberAnalysisMap: map,
+      // Auto-enable overlay when results are first loaded
+      analysisOverlay: map.size > 0,
+    });
+  },
+
+  toggleAnalysisOverlay: () => {
+    set((state) => {
+      // Only toggle if we actually have results to show
+      if (state.memberAnalysisMap.size === 0) return {};
+      return { analysisOverlay: !state.analysisOverlay };
+    });
+  },
+
+  toggleLabelType: (type) => {
+    set((state) => {
+      const next = new Set(state.hiddenLabelTypes);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      return { hiddenLabelTypes: next };
+    });
+  },
+
+  toggleLabelMember: (id) => {
+    set((state) => {
+      const next = new Set(state.hiddenLabelIds);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return { hiddenLabelIds: next };
+    });
+  },
+
+  resetLabelVisibility: () =>
+    set({ hiddenLabelTypes: new Set(), hiddenLabelIds: new Set() }),
 }));

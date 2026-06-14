@@ -9,8 +9,14 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { apiClient, ApiError } from "@/lib/api";
-import { toast, Toaster } from "sonner";
-import { CheckCircle2, XCircle, RefreshCw, LogIn, ShieldAlert } from "lucide-react";
+import { toast } from "sonner";
+import {
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  LogIn,
+  ShieldAlert,
+} from "lucide-react";
 import { VerifyPayload, UserProfile } from "@/types/auth";
 
 function VerifyContent() {
@@ -19,10 +25,12 @@ function VerifyContent() {
   const token = searchParams.get("token");
 
   const [status, setStatus] = useState<"verifying" | "success" | "failed">(
-    token ? "verifying" : "failed"
+    token ? "verifying" : "failed",
   );
   const [errorMessage, setErrorMessage] = useState(
-    token ? "" : "No verification activation token was found in the URL. Please verify your verification link."
+    token
+      ? ""
+      : "No verification activation token was found in the URL. Please verify your verification link.",
   );
 
   useEffect(() => {
@@ -37,7 +45,10 @@ function VerifyContent() {
       } catch (err: unknown) {
         const apiErr = err as ApiError;
         setStatus("failed");
-        setErrorMessage(apiErr.detail || "The verification token is invalid or has expired. Please request a new activation link.");
+        setErrorMessage(
+          apiErr.detail ||
+            "The verification token is invalid or has expired. Please request a new activation link.",
+        );
         toast.error("Verification failed.");
       }
     };
@@ -47,8 +58,6 @@ function VerifyContent() {
 
   return (
     <div className="w-full max-w-md bg-card/45 backdrop-blur-md border border-border rounded-xl p-8 shadow-2xl relative z-10 animate-fade-in-up">
-      <Toaster position="top-right" theme="dark" closeButton richColors />
-
       {/* ── Status: Verifying ── */}
       {status === "verifying" && (
         <div className="flex flex-col items-center py-6">
@@ -75,7 +84,8 @@ function VerifyContent() {
               Verification Granted
             </h1>
             <p className="text-muted-foreground text-xs font-mono mt-2 text-center leading-relaxed">
-              Your professional email profile has been successfully confirmed. You may now initialize your workspace.
+              Your professional email profile has been successfully confirmed.
+              You may now initialize your workspace.
             </p>
           </div>
 
@@ -135,12 +145,14 @@ export default function VerifyPage() {
       {/* Visual background ambient glow highlights */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-[100px] pointer-events-none" />
-      
-      <Suspense fallback={
-        <div className="w-full max-w-md bg-card/45 backdrop-blur-md border border-border rounded-xl p-8 flex items-center justify-center">
-          <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-        </div>
-      }>
+
+      <Suspense
+        fallback={
+          <div className="w-full max-w-md bg-card/45 backdrop-blur-md border border-border rounded-xl p-8 flex items-center justify-center">
+            <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+          </div>
+        }
+      >
         <VerifyContent />
       </Suspense>
     </div>

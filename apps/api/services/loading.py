@@ -36,39 +36,38 @@ logger = logging.getLogger(__name__)
 class _LoadingStore:
     """
     In-memory store for load definitions and combination output.
-
-    Attributes
-    ----------
-    _definitions : dict[str, dict]
-        Raw load definition per project.
-    _output : dict[str, dict]
-        Factored load output (from combination engine) per project.
+    Delegates to stage_result_store.
     """
 
     def __init__(self) -> None:
-        self._definitions: dict[str, dict[str, Any]] = {}
-        self._output: dict[str, dict[str, Any]] = {}
+        pass
 
     def set_definition(self, project_id: str, data: dict) -> None:
         """Store load definition for a project."""
-        self._definitions[project_id] = data
+        from storage.stage_result_store import stage_result_store
+        payload = stage_result_store._memory_store.setdefault((project_id, "loads"), {})
+        payload["definition"] = data
 
     def get_definition(self, project_id: str) -> Optional[dict]:
         """Return load definition or None."""
-        return self._definitions.get(project_id)
+        from storage.stage_result_store import stage_result_store
+        return stage_result_store._memory_store.get((project_id, "loads"), {}).get("definition")
 
     def set_output(self, project_id: str, data: dict) -> None:
         """Store combination output for a project."""
-        self._output[project_id] = data
+        from storage.stage_result_store import stage_result_store
+        payload = stage_result_store._memory_store.setdefault((project_id, "loads"), {})
+        payload["output"] = data
 
     def get_output(self, project_id: str) -> Optional[dict]:
         """Return combination output or None."""
-        return self._output.get(project_id)
+        from storage.stage_result_store import stage_result_store
+        return stage_result_store._memory_store.get((project_id, "loads"), {}).get("output")
 
     def clear(self, project_id: str) -> None:
         """Remove all loading data for a project."""
-        self._definitions.pop(project_id, None)
-        self._output.pop(project_id, None)
+        from storage.stage_result_store import stage_result_store
+        stage_result_store._memory_store.pop((project_id, "loads"), None)
 
 
 _store = _LoadingStore()

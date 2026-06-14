@@ -21,7 +21,6 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from agents.state import StructuralDesignState
-from agents.parser import parser_node
 from agents.analyst import analyst_node, analyst_router
 from agents.designer import designer_node
 from agents.drafter import drafter_node
@@ -38,7 +37,6 @@ workflow = StateGraph(StructuralDesignState)
 
 # Nodes
 workflow.add_node("supervisor_agent", supervisor_node)
-workflow.add_node("vision_agent", parser_node)
 workflow.add_node("geometry_gate", geometry_verification_gate)
 workflow.add_node("analyst_agent", analyst_node)
 workflow.add_node("loading_gate", loading_confirmation_gate)
@@ -53,15 +51,13 @@ workflow.add_conditional_edges(
     "supervisor_agent",
     supervisor_router,
     {
-        "vision":    "vision_agent",
+        "geometry":  "geometry_gate",
         "analyst":   "analyst_agent",
         "designer":  "designer_agent",
         "drafting":  "drafting_agent",
         "end":        END
     }
 )
-
-workflow.add_edge("vision_agent", "geometry_gate")
 
 workflow.add_conditional_edges(
     "geometry_gate",

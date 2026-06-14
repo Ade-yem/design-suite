@@ -16,8 +16,9 @@
  * @module canvas/drawMembers
  */
 
-import type { GeometricMember, Point } from "@/types/canvas";
+import type { GeometricMember, Point, AnalysisStatus } from "@/types/canvas";
 import { worldToScreen } from "./transform";
+
 
 // ── Color Palette ───────────────────────────────────────────────────────────
 
@@ -43,6 +44,20 @@ const FOOTING_STROKE = "rgba(217, 119, 6, 0.65)";
 
 const SELECTION_GLOW = "rgba(6, 182, 212, 0.80)";
 const SELECTION_GLOW_SHADOW = "rgba(6, 182, 212, 0.35)";
+
+// ── Analysis overlay colours ─────────────────────────────────────────────────
+
+/** Outer stroke for a member that passed all analysis checks. */
+const ANALYSIS_PASS_STROKE = "rgba(34, 197, 94, 0.85)";
+const ANALYSIS_PASS_SHADOW = "rgba(34, 197, 94, 0.30)";
+
+/** Outer stroke for a member that failed one or more checks. */
+const ANALYSIS_FAIL_STROKE = "rgba(239, 68, 68, 0.90)";
+const ANALYSIS_FAIL_SHADOW = "rgba(239, 68, 68, 0.35)";
+
+/** Dashed border for members skipped from analysis (e.g. voids). */
+const ANALYSIS_SKIP_STROKE = "rgba(148, 163, 184, 0.50)";
+
 
 // ── Helper: Screen-space rectangle for a beam ───────────────────────────────
 
@@ -83,7 +98,8 @@ export function drawBeam(
   pan: Point,
   canvasHeight: number,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  analysisStatus?: AnalysisStatus
 ): void {
   const rect = beamScreenRect(member, zoom, pan, canvasHeight);
   if (rect.w < 1 && rect.h < 1) return;
@@ -97,8 +113,11 @@ export function drawBeam(
 
   if (isSelected) {
     drawSelectionGlow(ctx, rect.x, rect.y, rect.w, rect.h);
+  } else if (analysisStatus && analysisStatus !== "unknown") {
+    drawAnalysisOverlay(ctx, rect.x, rect.y, rect.w, rect.h, analysisStatus);
   }
 }
+
 
 export function drawColumn(
   ctx: CanvasRenderingContext2D,
@@ -107,7 +126,8 @@ export function drawColumn(
   pan: Point,
   canvasHeight: number,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  analysisStatus?: AnalysisStatus
 ): void {
   const centerPoint = member.center_point ?? { x: 0, y: 0 };
   const center = worldToScreen(centerPoint, zoom, pan, canvasHeight);
@@ -136,8 +156,11 @@ export function drawColumn(
 
   if (isSelected) {
     drawSelectionGlow(ctx, x, y, drawW, drawH);
+  } else if (analysisStatus && analysisStatus !== "unknown") {
+    drawAnalysisOverlay(ctx, x, y, drawW, drawH, analysisStatus);
   }
 }
+
 
 function drawArrowHead(
   ctx: CanvasRenderingContext2D,
@@ -215,7 +238,8 @@ export function drawSlab(
   pan: Point,
   canvasHeight: number,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  analysisStatus?: AnalysisStatus
 ): void {
   let cx: number, cy: number;
   let xMin: number, yMin: number, w: number, h: number;
@@ -278,6 +302,8 @@ export function drawSlab(
 
   if (isSelected) {
     drawSelectionGlow(ctx, xMin, yMin, w, h);
+  } else if (analysisStatus && analysisStatus !== "unknown") {
+    drawAnalysisOverlay(ctx, xMin, yMin, w, h, analysisStatus);
   }
 }
 
@@ -402,6 +428,54 @@ export function drawFooting(
   }
 }
 
+// ── Analysis overlay helper ──────────────────────────────────────────────────
+
+/**
+ * Draw a coloured glow border indicating analysis pass/fail/skipped status.
+ *
+ * Must be called *after* the member's own geometry is drawn so the glow
+ * renders on top without being clipped by fill areas.
+ *
+ * @param ctx    - Canvas 2D rendering context.
+ * @param x      - Left edge of the member bounding rect (screen pixels).
+ * @param y      - Top edge of the member bounding rect (screen pixels).
+ * @param w      - Width of the member bounding rect (screen pixels).
+ * @param h      - Height of the member bounding rect (screen pixels).
+ * @param status - Analysis result status driving the colour choice.
+ */
+function drawAnalysisOverlay(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  status: AnalysisStatus
+): void {
+  if (status === "unknown") return;
+
+  ctx.save();
+
+  if (status === "skipped") {
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = ANALYSIS_SKIP_STROKE;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = "transparent";
+    ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+  } else {
+    const strokeColor =
+      status === "pass" ? ANALYSIS_PASS_STROKE : ANALYSIS_FAIL_STROKE;
+    const shadowColor =
+      status === "pass" ? ANALYSIS_PASS_SHADOW : ANALYSIS_FAIL_SHADOW;
+    ctx.shadowColor = shadowColor;
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+  }
+
+  ctx.restore();
+}
+
 function drawSelectionGlow(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -421,6 +495,7 @@ function drawSelectionGlow(
   ctx.restore();
 }
 
+
 export function drawMember(
   ctx: CanvasRenderingContext2D,
   member: GeometricMember,
@@ -428,17 +503,19 @@ export function drawMember(
   pan: Point,
   canvasHeight: number,
   isSelected: boolean,
-  isHovered: boolean
+  isHovered: boolean,
+  /** Optional analysis result status — drives pass/fail colour-coding overlay. */
+  analysisStatus?: AnalysisStatus
 ): void {
   switch (member.member_type) {
     case "beam":
-      drawBeam(ctx, member, zoom, pan, canvasHeight, isSelected, isHovered);
+      drawBeam(ctx, member, zoom, pan, canvasHeight, isSelected, isHovered, analysisStatus);
       break;
     case "column":
-      drawColumn(ctx, member, zoom, pan, canvasHeight, isSelected, isHovered);
+      drawColumn(ctx, member, zoom, pan, canvasHeight, isSelected, isHovered, analysisStatus);
       break;
     case "slab":
-      drawSlab(ctx, member, zoom, pan, canvasHeight, isSelected, isHovered);
+      drawSlab(ctx, member, zoom, pan, canvasHeight, isSelected, isHovered, analysisStatus);
       break;
     case "void":
     case "staircase":
@@ -452,3 +529,4 @@ export function drawMember(
       break;
   }
 }
+

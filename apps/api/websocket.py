@@ -69,7 +69,7 @@ manager = ConnectionManager()
 # Graph nodes that speak to the engineer.  Their appended ``messages`` are the
 # canonical chat channel — broadcast on node completion (``on_chain_end``).
 _AGENT_NODE_NAMES: frozenset[str] = frozenset({
-    "supervisor_agent", "vision_agent", "analyst_agent",
+    "supervisor_agent", "analyst_agent",
     "designer_agent", "drafting_agent",
     "geometry_gate", "loading_gate", "design_gate", "drawing_gate",
 })
@@ -229,19 +229,32 @@ async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | Non
     stored_status = await project_store.get_status(project_id)
     pipeline_status = stored_status.label() if stored_status is not None else "created"
     
+    project = await project_store.get(project_id, bypass_tenant_check=True)
+    design_code = project.design_code if project else "BS8110"
+    
     if input_state is None:
         state = await _agent_graph.app.aget_state(config)
         if state and state.next:
+            if not state.values or "project_id" not in state.values or "design_code" not in state.values:
+                await _agent_graph.app.aupdate_state(
+                    config,
+                    {
+                        "project_id": project_id,
+                        "design_code": design_code,
+                    }
+                )
             state_to_run = None
         else:
             state_to_run = {
                 "project_id": project_id,
+                "design_code": design_code,
                 "pipeline_status": pipeline_status,
             }
     else:
         state_to_run = input_state
         state_to_run.update({
             "project_id": project_id,
+            "design_code": design_code,
             "pipeline_status": pipeline_status,
         })
 
@@ -253,6 +266,8 @@ async def run_or_resume_graph(project_id: str, input_state: dict[str, Any] | Non
         ):
             # Stream agent messages to chat panel
             if event["event"] == "on_chat_model_stream":
+                if "utility" in event.get("tags", []):
+                    continue
                 chunk = event["data"].get("chunk")
                 if chunk:
                     await manager.broadcast(project_id, {
@@ -376,6 +391,66 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
     try:
         config = {"configurable": {"thread_id": project_id}}
         state = await _agent_graph.app.aget_state(config)
+        
+        # Self-healing/Synchronization: if the database status is advanced but
+        # the LangGraph checkpointer is stuck at a gate, update the state and resume.
+        from schemas.project import ProjectStatus
+        status_ordinal = project.pipeline_status_ordinal
+        state_updated = False
+        
+        if state and state.next:
+            for node in state.next:
+                if node == "geometry_gate" and status_ordinal >= ProjectStatus.GEOMETRY_VERIFIED.value:
+                    logger.info("Healing graph state: setting geometry_verified=True for project %s", project_id)
+                    await _agent_graph.app.aupdate_state(
+                        config,
+                        {
+                            "geometry_verified": True,
+                            "project_id": project_id,
+                            "design_code": project.design_code
+                        }
+                    )
+                    state_updated = True
+                elif node == "loading_gate" and status_ordinal >= ProjectStatus.LOADING_DEFINED.value:
+                    logger.info("Healing graph state: setting loading_confirmed=True for project %s", project_id)
+                    await _agent_graph.app.aupdate_state(
+                        config,
+                        {
+                            "loading_confirmed": True,
+                            "project_id": project_id,
+                            "design_code": project.design_code
+                        }
+                    )
+                    state_updated = True
+                elif node == "design_gate" and status_ordinal >= ProjectStatus.DESIGN_COMPLETE.value:
+                    logger.info("Healing graph state: setting design_confirmed=True for project %s", project_id)
+                    await _agent_graph.app.aupdate_state(
+                        config,
+                        {
+                            "design_confirmed": True,
+                            "project_id": project_id,
+                            "design_code": project.design_code
+                        }
+                    )
+                    state_updated = True
+                elif node == "drawing_gate" and status_ordinal >= ProjectStatus.REPORT_GENERATED.value:
+                    logger.info("Healing graph state: setting drawing_confirmed=True for project %s", project_id)
+                    await _agent_graph.app.aupdate_state(
+                        config,
+                        {
+                            "drawing_confirmed": True,
+                            "project_id": project_id,
+                            "design_code": project.design_code
+                        }
+                    )
+                    state_updated = True
+        
+        if state_updated:
+            # Re-fetch state and resume the graph in a non-blocking background task
+            state = await _agent_graph.app.aget_state(config)
+            import asyncio
+            asyncio.create_task(run_or_resume_graph(project_id, None))
+        
         if state and state.values:
             messages = state.values.get("messages", [])
             serialized_messages = []
@@ -391,6 +466,15 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
         
         if state and state.next:
             for node in state.next:
+                if node == "geometry_gate" and status_ordinal >= ProjectStatus.GEOMETRY_VERIFIED.value:
+                    continue
+                if node == "loading_gate" and status_ordinal >= ProjectStatus.LOADING_DEFINED.value:
+                    continue
+                if node == "design_gate" and status_ordinal >= ProjectStatus.DESIGN_COMPLETE.value:
+                    continue
+                if node == "drawing_gate" and status_ordinal >= ProjectStatus.REPORT_GENERATED.value:
+                    continue
+
                 if node in ("geometry_gate", "loading_gate", "design_gate", "drawing_gate"):
                     await websocket.send_json({
                         "type": "gate_reached",

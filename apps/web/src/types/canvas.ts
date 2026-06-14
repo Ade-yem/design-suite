@@ -142,8 +142,6 @@ export interface ParsedGeometry {
   parse_warnings?: string[];
 }
 
-// ── Canvas Interaction State ────────────────────────────────────────────────
-
 /**
  * Active tool mode for the canvas viewport.
  *
@@ -161,3 +159,31 @@ export type CanvasTool = "select" | "pan";
  * - `"error"`      — Verification request failed.
  */
 export type VerificationStatus = "pending" | "submitting" | "verified" | "error";
+
+// ── Analysis Overlay Types ──────────────────────────────────────────────────
+
+/**
+ * Per-member analysis result status used for canvas colour-coding.
+ *
+ * - `"pass"`    — Member passed all limit state checks.
+ * - `"fail"`    — Member failed one or more checks (red highlight).
+ * - `"skipped"` — Member was excluded from analysis (e.g. void/opening).
+ * - `"unknown"` — No analysis result available for this member.
+ */
+export type AnalysisStatus = "pass" | "fail" | "skipped" | "unknown";
+
+/**
+ * Minimal analysis result record returned by
+ * `GET /api/v1/analysis/{project_id}/results` and stored in the canvas
+ * store for rendering.
+ *
+ * @property member_id - Unique member identifier matching `GeometricMember.member_id`.
+ * @property status    - Pass/fail/skipped result for this member.
+ * @property reason    - Optional explanation for a failure or skip (shown in tooltip).
+ */
+export interface MemberAnalysisResult {
+  member_id: string;
+  status: AnalysisStatus;
+  reason?: string;
+}
+

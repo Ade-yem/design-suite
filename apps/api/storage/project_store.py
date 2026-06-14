@@ -67,11 +67,11 @@ class MemoryProjectStore:
     def __init__(self) -> None:
         self._projects: dict[str, dict] = {}
         self._members: dict[str, set[str]] = {}
-        self._loads: dict[str, tuple[dict, dict | None]] = {}
+        pass
 
     async def save_loads(self, project_id: str, definition: dict, output: dict | None) -> None:
         """
-        Store the load definition and output for a project in memory.
+        Store the load definition and output for a project.
 
         Parameters
         ----------
@@ -79,11 +79,12 @@ class MemoryProjectStore:
         definition : dict
         output : dict | None
         """
-        self._loads[project_id] = (definition, output)
+        from storage.stage_result_store import stage_result_store
+        await stage_result_store.save(project_id, "loads", {"definition": definition, "output": output})
 
     async def get_loads(self, project_id: str) -> tuple[dict | None, dict | None]:
         """
-        Retrieve the stored load definition and output for a project from memory.
+        Retrieve the stored load definition and output for a project.
 
         Parameters
         ----------
@@ -94,7 +95,11 @@ class MemoryProjectStore:
         tuple[dict | None, dict | None]
             (definition, output)
         """
-        return self._loads.get(project_id, (None, None))
+        from storage.stage_result_store import stage_result_store
+        payload = await stage_result_store.get(project_id, "loads")
+        if payload:
+            return payload.get("definition"), payload.get("output")
+        return None, None
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
@@ -648,29 +653,8 @@ class PostgresProjectStore:
         definition : dict
         output : dict | None
         """
-        import json
-        from db.models.project import ProjectLoad
-        from sqlalchemy import select
-
-        async with self.session_maker() as session:
-            row = (await session.execute(
-                select(ProjectLoad).where(ProjectLoad.project_id == project_id)
-            )).scalar_one_or_none()
-
-            def_str = json.dumps(definition)
-            out_str = json.dumps(output) if output is not None else None
-
-            if row:
-                row.definition = def_str
-                if out_str is not None:
-                    row.output = out_str
-            else:
-                session.add(ProjectLoad(
-                    project_id=project_id,
-                    definition=def_str,
-                    output=out_str,
-                ))
-            await session.commit()
+        from storage.stage_result_store import stage_result_store
+        await stage_result_store.save(project_id, "loads", {"definition": definition, "output": output})
 
     async def get_loads(self, project_id: str) -> tuple[dict | None, dict | None]:
         """
@@ -685,19 +669,11 @@ class PostgresProjectStore:
         tuple[dict | None, dict | None]
             (definition, output)
         """
-        import json
-        from db.models.project import ProjectLoad
-        from sqlalchemy import select
-
-        async with self.session_maker() as session:
-            row = (await session.execute(
-                select(ProjectLoad).where(ProjectLoad.project_id == project_id)
-            )).scalar_one_or_none()
-            if row:
-                definition = json.loads(row.definition) if row.definition else None
-                output = json.loads(row.output) if row.output else None
-                return definition, output
-            return None, None
+        from storage.stage_result_store import stage_result_store
+        payload = await stage_result_store.get(project_id, "loads")
+        if payload:
+            return payload.get("definition"), payload.get("output")
+        return None, None
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
