@@ -1,4 +1,6 @@
 venv/
+# npm lockfile — project uses pnpm; package-lock.json should not be committed
+apps/web/package-lock.json
 **/__pycache__/**
 **/api/**/*.svg
 apps/api/uploads/*
