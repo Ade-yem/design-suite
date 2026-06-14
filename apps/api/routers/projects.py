@@ -170,9 +170,9 @@ async def update_project(
     ProjectResponse
         Updated project.
     """
-    updated = await project_store.update(project_id, payload)
+    updated = await project_store.update(project_id, payload, organisation_id=project.organisation_id)
     if updated is None:
-        return await project_store.get_or_404(project_id)
+        return await project_store.get_or_404(project_id, organisation_id=project.organisation_id)
 
     logger.info("Project updated: %s", project_id)
     return updated
@@ -194,8 +194,16 @@ async def delete_project(
         Gate dependency.
     """
     from storage.file_handler import file_handler
+    from middleware.error_handler import StructuralError
 
-    await project_store.delete(project_id)
+    deleted = await project_store.delete(project_id, organisation_id=project.organisation_id)
+    if not deleted:
+        raise StructuralError(
+            error_code="PROJECT_DELETE_FAILURE",
+            details={"project_id": project_id},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
     file_handler.delete_project(project_id)
     logger.info("Project deleted: %s", project_id)
 

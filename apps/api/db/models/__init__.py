@@ -17,14 +17,8 @@ from db.models.oauth import OAuthAccount
 from db.models.project import (
     Project,
     ProjectMember,
-    ProjectLoad,
-    ProjectGeometry,
 )
-from db.models.pipeline import (
-    ProjectAnalysis,
-    ProjectDesign,
-    ProjectDrawing,
-)
+from db.models.pipeline_results import PipelineResult
 from db.models.artifact import Artifact, ArtifactStage
 
 __all__ = [
@@ -33,11 +27,7 @@ __all__ = [
     "OAuthAccount",
     "Project",
     "ProjectMember",
-    "ProjectLoad",
-    "ProjectGeometry",
-    "ProjectAnalysis",
-    "ProjectDesign",
-    "ProjectDrawing",
+    "PipelineResult",
     "Artifact",
     "ArtifactStage",
 ]

@@ -5,10 +5,13 @@
  * Labels are positioned near the center of each member and include
  * the member ID (e.g. "B1") and key dimensions (e.g. "450×225").
  *
+ * The label pill border is optionally tinted to reflect the member's analysis
+ * result (green = pass, red = fail, dashed neutral = skipped/unknown).
+ *
  * @module canvas/drawLabels
  */
 
-import type { GeometricMember, Point } from "@/types/canvas";
+import type { GeometricMember, MemberType, Point, AnalysisStatus } from "@/types/canvas";
 import { worldToScreen } from "./transform";
 
 /** Label font for member IDs. */
@@ -22,6 +25,12 @@ const LABEL_COLOR = "rgba(213, 219, 228, 0.85)";
 
 /** Label background for readability. */
 const LABEL_BG = "rgba(11, 15, 25, 0.75)";
+
+/** Pill border colours driven by analysis status. */
+const PILL_BORDER_PASS   = "rgba(34, 197, 94, 0.80)";
+const PILL_BORDER_FAIL   = "rgba(239, 68, 68, 0.85)";
+const PILL_BORDER_SKIP   = "rgba(148, 163, 184, 0.40)";
+const PILL_BORDER_NONE   = "rgba(255, 255, 255, 0.08)";
 
 function getMemberCenter(member: GeometricMember): Point {
   if (member.center_point) {
@@ -46,18 +55,21 @@ function getMemberCenter(member: GeometricMember): Point {
 /**
  * Draw the ID label and dimension annotation for a member.
  *
- * @param ctx          - Canvas 2D rendering context.
- * @param member       - The structural member to label.
- * @param zoom         - Current zoom level.
- * @param pan          - Current pan offset.
- * @param canvasHeight - Canvas height in pixels.
+ * @param ctx            - Canvas 2D rendering context.
+ * @param member         - The structural member to label.
+ * @param zoom           - Current zoom level.
+ * @param pan            - Current pan offset.
+ * @param canvasHeight   - Canvas height in pixels.
+ * @param analysisStatus - Optional analysis result; when provided the pill border
+ *                         is tinted green (pass), red (fail), or dashed gray (skipped).
  */
 export function drawMemberLabel(
   ctx: CanvasRenderingContext2D,
   member: GeometricMember,
   zoom: number,
   pan: Point,
-  canvasHeight: number
+  canvasHeight: number,
+  analysisStatus?: AnalysisStatus
 ): void {
   // Skip labels at very low zoom levels where they'd be unreadable
   if (zoom < 0.02) return;
@@ -90,6 +102,28 @@ export function drawMemberLabel(
   ctx.roundRect(bgX, bgY, totalWidth, totalHeight, 3);
   ctx.fill();
 
+  // Pill border — tinted by analysis status when overlay is active
+  ctx.save();
+  const borderColor = analysisStatus
+    ? analysisStatus === "pass"
+      ? PILL_BORDER_PASS
+      : analysisStatus === "fail"
+        ? PILL_BORDER_FAIL
+        : analysisStatus === "skipped"
+          ? PILL_BORDER_SKIP
+          : PILL_BORDER_NONE
+    : PILL_BORDER_NONE;
+
+  if (analysisStatus === "skipped") {
+    ctx.setLineDash([3, 3]);
+  }
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = analysisStatus && analysisStatus !== "unknown" ? 1.5 : 0.5;
+  ctx.beginPath();
+  ctx.roundRect(bgX, bgY, totalWidth, totalHeight, 3);
+  ctx.stroke();
+  ctx.restore();
+
   // Member ID
   ctx.fillStyle = LABEL_COLOR;
   ctx.font = LABEL_FONT_ID;
@@ -107,14 +141,20 @@ export function drawMemberLabel(
 }
 
 /**
- * Draw labels for all members that are visible on screen.
+ * Draw labels for all members that are visible on screen, respecting
+ * the label visibility filters and optionally tinting pill borders by
+ * analysis result.
  *
- * @param ctx          - Canvas 2D rendering context.
- * @param members      - Array of structural members.
- * @param zoom         - Current zoom level.
- * @param pan          - Current pan offset.
- * @param canvasWidth  - Canvas width in pixels.
- * @param canvasHeight - Canvas height in pixels.
+ * @param ctx             - Canvas 2D rendering context.
+ * @param members         - Array of structural members.
+ * @param zoom            - Current zoom level.
+ * @param pan             - Current pan offset.
+ * @param canvasWidth     - Canvas width in pixels.
+ * @param canvasHeight    - Canvas height in pixels.
+ * @param analysisMap     - Optional map from member_id → AnalysisStatus.
+ *                          When provided and non-empty, pill borders are tinted.
+ * @param hiddenLabelTypes - Set of MemberType strings whose labels are suppressed.
+ * @param hiddenLabelIds   - Set of individual member IDs whose labels are suppressed.
  */
 export function drawAllLabels(
   ctx: CanvasRenderingContext2D,
@@ -122,9 +162,16 @@ export function drawAllLabels(
   zoom: number,
   pan: Point,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
+  analysisMap?: Map<string, AnalysisStatus>,
+  hiddenLabelTypes?: Set<MemberType>,
+  hiddenLabelIds?: Set<string>
 ): void {
   for (const member of members) {
+    // ── Visibility filters ─────────────────────────────────────────────────
+    if (hiddenLabelTypes?.has(member.member_type)) continue;
+    if (hiddenLabelIds?.has(member.member_id)) continue;
+
     const worldCenter = getMemberCenter(member);
     const screen = worldToScreen(worldCenter, zoom, pan, canvasHeight);
 
@@ -138,6 +185,7 @@ export function drawAllLabels(
       continue;
     }
 
-    drawMemberLabel(ctx, member, zoom, pan, canvasHeight);
+    const analysisStatus = analysisMap?.get(member.member_id);
+    drawMemberLabel(ctx, member, zoom, pan, canvasHeight, analysisStatus);
   }
 }

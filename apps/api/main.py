@@ -44,7 +44,6 @@ from middleware.request_logger import RequestLoggerMiddleware
 from routers import (
     analysis,
     artifacts,
-    chat,
     design,
     drawings,
     files,

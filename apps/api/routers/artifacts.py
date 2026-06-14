@@ -28,6 +28,7 @@ from middleware.error_handler import StructuralError
 from schemas.artifact import ArtifactRecord
 from schemas.project import ProjectResponse
 from storage.artifact_store import artifact_store
+from storage.project_store import project_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -153,4 +154,6 @@ async def get_artifact(
             details={"artifact_id": artifact_id},
             status_code=404,
         )
+    # Enforce tenant check
+    await project_store.get_or_404(record.project_id, organisation_id=user.organisation_id)
     return _to_response(record, include_content=True)

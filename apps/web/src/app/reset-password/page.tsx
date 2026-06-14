@@ -11,7 +11,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { apiClient, ApiError } from "@/lib/api";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import {
   Lock,
   RefreshCw,
@@ -84,8 +84,6 @@ function ResetPasswordContent() {
 
   return (
     <div className="w-full max-w-md bg-card/45 backdrop-blur-md border border-border rounded-xl p-8 shadow-2xl relative z-10 animate-fade-in-up">
-      <Toaster position="top-right" theme="dark" closeButton richColors />
-
       {/* Onboarding Header */}
       <div className="flex flex-col items-center mb-8">
         <div className="w-12 h-12 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-center mb-3 glow-blue">

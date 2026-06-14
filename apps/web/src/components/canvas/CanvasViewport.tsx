@@ -35,7 +35,6 @@ import { drawAllLabels } from "@/lib/canvas/drawLabels";
 import { hitTestMembers } from "@/lib/canvas/hitTest";
 import type { Point, ParsedGeometry } from "@/types/canvas";
 
-// Imported split-out subcomponents
 import { CanvasToolbar } from "./CanvasToolbar";
 import { CoordinateReadout } from "./CoordinateReadout";
 import { MemberTooltip } from "./MemberTooltip";
@@ -43,10 +42,12 @@ import { PropertyInspector } from "./PropertyInspector";
 import { CanvasUploader, type CanvasUploaderHandle } from "./CanvasUploader";
 import { MembersPanel } from "./MembersPanel";
 import { GeometryGate } from "./GeometryGate";
+import { LabelVisibilityModal } from "./LabelVisibilityModal";
 import { useProjectSocket } from "@/hooks/useProjectSocket";
 import { Loader2 } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
 import { CanvasLoading } from "./CanvasLoading";
+
 
 export interface CanvasViewportHandle {
   /** Public API: lets parent elements trigger DXF file browsing */
@@ -98,7 +99,18 @@ export const CanvasViewport = forwardRef<
     setVerificationStatus,
     resetGeometry,
     focusMember,
+    // Analysis overlay
+    analysisOverlay,
+    memberAnalysisMap,
+    hiddenLabelTypes,
+    hiddenLabelIds,
+    setAnalysisResults,
+    toggleAnalysisOverlay,
+    toggleLabelType,
+    toggleLabelMember,
+    resetLabelVisibility,
   } = useCanvasStore();
+
 
   // ── Component State ──────────────────────────────────────────────────────
   const [uploadState, setUploadState] = useState<UploadState>("not ready");
@@ -106,6 +118,8 @@ export const CanvasViewport = forwardRef<
   const [scaleUnit, setScaleUnit] = useState<string>("mm");
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [isConfirmingScale, setIsConfirmingScale] = useState(false);
+  const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
+
 
   // Regeneration state
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -194,6 +208,36 @@ export const CanvasViewport = forwardRef<
     }
   }, [activeProject, projectId, setVerificationStatus]);
 
+  // ── Fetch analysis results for colour-coding overlay ────────────────────
+  useEffect(() => {
+    if (
+      !activeProject ||
+      activeProject.project_id !== projectId ||
+      activeProject.pipeline_status_ordinal < 4  // ANALYSIS_COMPLETE = 4
+    ) {
+      return;
+    }
+    apiClient
+      .get<{ members: Array<{ member_id: string; status: string; reason?: string }> }>(
+        `/api/v1/analysis/${projectId}/results`
+      )
+      .then(({ data }) => {
+        if (Array.isArray(data?.members)) {
+          setAnalysisResults(
+            data.members.map((m) => ({
+              member_id: m.member_id,
+              status: (m.status as "pass" | "fail" | "skipped") ?? "unknown",
+              reason: m.reason,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // Non-fatal: overlay just won't be displayed
+      });
+  }, [activeProject, projectId, setAnalysisResults]);
+
+
   useEffect(() => {
     fetchExistingGeometry();
   }, [projectId, fetchExistingGeometry]);
@@ -236,16 +280,29 @@ export const CanvasViewport = forwardRef<
     // 1. Draw dot grid background
     drawDotGrid(ctx, canvas.width, canvas.height, zoom, pan);
 
-    // 2. Draw structural members
+    // 2. Draw structural members with optional analysis overlay
     for (const member of members) {
       const isSelected = member.member_id === selectedMemberId;
       const isHovered = member.member_id === hoveredMemberId;
-      drawMember(ctx, member, zoom, pan, canvas.height, isSelected, isHovered);
+      const analysisStatus =
+        analysisOverlay ? memberAnalysisMap.get(member.member_id) : undefined;
+      drawMember(ctx, member, zoom, pan, canvas.height, isSelected, isHovered, analysisStatus);
     }
 
-    // 3. Draw labels and dimension pills on top
-    drawAllLabels(ctx, members, zoom, pan, canvas.width, canvas.height);
-  }, [members, zoom, pan, selectedMemberId, hoveredMemberId]);
+    // 3. Draw labels and dimension pills on top, with visibility filters
+    drawAllLabels(
+      ctx,
+      members,
+      zoom,
+      pan,
+      canvas.width,
+      canvas.height,
+      analysisOverlay ? memberAnalysisMap : undefined,
+      hiddenLabelTypes,
+      hiddenLabelIds
+    );
+  }, [members, zoom, pan, selectedMemberId, hoveredMemberId, analysisOverlay, memberAnalysisMap, hiddenLabelTypes, hiddenLabelIds]);
+
 
   // Setup rendering trigger
   useEffect(() => {
@@ -555,7 +612,25 @@ export const CanvasViewport = forwardRef<
                   canvasRef.current?.height ?? 600,
                 )
               }
+              analysisOverlay={analysisOverlay}
+              hasAnalysisResults={memberAnalysisMap.size > 0}
+              onToggleAnalysisOverlay={toggleAnalysisOverlay}
+              onOpenLabelModal={() => setIsLabelModalOpen((v) => !v)}
+              isLabelModalOpen={isLabelModalOpen}
             />
+
+            {isLabelModalOpen && (
+              <LabelVisibilityModal
+                members={members}
+                hiddenLabelTypes={hiddenLabelTypes}
+                hiddenLabelIds={hiddenLabelIds}
+                onToggleType={toggleLabelType}
+                onToggleMember={toggleLabelMember}
+                onReset={resetLabelVisibility}
+                onClose={() => setIsLabelModalOpen(false)}
+              />
+            )}
+
 
             <CoordinateReadout mouseWorldPos={mouseWorldPos} scale={scale} />
 

@@ -25,6 +25,7 @@ import { getPipelineStatus } from "@/lib/pipelineStatus";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { NewProjectModal } from "./NewProjectModal";
 import type { Project, ProjectListItem } from "@/types/project";
+import { toast } from "sonner";
 
 function statusLabel(status: string): string {
   return getPipelineStatus(status).label;
@@ -134,9 +135,10 @@ export function ProjectSidebar() {
         clearActiveProject();
       }
       await fetchProjects();
+      toast.success("Project deleted successfully")
       setDeletingProject(null);
     } catch {
-      alert("Failed to delete project. Please try again.");
+      toast.error("Failed to delete project");
     } finally {
       setIsDeleting(false);
     }

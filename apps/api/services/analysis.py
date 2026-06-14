@@ -33,27 +33,26 @@ logger = logging.getLogger(__name__)
 class _AnalysisStore:
     """
     In-memory store for analysis results.
-
-    Attributes
-    ----------
-    _results : dict[str, dict]
-        Analysis output per project (full ``AnalysisOutputSchema`` dict).
+    Delegates internally to stage_result_store.
     """
 
     def __init__(self) -> None:
-        self._results: dict[str, dict[str, Any]] = {}
+        pass
 
     def set(self, project_id: str, data: dict) -> None:
         """Store analysis results for a project."""
-        self._results[project_id] = data
+        from storage.stage_result_store import stage_result_store
+        stage_result_store._memory_store[(project_id, "analysis")] = data
 
     def get(self, project_id: str) -> Optional[dict]:
         """Return analysis results or None."""
-        return self._results.get(project_id)
+        from storage.stage_result_store import stage_result_store
+        return stage_result_store._memory_store.get((project_id, "analysis"))
 
     def clear(self, project_id: str) -> None:
         """Remove results for a project."""
-        self._results.pop(project_id, None)
+        from storage.stage_result_store import stage_result_store
+        stage_result_store._memory_store.pop((project_id, "analysis"), None)
 
 
 _store = _AnalysisStore()
@@ -278,7 +277,7 @@ class AnalysisService:
         _store.set(project_id, merged)
         return merged
 
-    def clear(self, project_id: str) -> None:
+    async def clear(self, project_id: str) -> None:
         """
         Clear analysis results for a project.
 
@@ -287,67 +286,22 @@ class AnalysisService:
         project_id : str
         """
         _store.clear(project_id)
+        from storage.stage_result_store import stage_result_store
+        await stage_result_store.clear(project_id, "analysis")
 
     # ── DB persistence helpers ────────────────────────────────────────────────
 
     async def ensure_cached(self, project_id: str) -> None:
         """Load analysis results from DB into cache if missing."""
-        if _store.get(project_id) is not None:
-            return
-        from config import settings
-        if settings.PROJECT_STORE_BACKEND != "postgres":
-            return
-        try:
-            from db.session import get_session_maker
-            from db.models.pipeline import ProjectAnalysis
-            from sqlalchemy import select
-
-            session_maker = get_session_maker()
-            async with session_maker() as session:
-                row = (await session.execute(
-                    select(ProjectAnalysis).where(ProjectAnalysis.project_id == project_id)
-                )).scalar_one_or_none()
-                if row and row.output:
-                    _store.set(project_id, json.loads(row.output))
-        except Exception as exc:
-            logger.warning("DB analysis fetch for project %s failed: %s", project_id, exc)
+        from storage.stage_result_store import stage_result_store
+        payload = await stage_result_store.get(project_id, "analysis")
+        if payload:
+            _store.set(project_id, payload)
 
     async def _db_save_analysis(self, project_id: str, output: dict) -> None:
-        """Upsert analysis output to ProjectAnalysis. Silent no-op if DB unavailable."""
-        from config import settings
-        if settings.PROJECT_STORE_BACKEND != "postgres":
-            return
-        try:
-            from db.session import get_session_maker
-            from db.models.pipeline import ProjectAnalysis
-            from sqlalchemy import select
-
-            session_maker = get_session_maker()
-            async with session_maker() as session:
-                row = (await session.execute(
-                    select(ProjectAnalysis).where(ProjectAnalysis.project_id == project_id)
-                )).scalar_one_or_none()
-
-                out_str = json.dumps(output)
-                analysis_id = output.get("analysis_id", "")
-                design_code = output.get("design_code", "BS8110")
-
-                if row:
-                    row.output = out_str
-                    row.analysis_id = analysis_id
-                    row.design_code = design_code
-                else:
-                    session.add(ProjectAnalysis(
-                        project_id=project_id,
-                        analysis_id=analysis_id,
-                        design_code=design_code,
-                        output=out_str,
-                    ))
-                await session.commit()
-        except RuntimeError:
-            pass  # DATABASE_URL not configured
-        except Exception as exc:
-            logger.warning("DB analysis save failed for project %s: %s", project_id, exc)
+        """Upsert analysis output. Silent no-op if DB unavailable."""
+        from storage.stage_result_store import stage_result_store
+        await stage_result_store.save(project_id, "analysis", output)
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

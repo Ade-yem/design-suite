@@ -44,6 +44,7 @@ class JobStatus(BaseModel):
     """
 
     job_id: str = Field(..., description="Unique job identifier.")
+    project_id: Optional[str] = Field(None, description="Owning project identifier.")
     job_type: Literal["parsing", "analysis", "design", "reporting", "drawings"] = Field(
         ..., description="Operation category."
     )

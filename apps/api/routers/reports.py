@@ -42,7 +42,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
+from auth.dependencies import current_active_user
+from db.models.user import User
+from storage.project_store import project_store
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
@@ -157,6 +160,7 @@ _pdf_engine = PDFExportEngine()
 async def generate_report(
     request: GenerateReportRequest,
     background_tasks: BackgroundTasks,
+    user: User = Depends(current_active_user),
 ) -> GenerateReportResponse:
     """
     Generate a structured engineering report from Design Suite JSON outputs.
@@ -168,6 +172,10 @@ async def generate_report(
     ----------
     request : GenerateReportRequest
         Full report generation request including project metadata and member data.
+    background_tasks : BackgroundTasks
+        FastAPI background tasks queue.
+    user : User
+        The authenticated current user.
 
     Returns
     -------
@@ -178,9 +186,14 @@ async def generate_report(
     ------
     400 Bad Request
         If input validation fails (missing required member fields, mixed codes).
+    404 Not Found
+        If the project does not exist or does not belong to the user's organisation.
     500 Internal Server Error
         If template rendering fails.
     """
+    # Enforce tenant check first
+    await project_store.get_or_404(request.project_id, organisation_id=user.organisation_id)
+
     report_id = f"RPT-{uuid.uuid4().hex[:8].upper()}"
     logger.info("Generating report %s for project %s.", report_id, request.project_id)
 
@@ -259,7 +272,10 @@ async def generate_report(
 
 
 @router.get("/{report_id}/preview", response_class=HTMLResponse)
-async def preview_report(report_id: str) -> HTMLResponse:
+async def preview_report(
+    report_id: str,
+    user: User = Depends(current_active_user),
+) -> HTMLResponse:
     """
     Return the rendered HTML for the frontend IDE right panel.
 
@@ -267,6 +283,8 @@ async def preview_report(report_id: str) -> HTMLResponse:
     ----------
     report_id : str
         The report ID returned by ``/reports/generate``.
+    user : User
+        The authenticated current user.
 
     Returns
     -------
@@ -276,14 +294,20 @@ async def preview_report(report_id: str) -> HTMLResponse:
     Raises
     ------
     404 Not Found
-        If no report with this ID exists.
+        If no report with this ID exists, or if the associated project
+        does not belong to the user's organisation.
     """
     store = _get_report_or_404(report_id)
+    # Enforce tenant check
+    await project_store.get_or_404(store["project_id"], organisation_id=user.organisation_id)
     return HTMLResponse(content=store["html"], status_code=200)
 
 
 @router.get("/{report_id}/download")
-async def download_report(report_id: str) -> Response:
+async def download_report(
+    report_id: str,
+    user: User = Depends(current_active_user),
+) -> Response:
     """
     Convert the report HTML to PDF via WeasyPrint and return the binary.
 
@@ -293,6 +317,8 @@ async def download_report(report_id: str) -> Response:
     ----------
     report_id : str
         The report ID returned by ``/reports/generate``.
+    user : User
+        The authenticated current user.
 
     Returns
     -------
@@ -302,13 +328,16 @@ async def download_report(report_id: str) -> Response:
     Raises
     ------
     404 Not Found
-        If the report ID does not exist.
+        If the report ID does not exist, or if the associated project
+        does not belong to the user's organisation.
     503 Service Unavailable
         If WeasyPrint is not installed.
     500 Internal Server Error
         If PDF conversion fails.
     """
     store = _get_report_or_404(report_id)
+    # Enforce tenant check
+    await project_store.get_or_404(store["project_id"], organisation_id=user.organisation_id)
 
     if store.get("pdf") is None:
         # Generate on demand
@@ -338,7 +367,10 @@ async def download_report(report_id: str) -> Response:
 
 
 @router.get("/{report_id}/status")
-async def report_status(report_id: str) -> dict:
+async def report_status(
+    report_id: str,
+    user: User = Depends(current_active_user),
+) -> dict:
     """
     Return generation status for a given report.
 
@@ -346,6 +378,8 @@ async def report_status(report_id: str) -> dict:
     ----------
     report_id : str
         The report ID to check.
+    user : User
+        The authenticated current user.
 
     Returns
     -------
@@ -355,9 +389,12 @@ async def report_status(report_id: str) -> dict:
     Raises
     ------
     404 Not Found
-        If the report ID does not exist.
+        If the report ID does not exist, or if the associated project
+        does not belong to the user's organisation.
     """
     store = _get_report_or_404(report_id)
+    # Enforce tenant check
+    await project_store.get_or_404(store["project_id"], organisation_id=user.organisation_id)
     return {
         "report_id": report_id,
         "status": "pdf_ready" if store.get("pdf") else "html_ready",

@@ -26,8 +26,8 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
 from pathlib import Path
+from uuid import UUID
 from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, status
@@ -175,7 +175,7 @@ async def _parse_file_background(
         # ezdxf extracts raw geometry only;
         if not parsed.get("members"):
             await job_store.update_progress(job_id, 60.0, "Classifying structural members…")
-            from agents.parser import cross_reference_void_markers, _filter_stub_beams, _deduplicate_beams, _run_member_extraction
+            from core.parsing.extractor import cross_reference_void_markers, _filter_stub_beams, _deduplicate_beams, _run_member_extraction
             from storage.project_store import project_store as _pstore
 
             members = await _run_member_extraction(project_id, parsed)
@@ -194,6 +194,72 @@ async def _parse_file_background(
         logger.exception("Parsing failed for project %s.", project_id)
         await job_store.mark_failed(job_id, errors=[str(exc)])
 
+
+async def _take_snapshot(
+    project_id: str,
+    parsed_geometry: dict[str, Any],
+    user_id: UUID,
+    user_email: str
+) -> None:
+    """Run heavy artifact generation and langraph update in the background"""
+    # Freeze an immutable snapshot of the verified geometry (audit trail).
+    from db.models.artifact import ArtifactStage
+
+    # Clean up any existing verification snapshots for this project first
+    # to prevent duplicate/stale artifacts from retry attempts.
+    if hasattr(artifact_store, "_artifacts"):
+        # MemoryArtifactStore
+        for k in list(artifact_store._artifacts.keys()):
+            art = artifact_store._artifacts[k]
+            if art.project_id == project_id and art.stage == ArtifactStage.VERIFICATION.value:
+                del artifact_store._artifacts[k]
+    else:
+        # PostgresArtifactStore
+        from db.session import get_session_maker
+        from db.models.artifact import Artifact
+        from sqlalchemy import delete
+        
+        # 1. Clean up old verification artifacts
+        session_maker = get_session_maker()
+        async with session_maker() as session:
+            stmt = delete(Artifact).where(
+                Artifact.project_id == project_id,
+                Artifact.stage == ArtifactStage.VERIFICATION
+            )
+            await session.execute(stmt)
+            await session.commit()
+        
+    # 2. Freeze verified geometry snapshot
+    snapshot = await artifact_store.create_snapshot(
+        project_id,
+        ArtifactStage.VERIFICATION,
+        content=parsed_geometry,
+        author_id=user_id,
+        author_email=user_email,
+        preview_url=None,  # TODO: generate geometry diagram on approval
+    )
+    if snapshot:
+        logger.info(f"Created snapshot for project {project_id}")
+    
+    # 3. Write confirmation to LangGraph checkpointer state
+    import agents.graph as _agent_graph
+    from storage.project_store import project_store
+    project = await project_store.get(project_id, bypass_tenant_check=True)
+    design_code = project.design_code if project else "BS8110"
+    
+    config = {"configurable": {"thread_id": project_id}}
+    await _agent_graph.app.aupdate_state(
+        config,
+        {
+            "geometry_verified": True,
+            "project_id": project_id,
+            "design_code": design_code,
+        }
+    )
+    
+    # 4. Trigger resume in the background
+    from websocket import run_or_resume_graph
+    await run_or_resume_graph(project_id, None)
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
@@ -510,43 +576,15 @@ async def verify_geometry(
             last_updated_at=payload.last_updated_at,
         )
 
-        # Freeze an immutable snapshot of the verified geometry (audit trail).
-        from db.models.artifact import ArtifactStage
-
-        # Clean up any existing verification snapshots for this project first
-        # to prevent duplicate/stale artifacts from retry attempts.
-        if hasattr(artifact_store, "_artifacts"):
-            # MemoryArtifactStore
-            for k in list(artifact_store._artifacts.keys()):
-                art = artifact_store._artifacts[k]
-                if art.project_id == project_id and art.stage == ArtifactStage.VERIFICATION.value:
-                    del artifact_store._artifacts[k]
-        else:
-            # PostgresArtifactStore
-            from db.session import get_session_maker
-            from db.models.artifact import Artifact
-            from sqlalchemy import delete
-            
-            session_maker = get_session_maker()
-            async with session_maker() as session:
-                stmt = delete(Artifact).where(
-                    Artifact.project_id == project_id,
-                    Artifact.stage == ArtifactStage.VERIFICATION
-                )
-                await session.execute(stmt)
-                await session.commit()
-
         parsed_geometry = await file_service.get_parsed(project_id)
-        if parsed_geometry:
-            snapshot = await artifact_store.create_snapshot(
-                project_id,
-                ArtifactStage.VERIFICATION,
-                content=parsed_geometry,
-                author_id=user.id,
-                author_email=user.email,
-                preview_url=None,  # TODO: generate geometry diagram on approval
-            )
-            result["artifact_id"] = snapshot.artifact_id
+        background_tasks.add_task(
+            _take_snapshot,
+            project_id=project_id,
+            parsed_geometry=parsed_geometry,
+            user_id=user.id,
+            user_email=user.email
+        )
+        
 
     except ValueError as exc:
         raise StructuralError(
@@ -555,15 +593,6 @@ async def verify_geometry(
             details={"reason": str(exc)},
             status_code=400,
         ) from exc
-
-    # Write confirmation to LangGraph checkpointer state
-    import agents.graph as _agent_graph
-    config = {"configurable": {"thread_id": project_id}}
-    await _agent_graph.app.aupdate_state(config, {"geometry_verified": True})
-
-    # Trigger resume in the background
-    from websocket import run_or_resume_graph
-    background_tasks.add_task(run_or_resume_graph, project_id, None)
 
     return result
 

@@ -232,11 +232,7 @@ def _deep_merge_parameters(base: dict, incoming: dict) -> dict:
 
 def _build_considerations_prompt(design_code: str) -> str:
     """
-    Opening questionnaire that kicks off the design-considerations dialogue.
-
-    Asked once, immediately after geometry is confirmed, before any loads are
-    assembled.  Covers every input the downstream loading, analysis and design
-    suites need — none are assumed.
+    Opening prompt that kicks off the design-considerations dialogue.
 
     Parameters
     ----------
@@ -246,32 +242,11 @@ def _build_considerations_prompt(design_code: str) -> str:
     Returns
     -------
     str
-        Markdown questionnaire for the IDE chat panel.
+        Concise welcome message directing the engineer to the interactive form.
     """
     return (
-        "**Geometry confirmed.** Before I assemble the loads I need the full "
-        f"design brief so nothing is assumed on your behalf (basis: **{design_code}**).\n\n"
-        "**1 · Building & use**\n"
-        "- Building type / purpose (residential, office, retail, school, car park, …)\n"
-        "- Multi-storey? How many storeys / floor levels?\n"
-        "- Typical clear storey height (m)\n"
-        "- Braced (cores/shear walls) or unbraced/sway frame?\n"
-        "- Design working life (years)\n\n"
-        "**2 · Materials**\n"
-        "- Concrete grade (e.g. C30/37 or grade 30)\n"
-        "- Main bar yield fy / fyk (MPa)\n"
-        "- Link yield fyv / fywk (MPa)\n"
-        "- Reinforced-concrete unit weight (kN/m³)\n\n"
-        "**3 · Durability & fire**\n"
-        "- Exposure class (e.g. XC1, XC3/4, XD, XS) or BS 8110 condition\n"
-        "- Fire resistance period (minutes)\n"
-        "- Nominal cover c_nom (mm)\n\n"
-        "**4 · Loading**\n"
-        "- Superimposed dead loads: finishes, screed, services, partitions (kN/m²)\n"
-        "- Soil bearing capacity (kN/m²) — if foundations are in scope\n\n"
-        "Answer in plain English — e.g. *\"4-storey braced office, 3.2 m clear, 50-yr "
-        "life, C30/37, 500 MPa bars & links, 25 kN/m³, exposure XC1, 90 min fire, "
-        "30 mm cover, finishes 1.5 / screed 1.2 / services 0.5 / partitions 1.0.\"*"
+        "**Geometry confirmed.** Please fill in the interactive design parameters form below "
+        f"to specify materials, durability, and loading requirements (basis: **{design_code}**)."
     )
 
 
@@ -372,7 +347,7 @@ def _extract_missing_consideration_fields(
 
 def _build_missing_consideration_question(missing: list[str]) -> str:
     """
-    Build a targeted, domain-grouped chat message asking for missing inputs.
+    Build a concise prompt asking for the remaining missing brief inputs.
 
     Parameters
     ----------
@@ -382,21 +357,9 @@ def _build_missing_consideration_question(missing: list[str]) -> str:
     Returns
     -------
     str
-        Natural-language follow-up question grouped by domain.
+        Concise message prompting the engineer to fill out the form.
     """
-    lookup = {path: (domain, q) for path, domain, q in (*_REQUIRED_FIELDS, _GEOTECH_FIELD)}
-
-    grouped: dict[str, list[str]] = {}
-    for path in missing:
-        domain, question = lookup.get(path, ("Other", path))
-        grouped.setdefault(domain, []).append(question)
-
-    lines = ["I still need the following before I can assemble the loads:\n"]
-    for domain, questions in grouped.items():
-        lines.append(f"**{domain}**")
-        lines.extend(f"- {q}" for q in questions)
-        lines.append("")
-    return "\n".join(lines).rstrip()
+    return "Please complete the remaining required design parameters in the form below."
 
 
 def _build_load_definition_from_parameters(
@@ -808,7 +771,8 @@ async def _collect_design_considerations(
     # ── Step 2: LLM extraction — extracts only, never invents ─────────────────
     try:
         raw = await _get_llm().ainvoke(
-            _considerations_extraction_prompt(last.text, design_code)
+            _considerations_extraction_prompt(last.text, design_code),
+            config={"tags": ["utility"]}
         )
         content = raw.text.replace("```json", "").replace("```", "").strip()
         extracted: dict = json.loads(content)

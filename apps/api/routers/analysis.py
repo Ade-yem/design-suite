@@ -436,7 +436,7 @@ async def get_member_analysis_result(
 
 
 @router.delete("/{project_id}/results", status_code=status.HTTP_204_NO_CONTENT)
-def clear_analysis_results(
+async def clear_analysis_results(
     project_id: str,
     project: ProjectResponse = Depends(require_loading_defined),
 ) -> None:
@@ -449,5 +449,5 @@ def clear_analysis_results(
     project : ProjectResponse
         Gate dependency.
     """
-    analysis_service.clear(project_id)
+    await analysis_service.clear(project_id)
     logger.info("Analysis results cleared for project %s.", project_id)

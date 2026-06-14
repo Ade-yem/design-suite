@@ -1,41 +1,16 @@
-"""
-services/agents/parser.py (Vision Agent)
-==========================================
-Vision Agent node — the "Eyes" of the pipeline.
-
-Responsibilities
-----------------
-1. Trigger async DXF/PDF parsing via the FastAPI files router.
-2. Detect and surface unit/scale ambiguity **before** anything else.
-3. Classify raw geometry entities into structured structural members.
-4. Summarise the detected structural members for engineer review.
-5. Produce the state update that feeds Gate 1 (geometry_verification_gate).
-"""
 
 from __future__ import annotations
 
-import logging
 import math
 import re
-from datetime import datetime, timezone
+import logging
 from typing import Any, Optional
 from collections import defaultdict
-
-from langchain_core.messages import AIMessage
 
 import shapely.geometry as sg
 from shapely.ops import polygonize, unary_union
 
-from agents.state import StructuralDesignState
-from config import settings
-from services.files import file_service
-from storage.project_store import project_store
-
 logger = logging.getLogger(__name__)
-
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
 
 def _detect_unit_ambiguity(parsed_json: dict) -> dict:
     """
@@ -688,6 +663,7 @@ def _extract_beams_deterministically(beam_candidates: list[dict]) -> list[dict]:
 async def _run_member_extraction(
     project_id: str,
     parsed_json: dict,
+    pdf_path: Optional[str] = None,
 ) -> list[dict]:
     """
     Extract structural members from parsed DXF + optional reference PDF.
@@ -886,120 +862,3 @@ def cross_reference_void_markers(entities: list[dict], members: list[dict]) -> l
                 member["meta"]["slab_type"] = "opening_void"
 
     return members
-
-
-# ─── Node ─────────────────────────────────────────────────────────────────────
-
-
-async def parser_node(state: StructuralDesignState) -> dict:
-    """
-    Vision Agent LangGraph node.
-
-    Called when the pipeline status is ``"created"`` or ``"file_uploaded"``.
-    Triggers parsing, detects unit ambiguity, and builds the geometry summary
-    for Gate 1.
-
-    Parameters
-    ----------
-    state : StructuralDesignState
-        Current pipeline state. Requires ``project_id`` and
-        ``uploaded_file_path`` to be set.
-
-    Returns
-    -------
-    dict
-        Partial state update applied by LangGraph.
-    """
-    project_id = state["project_id"]
-    file_path = state.get("uploaded_file_path")
-
-    log_entry = {
-        "agent": "vision",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-
-    # ── Step 1: upload & trigger parsing ──────────────────────────────────────
-    if not file_path:
-        message = AIMessage(content=(
-            "⚠️ No file path provided. "
-            "Please upload a DXF or PDF drawing to begin."
-        ))
-        return {
-            "messages": [message],
-            "agent_logs": [{**log_entry, "status": "error", "detail": "no_file_path"}],
-            "current_error": "FILE_PARSE_ERROR",
-        }
-
-    # Parse raw geometries
-    parsed = await file_service.parse(project_id, file_path)
-
-    # Initialize logs list
-    logs = []
-
-    # ── Step 4: unit ambiguity detection ──────────────────────────────────────
-    unit_check = _detect_unit_ambiguity(parsed)
-    logs.append({**log_entry, "status": "unit_check", "detail": unit_check})
-
-    parse_job_id = state.get("parse_job_id")
-
-    if unit_check["ambiguous"]:
-        samples = ", ".join(str(round(d, 3)) for d in unit_check["sample_dimensions"])
-        message = AIMessage(content=(
-            "⚠️ **Unit Confirmation Required**\n\n"
-            "I cannot determine with confidence whether the drawing dimensions "
-            f"are in **metres** or **millimetres**.\n\n"
-            f"Sample dimension values: `{samples}`\n\n"
-            "A 6 m beam and a 6 mm beam produce catastrophically different results. "
-            "Please confirm the drawing units before I proceed."
-        ))
-        return {
-            "parsed_structural_json": parsed,
-            "unit_confirmation": unit_check,
-            "parse_job_id": parse_job_id,
-            "messages": [message],
-            "agent_logs": logs + [{**log_entry, "status": "awaiting_unit_confirmation"}],
-            "pipeline_status": "file_uploaded",
-        }
-
-    # ── Step 4.5: extract members if not yet populated ───────────────────────
-    if not parsed.get("members"):
-        logger.info("Extracting structural members via LLM...")
-        # pdf_path = state.get("uploaded_pdf_path")
-        members = await _run_member_extraction(project_id, parsed)
-        members = _deduplicate_beams(members)
-        members = _filter_stub_beams(members)
-        members = cross_reference_void_markers(parsed["entities"], members)
-        parsed["members"] = members
-        
-        # Save structural JSON back to files service and project store
-        await file_service.register_geometry(project_id, parsed)
-        
-        mids = [member.get("member_id") for member in members if member.get("member_id")]
-        await project_store.register_members_batch(project_id, mids)
-
-    # ── Step 5: geometry summary ───────────────────────────────────────────────
-    scale = await file_service.get_scale(project_id)
-    summary = _build_geometry_summary(parsed)
-
-    message = AIMessage(content=(
-        "**Parsing complete.**\n\n"
-        f"{summary}\n\n"
-        f"**Detected units:** {unit_check['detected_unit']} "
-        f"(confidence: {unit_check['confidence']})\n"
-        f"**Scale factor:** `{scale.get('factor', '?')}`\n\n"
-        "**Before we proceed, please confirm:**\n"
-        "1. Are all members correctly identified and classified?\n"
-        "2. Drawing units confirmed as "
-        f"**{unit_check['detected_unit']}**?\n"
-        "3. Any members missed or misclassified?\n\n"
-        "Click **Confirm Geometry** when satisfied, or describe any corrections."
-    ))
-
-    return {
-        "parsed_structural_json": parsed,
-        "unit_confirmation": unit_check,
-        "parse_job_id": parse_job_id,
-        "pipeline_status": "file_uploaded",
-        "messages": [message],
-        "agent_logs": logs + [{**log_entry, "status": "awaiting_verification"}],
-    }

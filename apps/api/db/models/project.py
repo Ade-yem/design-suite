@@ -13,11 +13,6 @@ the User who created it.
 
 from __future__ import annotations
 
-from db.models import Artifact
-from db.models import ProjectDrawing
-from db.models import ProjectDesign
-from db.models import ProjectAnalysis
-
 from db.models.user import User
 from db.models.organisation import Organisation
 
@@ -101,20 +96,8 @@ class Project(Base):
     member_ids: Mapped[list["ProjectMember"]] = relationship(
         "ProjectMember", back_populates="project", cascade="all, delete-orphan"
     )
-    loads: Mapped["ProjectLoad | None"] = relationship(
-        "ProjectLoad", back_populates="project", uselist=False, cascade="all, delete-orphan"
-    )
-    geometry: Mapped["ProjectGeometry | None"] = relationship(
-        "ProjectGeometry", back_populates="project", uselist=False, cascade="all, delete-orphan"
-    )
-    analysis: Mapped["ProjectAnalysis | None"] = relationship(
-        "ProjectAnalysis", back_populates="project", uselist=False, cascade="all, delete-orphan"
-    )
-    design: Mapped["ProjectDesign | None"] = relationship(
-        "ProjectDesign", back_populates="project", uselist=False, cascade="all, delete-orphan"
-    )
-    drawing: Mapped["ProjectDrawing | None"] = relationship(
-        "ProjectDrawing", back_populates="project", uselist=False, cascade="all, delete-orphan"
+    pipeline_results: Mapped[list["PipelineResult"]] = relationship(
+        "PipelineResult", back_populates="project", cascade="all, delete-orphan"
     )
     artifacts: Mapped[list["Artifact"]] = relationship(
         "Artifact", back_populates="project", cascade="all, delete-orphan"
@@ -147,86 +130,3 @@ class ProjectMember(Base):
     member_type: Mapped[str] = mapped_column(String(50), default="beam")
 
     project: Mapped[Project] = relationship("Project", back_populates="member_ids")
-
-
-class ProjectLoad(Base):
-    """
-    Load definition and combination output for a project.
-
-    Stores the raw LoadDefinitionRequest dict and the factored output
-    produced by the LoadCombinationEngine as JSONB columns.
-
-    Attributes
-    ----------
-    id : int
-        Auto-increment PK.
-    project_id : str
-        FK → projects.project_id (one-to-one).
-    definition : dict | None
-        The submitted LoadDefinitionRequest as a JSON object.
-    output : dict | None
-        The factored MemberLoadOutput produced by run_combinations.
-    created_at : datetime
-        UTC timestamp of first submission.
-    updated_at : datetime
-        UTC timestamp of last update.
-    """
-
-    __tablename__ = "project_loads"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    project_id: Mapped[str] = mapped_column(
-        String, ForeignKey("projects.project_id", ondelete="CASCADE"), unique=True, nullable=False
-    )
-    definition: Mapped[str | None] = mapped_column(Text, nullable=True)   # stored as JSON string
-    output: Mapped[str | None] = mapped_column(Text, nullable=True)       # stored as JSON string
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-
-    project: Mapped[Project] = relationship("Project", back_populates="loads")
-
-
-class ProjectGeometry(Base):
-    """
-    Parsed structural geometry JSON for a project (output of the Parser Agent).
-
-    Stores the Structural JSON Schema produced after DXF/PDF parsing.
-    Also records whether the human engineer has confirmed/verified the geometry
-    (Safety Gate 1).
-
-    Attributes
-    ----------
-    id : int
-        Auto-increment PK.
-    project_id : str
-        FK → projects.project_id (one-to-one).
-    geometry : str
-        Full StructuralDesignState geometry JSON as a text string.
-    verified_at : datetime | None
-        UTC timestamp when the engineer confirmed the parsed geometry.
-    updated_at : datetime
-        UTC timestamp of last parser update.
-    """
-
-    __tablename__ = "project_geometry"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    project_id: Mapped[str] = mapped_column(
-        String, ForeignKey("projects.project_id", ondelete="CASCADE"), unique=True, nullable=False
-    )
-    geometry: Mapped[str] = mapped_column(Text, nullable=False)
-    scale_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-
-    project: Mapped[Project] = relationship("Project", back_populates="geometry")
