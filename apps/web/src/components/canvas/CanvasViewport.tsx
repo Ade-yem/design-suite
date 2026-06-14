@@ -26,6 +26,7 @@ import {
   useImperativeHandle,
 } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
+import { useAnalysisStore } from "@/stores/analysisStore";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { screenToWorld, zoomTowardPoint } from "@/lib/canvas/transform";
@@ -237,6 +238,28 @@ export const CanvasViewport = forwardRef<
       });
   }, [activeProject, projectId, setAnalysisResults]);
 
+  // ── Fetch full analysis + design results for the member detail drawer ─────
+  const fetchAnalysisDetail = useAnalysisStore((s) => s.fetchResults);
+  const fetchDesignDetail = useAnalysisStore((s) => s.fetchDesign);
+  useEffect(() => {
+    if (
+      !activeProject ||
+      activeProject.project_id !== projectId ||
+      activeProject.pipeline_status_ordinal < 4 // ANALYSIS_COMPLETE = 4
+    ) {
+      return;
+    }
+    fetchAnalysisDetail(projectId);
+    fetchDesignDetail(projectId);
+  }, [activeProject, projectId, fetchAnalysisDetail, fetchDesignDetail]);
+
+  // Whether the analysis drawer experience is unlocked for this project.
+  const analysisReady =
+    !!activeProject &&
+    activeProject.project_id === projectId &&
+    activeProject.pipeline_status_ordinal >= 4;
+  const openMemberDrawer = useAnalysisStore((s) => s.openForMember);
+
 
   useEffect(() => {
     fetchExistingGeometry();
@@ -384,6 +407,12 @@ export const CanvasViewport = forwardRef<
       canvas.height,
     );
     selectMember(hitId);
+
+    // Once analysis is complete, clicking a member opens the analysis &
+    // calculation verification drawer for it.
+    if (hitId && analysisReady) {
+      openMemberDrawer(hitId);
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -641,13 +670,21 @@ export const CanvasViewport = forwardRef<
               />
             )}
 
-            {selectedMember && (
+            {/* Geometry editor is only for the pre-analysis phase; once
+                analysis is complete the member analysis drawer takes over. */}
+            {selectedMember && !analysisReady && (
               <PropertyInspector
                 selectedMember={selectedMember}
                 onDeselect={() => selectMember(null)}
                 onDelete={handleDeleteMember}
                 onSave={handleSaveProperties}
               />
+            )}
+
+            {analysisReady && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-full bg-card/90 backdrop-blur-sm border border-border/50 shadow-sm text-[11px] text-muted-foreground pointer-events-none">
+                Analysis complete — click a member to inspect its calculations
+              </div>
             )}
           </>
         )}
