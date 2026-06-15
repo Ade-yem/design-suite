@@ -13,10 +13,12 @@ import { ProjectPrompt } from "@/components/ProjectPrompt";
 import { NewProjectModal } from "@/components/NewProjectModal";
 import { PipelineRail } from "@/components/PipelineRail";
 import { ArtifactsDrawer } from "@/components/ArtifactsDrawer";
+import { MemberAnalysisDrawer } from "@/components/analysis/MemberAnalysisDrawer";
 import { pipelineStatusToStage } from "@/lib/pipelineStatus";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useArtifactStore } from "@/stores/artifactStore";
+import { useAnalysisStore } from "@/stores/analysisStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/project";
@@ -85,6 +87,7 @@ export default function WorkspacePage(): JSX.Element {
   } = useProjectStore();
   const { chatOpen, setChatOpen } = useUIStore();
   const { fetchArtifacts } = useArtifactStore();
+  const clearAnalysis = useAnalysisStore((s) => s.clear);
 
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showUploadNudge, setShowUploadNudge] = useState(false);
@@ -123,6 +126,9 @@ export default function WorkspacePage(): JSX.Element {
   });
 
   useEffect(() => {
+    // Reset the per-member analysis drawer state whenever the project changes
+    // so a drawer opened on a previous project never leaks across.
+    clearAnalysis();
     if (activeProject) {
       refreshActiveProject().finally(() => {
       });
@@ -187,8 +193,9 @@ export default function WorkspacePage(): JSX.Element {
                   onUploadStart={() => setShowUploadNudge(false)}
                 />
               </div>
-              {/* Right side: Artifacts drawer + Chat sidebar */}
+              {/* Right side: Member analysis drawer + Artifacts drawer + Chat sidebar */}
               <div className="flex shrink-0 overflow-hidden relative">
+                <MemberAnalysisDrawer />
                 <ArtifactsDrawer />
                 {chatOpen && (
                   <div
