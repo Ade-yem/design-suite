@@ -20,6 +20,7 @@ import * as React from "react";
 import {
   useState,
   useCallback,
+  useMemo,
   useRef,
   useEffect,
   forwardRef,
@@ -37,6 +38,7 @@ import { hitTestMembers } from "@/lib/canvas/hitTest";
 import type { Point, ParsedGeometry } from "@/types/canvas";
 
 import { CanvasToolbar } from "./CanvasToolbar";
+import { FloorSwitcher } from "./FloorSwitcher";
 import { CoordinateReadout } from "./CoordinateReadout";
 import { MemberTooltip } from "./MemberTooltip";
 import { PropertyInspector } from "./PropertyInspector";
@@ -110,7 +112,27 @@ export const CanvasViewport = forwardRef<
     toggleLabelType,
     toggleLabelMember,
     resetLabelVisibility,
+    activeStorey,
+    setActiveStorey,
   } = useCanvasStore();
+
+  // Members visible on the canvas — filtered to the active storey when the
+  // geometry has been extrapolated into multiple floors. Members without a
+  // storey (single typical floor) are always shown.
+  const visibleMembers = useMemo(
+    () =>
+      activeStorey
+        ? members.filter((m) => !m.storey || m.storey === activeStorey)
+        : members,
+    [members, activeStorey]
+  );
+
+  // Distinct storey codes available for the floor switcher.
+  const storeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of members) if (m.storey) set.add(m.storey);
+    return Array.from(set).sort();
+  }, [members]);
 
 
   // ── Component State ──────────────────────────────────────────────────────
@@ -304,7 +326,7 @@ export const CanvasViewport = forwardRef<
     drawDotGrid(ctx, canvas.width, canvas.height, zoom, pan);
 
     // 2. Draw structural members with optional analysis overlay
-    for (const member of members) {
+    for (const member of visibleMembers) {
       const isSelected = member.member_id === selectedMemberId;
       const isHovered = member.member_id === hoveredMemberId;
       const analysisStatus =
@@ -315,7 +337,7 @@ export const CanvasViewport = forwardRef<
     // 3. Draw labels and dimension pills on top, with visibility filters
     drawAllLabels(
       ctx,
-      members,
+      visibleMembers,
       zoom,
       pan,
       canvas.width,
@@ -324,7 +346,7 @@ export const CanvasViewport = forwardRef<
       hiddenLabelTypes,
       hiddenLabelIds
     );
-  }, [members, zoom, pan, selectedMemberId, hoveredMemberId, analysisOverlay, memberAnalysisMap, hiddenLabelTypes, hiddenLabelIds]);
+  }, [visibleMembers, zoom, pan, selectedMemberId, hoveredMemberId, analysisOverlay, memberAnalysisMap, hiddenLabelTypes, hiddenLabelIds]);
 
 
   // Setup rendering trigger
@@ -401,7 +423,7 @@ export const CanvasViewport = forwardRef<
 
     const hitId = hitTestMembers(
       clickScreen,
-      members,
+      visibleMembers,
       zoom,
       pan,
       canvas.height,
@@ -434,7 +456,7 @@ export const CanvasViewport = forwardRef<
     } else if (activeTool === "select") {
       const hoveredId = hitTestMembers(
         mouseScreen,
-        members,
+        visibleMembers,
         zoom,
         pan,
         canvas.height,
@@ -629,6 +651,14 @@ export const CanvasViewport = forwardRef<
               onRegenerateLayout={handleRegenerateLayout}
               isRegenerating={isRegenerating}
             />
+
+            {storeys.length > 1 && (
+              <FloorSwitcher
+                storeys={storeys}
+                activeStorey={activeStorey}
+                onChange={setActiveStorey}
+              />
+            )}
 
             <CanvasToolbar
               activeTool={activeTool}

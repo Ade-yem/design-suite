@@ -105,6 +105,10 @@ export interface GeometricMember {
   boundary_polygon?: Point[] | null;
   meta: MemberMeta;
   spans_m?: number[];
+  /** Storey code (e.g. "L01"), present once multi-storey extrapolation has run. */
+  storey?: string | null;
+  /** Elevation of the storey above the base (m). */
+  elevation_m?: number | null;
 }
 
 // ── Scale & Parsing Metadata ────────────────────────────────────────────────
