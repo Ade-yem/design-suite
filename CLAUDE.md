@@ -67,6 +67,8 @@ API docs available at `http://localhost:5000/api/docs` when backend is running.
 
 ## Architecture
 
+Always refer to the [pipeline architecture document](./guides/pipeline_architecture.md)
+
 ### LangGraph Agent Pipeline
 
 The backbone is a `StateGraph` in `apps/api/agents/graph.py`. Every node reads from and writes partial updates to `StructuralDesignState` (`agents/state.py`) — this is the most important object in the system.

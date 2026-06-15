@@ -88,12 +88,12 @@ export function BlueprintIcon({ state = "", className, ...props }: BlueprintIcon
 
       <defs>
         <linearGradient id="tech-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="var(--brand-primary)" />
-          <stop offset="100%" stop-color="var(--brand-secondary)" />
+          <stop offset="0%" stopColor="var(--brand-primary)" />
+          <stop offset="100%" stopColor="var(--brand-secondary)" />
         </linearGradient>
       </defs>
-
-      <g className="structural-axis" transform-origin="50 50">
+        {/* @ts-ignore */}
+      <g className="structural-axis" transformOrigin="50 50">
         <line x1="50" y1="5" x2="50" y2="95" />
         <line x1="5" y1="50" x2="95" y2="50" />
         <circle cx="50" cy="50" r="35" />
@@ -106,8 +106,8 @@ export function BlueprintIcon({ state = "", className, ...props }: BlueprintIcon
         className="vector-frame"
         d="M 50,14 L 82,32 L 82,68 L 50,86 L 18,68 L 18,32 Z M 50,14 L 50,50 M 82,32 L 50,50 M 82,68 L 50,50 M 50,86 L 50,50 M 18,68 L 50,50 M 18,32 L 50,50"
       />
-
-      <circle className="ai-core-node" cx="50" cy="50" r="4.5" transform-origin="50 50" />
+      {/* @ts-ignore */}
+      <circle className="ai-core-node" cx="50" cy="50" r="4.5" transformOrigin="50 50" />
     </svg>
   );
 }

@@ -43,7 +43,7 @@ class ColumnLoadAssembler:
         self_weight_gk: float,
         code: DesignCode,
         is_flat_slab: bool = False
-    ) -> Dict[str, float]:
+    ) -> Dict[str, float | str]:
         """
         Accumulates total column design loads.
         If is_flat_slab is True, incoming_gk/qk are assumed to be direct slab reactions.
@@ -76,6 +76,13 @@ class WallLoadAssembler:
         length_m: float = 1.0 # Calculated per meter run
     ) -> float:
         """Returns the self-weight (Gk) of the wall per meter run per storey."""
+        if thickness_mm <= 0.0:
+            raise ValueError(f"Wall thickness must be positive, got {thickness_mm}")
+        if height_m <= 0.0:
+            raise ValueError(f"Wall height must be positive, got {height_m}")
+        if length_m <= 0.0:
+            raise ValueError(f"Wall length must be positive, got {length_m}")
+            
         vol_m3 = (thickness_mm / 1000.0) * height_m * length_m
         return vol_m3 * MaterialWeightTable.get_rc_weight()
 
@@ -86,18 +93,28 @@ class WallLoadAssembler:
         thickness_mm: float,
         height_m: float,
         code: DesignCode,
+        num_floors_supported: int = 1,
         eccentricity_mm: Optional[float] = None
     ) -> Dict[str, Any]:
         """
-        Assemble the total design line load (kN/m) for a loadbearing wall.
+        Assemble the total design line load (kN/m) for a loadbearing wall,
+        integrating live load reductions based on the number of storeys supported.
         """
+        if num_floors_supported < 1:
+            raise ValueError(f"Number of supported floors must be >= 1, got {num_floors_supported}")
+        if incoming_gk_m < 0.0:
+            raise ValueError(f"Incoming dead load (Gk) cannot be negative, got {incoming_gk_m}")
+        if incoming_qk_m < 0.0:
+            raise ValueError(f"Incoming live load (Qk) cannot be negative, got {incoming_qk_m}")
+        reduction = ColumnLoadAssembler.get_load_reduction_factor(num_floors_supported)
+        
         self_weight = WallLoadAssembler.calculate_self_weight(thickness_mm, height_m)
         
         total_gk_m = incoming_gk_m + self_weight
-        total_qk_m = incoming_qk_m
+        reduced_qk_m = incoming_qk_m * reduction
         
         uls_load_m = LoadCombinationEngine.factor_loads(
-            total_gk_m, total_qk_m, 0, code, LimitState.ULS_DOMINANT
+            total_gk_m, reduced_qk_m, 0, code, LimitState.ULS_DOMINANT
         )
         
         # Nominal moment due to eccentric loading
@@ -108,9 +125,10 @@ class WallLoadAssembler:
 
         return {
             "total_gk_m": round(total_gk_m, 2),
-            "total_qk_m": round(total_qk_m, 2),
+            "total_qk_m": round(reduced_qk_m, 2),
             "uls_axial_load_m": round(uls_load_m, 2),
-            "eccentric_moment_uls": round(nominal_moment_uls, 2)
+            "eccentric_moment_uls": round(nominal_moment_uls, 2),
+            "reduction_factor": reduction
         }
 
 

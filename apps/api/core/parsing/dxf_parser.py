@@ -247,6 +247,19 @@ class RawEntity:
     """
     One geometric entity extracted from the DXF.
     All coordinates are in millimetres.
+
+    Attributes:
+        entity_id: Unique string identifier for the entity.
+        dxf_type: The DXF entity type (e.g., LINE, LWPOLYLINE).
+        layer: The CAD layer name.
+        layer_hint: Heuristic structural classification.
+        geometry: Dictionary containing entity geometry data.
+        bounding_box: BoundingBox object representing the spatial limits.
+        attributes: Additional CAD attributes and metadata.
+        spatial_hash: Spatial grid key.
+        flags: Semantic tags (e.g., void).
+        source_handle: Traceable handle to the original DXF entity.
+        layout_name: The sheet tab or layout name (default "Model").
     """
     entity_id: str
     dxf_type: str
@@ -258,8 +271,15 @@ class RawEntity:
     spatial_hash: str = ""
     flags: list[str] = field(default_factory=list)
     source_handle: str = ""   # ezdxf entity handle for traceability
+    layout_name: str = "Model"
 
     def to_dict(self) -> dict:
+        """
+        Serialize the raw entity to a dictionary.
+
+        Returns:
+            A dictionary representation of the RawEntity.
+        """
         return {
             "entity_id": self.entity_id,
             "dxf_type": self.dxf_type,
@@ -271,7 +291,9 @@ class RawEntity:
             "spatial_hash": self.spatial_hash,
             "flags": self.flags,
             "source_handle": self.source_handle,
+            "layout_name": self.layout_name,
         }
+
 
 
 @dataclass
@@ -363,6 +385,9 @@ class DXFGeometricExtractor:
             logger.info("  → Extracting from layout: %s", layout.name)
             layout_entities = self._extract_layout(layout)
             all_entities.extend(layout_entities)
+
+        # Run layout validation to detect and reject side-by-side floor layouts
+        self._validate_layout_separation(all_entities)
 
         # Build layer map and per-layer hints
         layer_map: dict[str, list[str]] = {}
@@ -552,13 +577,137 @@ class DXFGeometricExtractor:
         else:
             # Process modelspace by default
             layouts.append(doc.modelspace())
-            # Include any additional model-space-type layouts
+            # Include any additional layouts (model space or paper space sheets) containing structural data
             for layout in doc.layouts:
-                if layout.name not in ("Model", "*Model_Space") and not layout.is_any_paperspace:
-                    layouts.append(layout)
-                    logger.info("Found additional layout: %s", layout.name)
+                if layout.name in ("Model", "*Model_Space"):
+                    continue
+                
+                # If it's a paperspace layout, check if it contains structural entities
+                # to avoid processing empty template layouts like Layout1/Layout2.
+                if layout.is_any_paperspace:
+                    has_structural_ents = False
+                    for ent in layout:
+                        layer = ent.dxf.layer.lower() if hasattr(ent, "dxf") and hasattr(ent.dxf, "layer") else ""
+                        if any(keyword in layer for keyword in ("beam", "column", "col", "slab", "wall")):
+                            has_structural_ents = True
+                            break
+                    if not has_structural_ents:
+                        continue
+
+                layouts.append(layout)
+                logger.info("Found additional layout: %s", layout.name)
 
         return layouts
+
+    def _validate_layout_separation(self, entities: list[RawEntity]) -> None:
+        """
+        Validate that the drawing does not contain multiple floor plans
+        drawn side-by-side or stacked vertically in a single layout sheet.
+
+        Heuristic:
+        1. Find any floor/plan titles (e.g., 'GROUND FLOOR PLAN', 'FIRST FLOOR').
+        2. If multiple distinct floor titles are present and horizontally/vertically
+           separated by > 15m, raise a validation error.
+        3. As a fallback, if a single layout tab has a spatial gap > 15m in structural members
+           with at least 5 members on each side, reject it.
+
+        Args:
+            entities: List of extracted RawEntity instances.
+
+        Raises:
+            ValueError: If multiple plans are detected side-by-side or stacked.
+        """
+        from collections import defaultdict
+        entities_by_layout = defaultdict(list)
+        for ent in entities:
+            entities_by_layout[ent.layout_name].append(ent)
+
+        for layout_name, layout_ents in entities_by_layout.items():
+            # 1. Look for floor plan titles
+            floor_titles = []
+            for ent in layout_ents:
+                if ent.dxf_type in ("TEXT", "MTEXT") and "text_content" in ent.attributes:
+                    text_content = ent.attributes.get("text_content")
+                    if text_content:
+                        text_upper = text_content.strip().upper()
+                        # Match words like GROUND FLOOR, FIRST FLOOR, 1ST FLOOR, ROOF PLAN
+                        if re.search(
+                            r"\b(GROUND|FIRST|SECOND|THIRD|FOURTH|FIFTH|ROOF|1ST|2ND|3RD|4TH|5TH|TYPICAL)\s+(FLOOR|PLAN|LAYOUT)\b",
+                            text_upper
+                        ):
+                            floor_titles.append(ent)
+
+            # Check if there are multiple unique floor titles separated by a significant distance
+            if len(floor_titles) >= 2:
+                # Find distinct labels (skip exact duplicates within small proximity)
+                unique_titles: list[RawEntity] = []
+                for title in floor_titles:
+                    text_content = title.attributes.get("text_content")
+                    if not text_content:
+                        continue
+                    text = text_content.strip().upper()
+                    # Check if this title is too close to an already registered title of the same content
+                    if not any(
+                        t.attributes.get("text_content", "").strip().upper() == text
+                        and math.hypot(
+                            t.bounding_box.centroid[0] - title.bounding_box.centroid[0],
+                            t.bounding_box.centroid[1] - title.bounding_box.centroid[1]
+                        ) < 5000.0  # 5m proximity threshold
+                        for t in unique_titles
+                    ):
+                        unique_titles.append(title)
+
+                if len(unique_titles) >= 2:
+                    # Check if any two distinct titles are separated horizontally or vertically by > 15m
+                    for idx, t1 in enumerate(unique_titles):
+                        for t2 in unique_titles[idx+1:]:
+                            c1 = t1.bounding_box.centroid
+                            c2 = t2.bounding_box.centroid
+                            dx = abs(c1[0] - c2[0])
+                            dy = abs(c1[1] - c2[1])
+                            if dx > 15000.0 or dy > 15000.0:
+                                t1_text = t1.attributes.get("text_content", "Unknown")
+                                t2_text = t2.attributes.get("text_content", "Unknown")
+                                raise ValueError(
+                                    "INVALID_LAYOUT_STRUCTURE: Multiple plans detected side-by-side or stacked in Model space or layout "
+                                    f"'{layout_name}' (Titles found: '{t1_text}' and '{t2_text}'). "
+                                    "Please arrange each floor layout in a separate sheet/tab."
+                                )
+
+            # 2. Fallback: Structural member density spatial gap check
+            structural_candidates = [
+                ent for ent in layout_ents
+                if ent.layer_hint in ("beam_candidate", "column_candidate", "slab_candidate")
+                or any(keyword in ent.layer.lower() for keyword in ("beam", "column", "col", "slab", "wall"))
+            ]
+            if len(structural_candidates) < 15:
+                continue
+
+            # Check horizontal gaps
+            x_coords = sorted(ent.bounding_box.centroid[0] for ent in structural_candidates)
+            for i in range(len(x_coords) - 1):
+                gap = x_coords[i+1] - x_coords[i]
+                if gap > 15000.0:  # 15 meters
+                    left_count = sum(1 for x in x_coords if x <= x_coords[i])
+                    right_count = sum(1 for x in x_coords if x >= x_coords[i+1])
+                    if left_count >= 5 and right_count >= 5:
+                        raise ValueError(
+                            "INVALID_LAYOUT_STRUCTURE: Multiple plans detected side-by-side in Model space or layout "
+                            f"'{layout_name}'. Please arrange each floor layout in a separate sheet/tab."
+                        )
+
+            # Check vertical gaps
+            y_coords = sorted(ent.bounding_box.centroid[1] for ent in structural_candidates)
+            for i in range(len(y_coords) - 1):
+                gap = y_coords[i+1] - y_coords[i]
+                if gap > 15000.0:  # 15 meters
+                    bottom_count = sum(1 for y in y_coords if y <= y_coords[i])
+                    top_count = sum(1 for y in y_coords if y >= y_coords[i+1])
+                    if bottom_count >= 5 and top_count >= 5:
+                        raise ValueError(
+                            "INVALID_LAYOUT_STRUCTURE: Multiple plans detected side-by-side/stacked in Model space or layout "
+                            f"'{layout_name}'. Please arrange each floor layout in a separate sheet/tab."
+                        )
 
     # ------------------------------------------------------------------
     # Per-layout extraction
@@ -572,6 +721,8 @@ class DXFGeometricExtractor:
             try:
                 extracted = self._dispatch_entity(dxf_entity)
                 if extracted:
+                    for ent in extracted:
+                        ent.layout_name = layout.name
                     entities.extend(extracted)
             except Exception as exc:
                 handle = getattr(dxf_entity, "dxf", None)

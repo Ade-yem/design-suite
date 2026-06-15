@@ -12,6 +12,11 @@ from shapely.ops import polygonize, unary_union
 
 logger = logging.getLogger(__name__)
 
+_BEAM_SNAP_MM        = 650.0  # contiguity snap radius (matches column-snap tolerance)
+_COLLINEAR_PERP_MM   = 150.0  # max perpendicular offset to be considered on the same line
+_COLLINEAR_ANGLE_TOL = 0.02   # |sin(θ)| threshold ≈ 1.1° off parallel
+
+
 def _detect_unit_ambiguity(parsed_json: dict) -> dict:
     """
     Heuristic scale / unit detection from parsed geometry.
@@ -278,15 +283,19 @@ def _prepare_candidates_summary(parsed_json: dict) -> list[dict]:
                 "bbox": bbox,
                 "spatial": spatial,
                 "flags": flags,
+                "layout_name": ent.get("layout_name", "Model"),
                 "nearest_text": []
             }
             candidates.append(cand)
             
-    # For each candidate, find the nearest 5 text annotations
+    # For each candidate, find the nearest 5 text annotations within the same layout sheet
     for cand in candidates:
         cc = cand["centroid"]
+        cand_layout = cand.get("layout_name")
         texts_with_dist = []
         for tent in text_ents:
+            if tent.get("layout_name") != cand_layout:
+                continue
             tc = tent.get("bounding_box", {}).get("centroid", tent.get("geometry", {}).get("insertion_point", [0.0, 0.0]))
             dist = math.hypot(cc[0] - tc[0], cc[1] - tc[1])
             content = tent.get("attributes", {}).get("text_content", "")
@@ -390,6 +399,234 @@ def _filter_stub_beams(members: list[dict], min_span_m: float = 0.1) -> list[dic
     return result
 
 
+def _group_collinear_beam_runs(members: list[dict]) -> list[dict]:
+    """
+    Group collinear, contiguous beam segments into single multi-span members.
+
+    DXF drawings produce one beam segment per column-to-column span.  This
+    function detects runs of co-linear, end-to-end segments and merges them
+    into a single member with ``spans_m = [L1, L2, ...]``, allowing the
+    analysis engine to route the member to ``MomentCoefficientSolver`` for
+    continuous-beam analysis.
+
+    Three criteria must all be satisfied for two segments to be merged:
+
+    * **Parallel** – angle between direction vectors < ``_COLLINEAR_ANGLE_TOL``
+    * **Contiguous** – at least one endpoint pair is within ``_BEAM_SNAP_MM``
+    * **Collinear** – perpendicular offset between the two lines < ``_COLLINEAR_PERP_MM``
+
+    Merging is transitive (Union-Find), so a three-segment run B1–B2–B3
+    collapses into one member even if B1 and B3 never satisfy the criteria
+    directly.
+    """
+    beams: list[dict] = []
+    non_beams: list[dict] = []
+    ungroupable: list[dict] = []
+
+    for m in members:
+        if m.get("member_type") == "beam":
+            beams.append(m)
+        else:
+            non_beams.append(m)
+
+    n = len(beams)
+    if n <= 1:
+        return members
+
+    # ── Canonical unit direction per beam ────────────────────────────────────
+    dirs: list[tuple[float, float] | None] = []
+    for b in beams:
+        s = b.get("start_point")
+        e = b.get("end_point")
+        if not s or not e:
+            dirs.append(None)
+            continue
+        dx = e["x"] - s["x"]
+        dy = e["y"] - s["y"]
+        length = math.hypot(dx, dy)
+        if length < 1e-6:
+            dirs.append(None)
+            continue
+        # Canonicalize so reversed segments share the same direction
+        if dx < -1e-9 or (abs(dx) < 1e-9 and dy < -1e-9):
+            dx, dy = -dx, -dy
+        dirs.append((dx / length, dy / length))
+
+    # ── Union-Find ────────────────────────────────────────────────────────────
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x: int, y: int) -> None:
+        parent[find(x)] = find(y)
+
+    def endpoints(b: dict) -> list[tuple[float, float]]:
+        s = b["start_point"]
+        e = b["end_point"]
+        return [(s["x"], s["y"]), (e["x"], e["y"])]
+
+    for i in range(n):
+        dir_i = dirs[i]
+        if dir_i is None:
+            continue
+        for j in range(i + 1, n):
+            dir_j = dirs[j]
+            if dir_j is None:
+                continue
+            if find(i) == find(j):
+                continue
+
+            ux_i, uy_i = dir_i
+            ux_j, uy_j = dir_j
+
+            # Parallel test
+            cross = abs(ux_i * uy_j - uy_i * ux_j)
+            if cross >= _COLLINEAR_ANGLE_TOL:
+                continue
+
+            # Contiguous test
+            pts_i = endpoints(beams[i])
+            pts_j = endpoints(beams[j])
+            min_dist = min(
+                math.hypot(pi[0] - pj[0], pi[1] - pj[1])
+                for pi in pts_i
+                for pj in pts_j
+            )
+            if min_dist > _BEAM_SNAP_MM:
+                continue
+
+            # Collinear test — perpendicular distance from beam_j.start to line of beam_i
+            si = beams[i]["start_point"]
+            sj = beams[j]["start_point"]
+            vx = sj["x"] - si["x"]
+            vy = sj["y"] - si["y"]
+            perp = abs(vx * uy_i - vy * ux_i)  # |v × dir_i| (unit dir → no divide)
+            if perp >= _COLLINEAR_PERP_MM:
+                continue
+
+            union(i, j)
+
+    # ── Group by root ─────────────────────────────────────────────────────────
+    groups: dict[int, list[int]] = defaultdict(list)
+    for i in range(n):
+        groups[find(i)].append(i)
+
+    merged: list[dict] = []
+
+    for root, indices in groups.items():
+        if len(indices) == 1:
+            merged.append(beams[indices[0]])
+            continue
+
+        group_beams = [beams[i] for i in indices]
+
+        # Canonical direction from the longest segment in the group
+        def seg_length(b: dict) -> float:
+            s, e = b["start_point"], b["end_point"]
+            return math.hypot(e["x"] - s["x"], e["y"] - s["y"])
+
+        longest = max(group_beams, key=seg_length)
+        d = dirs[beams.index(longest)]
+        if d is None:
+            merged.extend(group_beams)
+            continue
+        ux, uy = d
+
+        # Sort by midpoint projection onto canonical direction
+        def midpoint_proj(b: dict) -> float:
+            mx = (b["start_point"]["x"] + b["end_point"]["x"]) / 2
+            my = (b["start_point"]["y"] + b["end_point"]["y"]) / 2
+            return mx * ux + my * uy
+
+        sorted_segs = sorted(group_beams, key=midpoint_proj)
+
+        # Orient each segment so start-projection <= end-projection
+        oriented: list[dict] = []
+        for seg in sorted_segs:
+            s, e = seg["start_point"], seg["end_point"]
+            if s["x"] * ux + s["y"] * uy <= e["x"] * ux + e["y"] * uy:
+                oriented.append(seg)
+            else:
+                flipped = dict(seg)
+                flipped["start_point"] = e
+                flipped["end_point"] = s
+                oriented.append(flipped)
+
+        # Validate chain continuity
+        valid_chain = True
+        for k in range(len(oriented) - 1):
+            e_k = oriented[k]["end_point"]
+            s_k1 = oriented[k + 1]["start_point"]
+            gap = math.hypot(e_k["x"] - s_k1["x"], e_k["y"] - s_k1["y"])
+            if gap > _BEAM_SNAP_MM:
+                logger.warning(
+                    "Collinear run has a gap of %.0f mm between segments %s and %s — "
+                    "skipping merge for this group",
+                    gap,
+                    oriented[k].get("member_id"),
+                    oriented[k + 1].get("member_id"),
+                )
+                valid_chain = False
+                break
+
+        if not valid_chain:
+            merged.extend(group_beams)
+            continue
+
+        # Check section consistency
+        first_meta = oriented[0].get("meta", {})
+        b_mm = first_meta.get("b_mm", 225.0)
+        h_mm = first_meta.get("h_mm", 450.0)
+        for seg in oriented[1:]:
+            sb = seg.get("meta", {}).get("b_mm", 225.0)
+            sh = seg.get("meta", {}).get("h_mm", 450.0)
+            if abs(sb - b_mm) > 1 or abs(sh - h_mm) > 1:
+                logger.warning(
+                    "Merged beam run starting at %s has mixed sections — using first segment's section",
+                    oriented[0].get("member_id"),
+                )
+                break
+
+        spans_m = [
+            round(seg_length(seg) / 1000.0, 4) for seg in oriented
+        ]
+        total_L = round(sum(spans_m), 4)
+        I_val = round((b_mm / 1000.0) * ((h_mm / 1000.0) ** 3) / 12.0, 6)
+
+        rep = dict(oriented[0])
+        rep["member_id"] = oriented[0]["member_id"]
+        rep["start_point"] = oriented[0]["start_point"]
+        rep["end_point"] = oriented[-1]["end_point"]
+        rep["meta"] = {
+            **first_meta,
+            "b_mm": b_mm,
+            "h_mm": h_mm,
+            "L_clear": total_L,
+            "E": first_meta.get("E", 30e6),
+            "I": I_val,
+        }
+        rep["spans_m"] = spans_m
+        rep["spans"] = [
+            {"span_id": f"S{i + 1}", "length_m": L}
+            for i, L in enumerate(spans_m)
+        ]
+
+        logger.info(
+            "Grouped %d segments → %s (%d spans: %s)",
+            len(oriented),
+            rep["member_id"],
+            len(spans_m),
+            spans_m,
+        )
+        merged.append(rep)
+
+    return non_beams + merged
+
+
 def classify_columns_deterministically(col_candidates: list[dict], beam_members: list[dict]) -> list[dict]:
     """
     Deterministic column classification. Uses a structural beam footprint 
@@ -470,6 +707,7 @@ def classify_columns_deterministically(col_candidates: list[dict], beam_members:
             "center_point": {"x": centroid[0], "y": centroid[1]},
             "boundary_polygon": None,
             "is_void": False,
+            "layout_name": c.get("layout_name", "Model"),
             "meta": {
                 "b": int(b_mm),
                 "h": int(h_mm),
@@ -646,6 +884,7 @@ def _extract_beams_deterministically(beam_candidates: list[dict]) -> list[dict]:
             "center_point": None,
             "boundary_polygon": None,
             "is_void": False,
+            "layout_name": cand.get("layout_name", "Model"),
             "meta": {
                 "b_mm": b_mm,
                 "h_mm": h_mm,
@@ -697,42 +936,46 @@ async def _run_member_extraction(
     if not candidates:
         return parsed_json.get("members", [])
 
+    candidates_by_layout: dict[str, list[dict]] = {}
+    for c in candidates:
+        layout = c.get("layout_name", "Model")
+        candidates_by_layout.setdefault(layout, []).append(c)
+
+    all_extracted_members: list[dict] = []
+    
     _COL_FLAGS = {"rectangular_outline", "circular_section"}
+    
+    # Global slab index counter to ensure unique typical IDs across sheets
+    slab_id_counter = 1
 
-    # ── Stage 1: extract beams deterministically ──────────────────────────────
-    beam_candidates = [
-        c for c in candidates
-        if c.get("layer_hint") == "beam_candidate"
-        and not (_COL_FLAGS & set(c.get("flags", [])))
-    ]
-    beam_members = _extract_beams_deterministically(beam_candidates)
-    logger.info(
-        "Deterministic beam extraction: %d beams for project %s",
-        len(beam_members), project_id,
-    )
-
-    # ── Stage 2: Column classification
-    col_candidates = [
-        c for c in candidates
-        if c.get("layer_hint") == "column_candidate"
-        or (_COL_FLAGS & set(c.get("flags", [])))
-    ]
-
-    col_members = classify_columns_deterministically(col_candidates, beam_members)
-    logger.info(
-        "Deterministic column extraction: %d columns for project",
-        len(col_members)
-    )
-
-    # ── Stage 3: slab + void extraction ──────────────────────────────
-    # Combine beams and columns for slab extraction
-    combined = col_members + beam_members
-    slab_members: list[dict] = extract_slabs_deterministically(combined)
-    logger.info(
-        "Deterministic slab extraction: %d slabs for project",
-        len(slab_members))
+    for layout, layout_candidates in candidates_by_layout.items():
+        # ── Stage 1: extract beams deterministically ──────────────────────────────
+        beam_candidates = [
+            c for c in layout_candidates
+            if c.get("layer_hint") == "beam_candidate"
+            and not (_COL_FLAGS & set(c.get("flags", [])))
+        ]
+        beam_members = _extract_beams_deterministically(beam_candidates)
         
-    return combined + slab_members
+        # ── Stage 2: Column classification
+        col_candidates = [
+            c for c in layout_candidates
+            if c.get("layer_hint") == "column_candidate"
+            or (_COL_FLAGS & set(c.get("flags", [])))
+        ]
+        col_members = classify_columns_deterministically(col_candidates, beam_members)
+        
+        # ── Stage 3: slab + void extraction ──────────────────────────────
+        combined = col_members + beam_members
+        slab_members = extract_slabs_deterministically(combined)
+        for s in slab_members:
+            s["layout_name"] = layout
+            s["member_id"] = f"S{slab_id_counter}"
+            slab_id_counter += 1
+            
+        all_extracted_members.extend(combined + slab_members)
+        
+    return all_extracted_members
 
 
 def _build_geometry_summary(parsed_json: dict) -> str:

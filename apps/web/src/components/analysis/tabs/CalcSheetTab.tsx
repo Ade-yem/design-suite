@@ -17,14 +17,46 @@ import type {
   DesignMemberResult,
 } from "@/types/analysis";
 
-function formatValue(v: number | string | boolean | null): string {
-  if (v === null) return "—";
+/**
+ * Formats a raw calculation value (primitive, array, or object) into a human-readable string.
+ * Handles floats by rounding to 3 decimal places and formats structured objects/arrays cleanly.
+ *
+ * @param v - The raw value to format.
+ * @returns The formatted string representation of the value.
+ */
+function formatValue(v: any): string {
+  if (v === null || v === undefined) return "—";
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(3);
   if (typeof v === "boolean") return v ? "true" : "false";
-  return v;
+  
+  if (Array.isArray(v)) {
+    return `[${v.map(formatValue).join(", ")}]`;
+  }
+  
+  if (typeof v === "object") {
+    return Object.entries(v)
+      .map(([key, val]) => `${key}: ${formatValue(val)}`)
+      .join(", ");
+  }
+  
+  return String(v);
 }
 
+/**
+ * Renders a single calculation trace step inside a styled container.
+ * Handles rendering of step numbers, clause references, formulas, input values, and results.
+ * For object results, it renders them as a list of styled inline key-value tags.
+ *
+ * @param props - Component properties.
+ * @param props.step - The calculation step to render.
+ * @returns A React component representing the calculation step.
+ */
 function StepBlock({ step }: { step: CalculationTraceStep }) {
+  const isObjectResult =
+    step.result !== null &&
+    typeof step.result === "object" &&
+    !Array.isArray(step.result);
+
   return (
     <div className="border border-border/50 rounded-md overflow-hidden">
       <div className="flex items-start gap-2 px-3 py-2 bg-muted/30 border-b border-border/40">
@@ -50,16 +82,29 @@ function StepBlock({ step }: { step: CalculationTraceStep }) {
           <div className="flex flex-wrap gap-x-3 gap-y-0.5">
             {Object.entries(step.inputs).map(([k, v]) => (
               <span key={k} className="font-mono text-[10px] text-muted-foreground">
-                {k} = {formatValue(v as number | string | boolean)}
+                {k} = {formatValue(v)}
               </span>
             ))}
           </div>
         )}
-        <div className="font-mono text-xs">
+        <div className="font-mono text-xs flex items-baseline gap-1.5">
           <span className="text-muted-foreground">⇒ </span>
-          <span className="text-foreground font-semibold">
-            {formatValue(step.result)}
-          </span>
+          {isObjectResult ? (
+            <div className="flex flex-wrap gap-x-2 gap-y-1">
+              {Object.entries(step.result as Record<string, any>).map(([key, val]) => (
+                <span
+                  key={key}
+                  className="px-1.5 py-0.5 rounded bg-primary/5 border border-primary/10 text-primary font-semibold text-[11px]"
+                >
+                  {key} = {formatValue(val)}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-foreground font-semibold">
+              {formatValue(step.result)}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -85,7 +130,7 @@ function buildSheetHtml(
       ${
         s.inputs
           ? `<div class="inputs">${Object.entries(s.inputs)
-              .map(([k, v]) => `<span>${k} = ${formatValue(v as number)}</span>`)
+              .map(([k, v]) => `<span>${k} = ${formatValue(v)}</span>`)
               .join("")}</div>`
           : ""
       }

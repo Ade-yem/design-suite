@@ -137,45 +137,116 @@ class AnalysisService:
         results: list[dict] = []
 
         def _run_analysis_sync() -> list[dict]:
-            """Synchronous analysis loop — runs in a thread pool."""
+            """Synchronous two-pass analysis loop — runs in a thread pool."""
             from core.analysis.engine import AnalysisEngine
+            from core.loading.takedown import VerticalLoadTakedownEngine
             from models.loading.schema import MemberLoadOutput
 
             design_code = load_output.get("design_code", "BS8110")
             engine = AnalysisEngine(design_code=design_code)
 
-            member_results = []
-            for i, mid in enumerate(all_ids, start=1):
-                pct = (i / total) * 100
-                step = f"Analysing member {mid} ({i}/{total})…"
+            HORIZONTAL = {"beam", "slab", "staircase"}
+            VERTICAL   = {"column", "wall", "footing"}
+
+            # ── Pass 1: horizontal members ────────────────────────────────
+            horizontal_results: dict[str, dict] = {}
+            h_ids = [m for m in all_ids if load_members.get(m, {}).get("member_type", "").lower() in HORIZONTAL]
+            other_ids = [m for m in all_ids if m not in h_ids]
+
+            for i, mid in enumerate(h_ids, start=1):
+                pct = (i / max(len(h_ids), 1)) * 40  # 0-40%
                 if progress_cb:
-                    progress_cb(step, pct)
+                    progress_cb(f"Pass 1 — {mid} ({i}/{len(h_ids)})…", pct)
 
                 load_member_data = load_members.get(mid)
                 geometry_meta = parsed_members.get(mid, {}).get("meta", {})
 
                 if load_member_data is None:
-                    logger.warning("No load data for member %s — skipping.", mid)
-                    member_results.append({
-                        "member_id": mid,
-                        "status": "skipped",
-                        "reason": "No load data available",
-                    })
+                    horizontal_results[mid] = {"member_id": mid, "status": "skipped", "reason": "No load data"}
                     continue
-
                 try:
                     load_obj = MemberLoadOutput(**load_member_data)
                     result = engine.analyze_member(load_obj, geometry_meta)
-                    member_results.append(result.model_dump())
+                    horizontal_results[mid] = result.model_dump()
                 except Exception as exc:
                     logger.warning("Analysis failed for member %s: %s", mid, exc)
-                    member_results.append({
-                        "member_id": mid,
-                        "status": "error",
-                        "reason": str(exc),
-                    })
+                    horizontal_results[mid] = {"member_id": mid, "status": "error", "reason": str(exc)}
 
-            return member_results
+            # ── Takedown ──────────────────────────────────────────────────
+            if progress_cb:
+                progress_cb("Running vertical load takedown…", 45)
+            try:
+                members_list = list(parsed_members.values())
+                project_params = opts.get("project_params", {})
+                col_axial, footing_members, footing_loads = (
+                    VerticalLoadTakedownEngine.compute_column_axial_loads(
+                        members=members_list,
+                        beam_analysis_results=horizontal_results,
+                        beam_loading_data=load_members,
+                        project_params=project_params,
+                        design_code=design_code,
+                    )
+                )
+                # Patch column meta with real N_uls
+                for col_id, axial in col_axial.items():
+                    if col_id in parsed_members:
+                        parsed_members[col_id]["meta"]["N_uls"] = axial["N_uls"]
+                        parsed_members[col_id]["meta"]["_takedown"] = axial
+
+                # Inject auto-generated footing members
+                for fm in footing_members:
+                    fid = fm["member_id"]
+                    parsed_members[fid] = fm
+                for fl in footing_loads:
+                    fid = fl["member_id"]
+                    load_members[fid] = fl
+                    if fid not in all_ids:
+                        all_ids.append(fid)
+            except Exception as exc:
+                logger.warning("Takedown failed — columns will use placeholder N_uls: %s", exc)
+
+            # ── Pass 2: vertical members + injected footings ───────────────
+            v_ids = [m for m in all_ids if load_members.get(m, {}).get("member_type", "").lower() in VERTICAL]
+            remaining_ids = [m for m in all_ids if m not in h_ids and m not in v_ids]
+
+            vertical_results: list[dict] = []
+            for i, mid in enumerate(v_ids, start=1):
+                pct = 50 + (i / max(len(v_ids), 1)) * 40  # 50-90%
+                if progress_cb:
+                    progress_cb(f"Pass 2 — {mid} ({i}/{len(v_ids)})…", pct)
+
+                load_member_data = load_members.get(mid)
+                geometry_meta = parsed_members.get(mid, {}).get("meta", {})
+
+                if load_member_data is None:
+                    vertical_results.append({"member_id": mid, "status": "skipped", "reason": "No load data"})
+                    continue
+                try:
+                    load_obj = MemberLoadOutput(**load_member_data)
+                    result = engine.analyze_member(load_obj, geometry_meta)
+                    vertical_results.append(result.model_dump())
+                except Exception as exc:
+                    logger.warning("Analysis failed for member %s: %s", mid, exc)
+                    vertical_results.append({"member_id": mid, "status": "error", "reason": str(exc)})
+
+            # Members with no load data in either pass
+            skipped: list[dict] = []
+            for mid in remaining_ids:
+                if progress_cb:
+                    progress_cb(f"Skipping {mid}…", 92)
+                load_member_data = load_members.get(mid)
+                if load_member_data is None:
+                    skipped.append({"member_id": mid, "status": "skipped", "reason": "No load data"})
+                    continue
+                try:
+                    geometry_meta = parsed_members.get(mid, {}).get("meta", {})
+                    load_obj = MemberLoadOutput(**load_member_data)
+                    result = engine.analyze_member(load_obj, geometry_meta)
+                    skipped.append(result.model_dump())
+                except Exception as exc:
+                    skipped.append({"member_id": mid, "status": "error", "reason": str(exc)})
+
+            return list(horizontal_results.values()) + vertical_results + skipped
 
         results = await asyncio.to_thread(_run_analysis_sync)
 
