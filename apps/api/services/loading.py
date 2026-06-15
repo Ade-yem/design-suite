@@ -19,10 +19,9 @@ loading_service.clear(project_id)                           → None
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional
 
 from schemas.loading import LoadValidationResult
 from schemas.project import ProjectStatus
@@ -399,11 +398,59 @@ class LoadingService:
         # Pull geometry from the files service
         try:
             parsed = await file_service.get_parsed(project_id)
-            parsed_members: dict[str, dict] = {
+        except KeyError:
+            parsed = {}
+
+        if parsed:
+            # Retrieve project parameters (num_storeys, storey_height_m) from the LangGraph state
+            num_storeys = 1
+            storey_height_m = 3.0
+            try:
+                from agents.graph import app as graph_app
+                config = {"configurable": {"thread_id": project_id}}
+                state = await graph_app.aget_state(config)
+                if state and state.values:
+                    params = state.values.get("project_parameters") or {}
+                    num_storeys = params.get("num_storeys", 1)
+                    storey_height_m = params.get("storey_height_m", 3.0)
+            except Exception as exc:
+                logger.warning("Failed to retrieve project parameters from state: %s", exc)
+
+            # Store the original typical members if we haven't already
+            if "typical_members" not in parsed:
+                import copy
+                parsed["typical_members"] = copy.deepcopy(parsed.get("members", []))
+
+            # Run extrapolation
+            from core.parsing.storey_generator import extrapolate_storeys
+            layouts = parsed.get("layouts_processed") or ["Model"]
+            extrapolated = extrapolate_storeys(
+                typical_members=parsed["typical_members"],
+                num_storeys=num_storeys,
+                storey_height_m=storey_height_m,
+                layouts_processed=layouts,
+            )
+
+            # Check if we actually mutated / updated the members list
+            parsed["members"] = extrapolated
+            await file_service.register_geometry(project_id, parsed)
+
+            new_mids = [m["member_id"] for m in extrapolated if m.get("member_id")]
+            await project_store.register_members_batch(project_id, new_mids)
+
+            # Also update the LangGraph state so other agents/views see the extrapolated geometry
+            try:
+                from agents.graph import app as graph_app
+                config = {"configurable": {"thread_id": project_id}}
+                await graph_app.aupdate_state(config, {"parsed_structural_json": parsed})
+            except Exception as exc:
+                logger.warning("Failed to update LangGraph state with extrapolated geometry: %s", exc)
+
+        parsed_members: dict[str, dict] = {}
+        if parsed:
+            parsed_members = {
                 m["member_id"]: m for m in parsed.get("members", [])
             }
-        except KeyError:
-            parsed_members = {}
 
         member_ids = await project_store.get_member_ids(project_id)
         effective_ids = member_ids or list(parsed_members.keys())

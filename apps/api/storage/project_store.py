@@ -582,13 +582,19 @@ class PostgresProjectStore:
                     added_in_batch.add(mid)
                     m_type = "beam"
                     upper_id = mid.upper()
-                    if upper_id.startswith("C"):
+                    parts = upper_id.split("-")
+                    if len(parts) > 1 and parts[0].startswith("L") and parts[0][1:].isdigit():
+                        type_check_str = parts[1]
+                    else:
+                        type_check_str = upper_id
+
+                    if type_check_str.startswith("C"):
                         m_type = "column"
-                    elif upper_id.startswith("S"):
+                    elif type_check_str.startswith("S"):
                         m_type = "slab"
-                    elif upper_id.startswith("F"):
+                    elif type_check_str.startswith("F"):
                         m_type = "footing"
-                    elif upper_id.startswith("W"):
+                    elif type_check_str.startswith("W"):
                         m_type = "wall"
 
                     new_members.append(

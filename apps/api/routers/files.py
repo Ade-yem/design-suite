@@ -175,12 +175,19 @@ async def _parse_file_background(
         # ezdxf extracts raw geometry only;
         if not parsed.get("members"):
             await job_store.update_progress(job_id, 60.0, "Classifying structural members…")
-            from core.parsing.extractor import cross_reference_void_markers, _filter_stub_beams, _deduplicate_beams, _run_member_extraction
+            from core.parsing.extractor import (
+                cross_reference_void_markers,
+                _filter_stub_beams,
+                _deduplicate_beams,
+                _group_collinear_beam_runs,
+                _run_member_extraction,
+            )
             from storage.project_store import project_store as _pstore
 
             members = await _run_member_extraction(project_id, parsed)
             members = _deduplicate_beams(members)
             members = _filter_stub_beams(members)
+            members = _group_collinear_beam_runs(members)
             members = cross_reference_void_markers(parsed["entities"], members)
             parsed["members"] = members
 

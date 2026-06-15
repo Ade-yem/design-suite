@@ -59,14 +59,14 @@ const STATUS_PILL: Record<
   skipped: { label: "SKIPPED", cls: "bg-muted/40 text-muted-foreground" },
 };
 
-/** Representative span/height of a member, in metres. */
+/** Total span of a member in metres (sum of all spans for multi-span members). */
 function memberSpanM(
   spans?: number[],
   lClear?: number,
   start?: { x: number; y: number } | null,
   end?: { x: number; y: number } | null
 ): number {
-  if (spans && spans.length) return Math.max(...spans);
+  if (spans && spans.length) return spans.reduce((a, b) => a + b, 0);
   if (lClear) return lClear;
   if (start && end) {
     // start/end are mm in DXF space → m
@@ -109,6 +109,9 @@ export function MemberAnalysisDrawer() {
     member?.start_point,
     member?.end_point
   );
+
+  // Individual span lengths for multi-span BMD/SFD rendering
+  const spansM: number[] = member?.spans_m?.length ? member.spans_m : [spanM];
 
   return (
     <div className="w-[520px] max-w-[80vw] flex flex-col border-l border-border bg-background shrink-0 h-full">
@@ -182,6 +185,8 @@ export function MemberAnalysisDrawer() {
             (analysis ? (
               <BMDRenderer
                 resultants={analysis.stress_resultants}
+                criticalSections={analysis.critical_sections}
+                spansM={spansM}
                 spanM={spanM}
                 memberId={selectedMemberId}
               />
@@ -193,6 +198,7 @@ export function MemberAnalysisDrawer() {
               <SFDRenderer
                 resultants={analysis.stress_resultants}
                 reactions={analysis.reactions_kN ?? []}
+                spansM={spansM}
                 spanM={spanM}
                 memberId={selectedMemberId}
               />

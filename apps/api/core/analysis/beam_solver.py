@@ -176,6 +176,23 @@ class MomentCoefficientSolver:
                 "F": F
             }
             
+        # Support reactions at all N+1 supports using BS 8110 Table 3.5 shear coefficients.
+        # Interior support receives shear from both adjacent spans; outer supports from one span only.
+        N = num_spans
+        support_reactions: list[float] = []
+        for support_idx in range(N + 1):
+            R = 0.0
+            if support_idx > 0:
+                k = support_idx - 1
+                R += (0.60 if (k == 0 or k == N - 1) else 0.50) * F_total_per_span[k]
+            if support_idx < N:
+                k = support_idx
+                R += (0.45 if (k == 0 or k == N - 1) else 0.50) * F_total_per_span[k]
+            support_reactions.append(round(R, 3))
+        # Outer supports receive only the outer shear coefficient — clamp to be explicit
+        support_reactions[0]  = round(0.45 * F_total_per_span[0], 3)
+        support_reactions[-1] = round(0.45 * F_total_per_span[-1], 3)
+
         self.trace.append(CalculationTraceStep(
             step=1,
             description="BS 8110 Moment Coefficients applied",
@@ -195,7 +212,7 @@ class MomentCoefficientSolver:
                 M_max_hogging_kNm=M_hog_max,
                 V_max_kN=V_max,
             ),
-            reactions_kN=[], # Handled purely by coefficients maxing for now
+            reactions_kN=support_reactions,
             calculation_trace=self.trace,
             critical_sections=critical_sections
         )

@@ -13,7 +13,7 @@
 
 import React, { useRef, useCallback } from "react";
 import { Download } from "lucide-react";
-import type { StressResultants, SLSChecks } from "@/types/analysis";
+import type { StressResultants, SLSChecks, MultiSpanCriticalSections } from "@/types/analysis";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ function AxisLabels({
   unit: string;
 }) {
   const ticks = [vMin, 0, vMax].filter(
-    (v, i, arr) => Math.abs(v) > 0.01 || i === 1
+    (v, i) => Math.abs(v) > 0.01 || i === 1
   );
   return (
     <>
@@ -116,11 +116,23 @@ function AxisLabels({
   );
 }
 
-function SpanAxis({ spanM }: { spanM: number }) {
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
+function SpanAxis({ spanM, spansM }: { spanM: number; spansM?: number[] }) {
+  const standardTicks = [0, 0.25, 0.5, 0.75, 1];
+  const isMultiSpan = spansM && spansM.length > 1;
+
+  // Cumulative boundary positions normalised to [0..1]
+  const boundaries: number[] = [];
+  if (isMultiSpan) {
+    let cum = 0;
+    for (let i = 0; i < spansM.length - 1; i++) {
+      cum += spansM[i];
+      boundaries.push(cum / spanM);
+    }
+  }
+
   return (
     <>
-      {ticks.map((t) => (
+      {standardTicks.map((t) => (
         <text
           key={t}
           x={mapX(t)}
@@ -133,37 +145,124 @@ function SpanAxis({ spanM }: { spanM: number }) {
           {(t * spanM).toFixed(1)}m
         </text>
       ))}
+      {/* Interior span boundary markers */}
+      {boundaries.map((t, i) => (
+        <g key={`boundary-${i}`}>
+          <line
+            x1={mapX(t)}
+            y1={MARGIN.top}
+            x2={mapX(t)}
+            y2={MARGIN.top + PLOT_H}
+            stroke="#475569"
+            strokeWidth="1"
+            strokeDasharray="3,3"
+          />
+          <text
+            x={mapX(t)}
+            y={H - 6}
+            textAnchor="middle"
+            fontSize="8"
+            fill="#64748b"
+            fontFamily="JetBrains Mono, monospace"
+          >
+            {(t * spanM).toFixed(1)}m
+          </text>
+        </g>
+      ))}
     </>
   );
 }
 
 // ── BMD ──────────────────────────────────────────────────────────────────────
 
+const N_PTS_PER_SPAN = 30;
+
 export function BMDRenderer({
   resultants,
+  criticalSections,
+  spansM = [],
   spanM = 6,
   memberId,
 }: {
   resultants: StressResultants;
+  criticalSections?: Record<string, unknown>;
+  spansM?: number[];
   spanM?: number;
   memberId: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const xs = linspace(0, 1, N_PTS);
   const mSag = resultants.M_max_sagging_kNm;
   const mHog = -Math.abs(resultants.M_max_hogging_kNm);
+  const effectiveSpansM = spansM.length > 0 ? spansM : [spanM];
+  const totalSpan = effectiveSpansM.reduce((a, b) => a + b, 0) || spanM;
+  const isMultiSpan = effectiveSpansM.length > 1;
 
-  // Approximate: parabolic sagging + hogging at supports
-  const ys = xs.map((t) => {
-    const sagging = mSag * 4 * t * (1 - t);
-    const hogging = mHog * (1 - Math.pow(2 * t - 1, 2)); // hogging peak at supports
-    return sagging + hogging;
-  });
+  let xs: number[];
+  let ys: number[];
+
+  if (isMultiSpan) {
+    xs = [];
+    ys = [];
+
+    // Cumulative normalised boundaries: [0, L1/total, (L1+L2)/total, ..., 1]
+    const cumNorm: number[] = [0];
+    let cumLen = 0;
+    for (const L of effectiveSpansM) {
+      cumLen += L;
+      cumNorm.push(cumLen / totalSpan);
+    }
+
+    const cs = criticalSections as MultiSpanCriticalSections | undefined;
+    const numInteriorSupports = effectiveSpansM.length - 1;
+
+    for (let k = 0; k < effectiveSpansM.length; k++) {
+      const xL = cumNorm[k];
+      const xR = cumNorm[k + 1];
+
+      // Per-span sagging from critical_sections, fallback to global max
+      const spanKey = `span_${k + 1}` as const;
+      const mSagK = cs?.[spanKey]?.M_sagging ?? mSag;
+
+      // Hogging notch before first span and after last span (boundary)
+      const hogAtLeft = k === 0 ? 0 : mHog / numInteriorSupports;
+      const hogAtRight = k === effectiveSpansM.length - 1 ? 0 : mHog / numInteriorSupports;
+
+      // Notch at left interior support: sharp spike from 0 to hogAtLeft back to 0
+      if (k > 0) {
+        const eps = 0.005;
+        xs.push(xL - eps, xL, xL + eps);
+        ys.push(0, hogAtLeft, 0);
+      }
+
+      for (let p = 0; p < N_PTS_PER_SPAN; p++) {
+        const t = p / (N_PTS_PER_SPAN - 1);
+        const xGlobal = xL + t * (xR - xL);
+        // Parabolic sagging + linear interpolation of end hogging
+        const sagPart = mSagK * 4 * t * (1 - t);
+        const hogPart = hogAtLeft * (1 - t) + hogAtRight * t;
+        xs.push(xGlobal);
+        ys.push(sagPart + hogPart);
+      }
+    }
+  } else {
+    // Single-span: existing parabolic + hogging blend
+    xs = linspace(0, 1, N_PTS);
+    ys = xs.map((t) => {
+      const sagging = mSag * 4 * t * (1 - t);
+      const hogging = mHog * (1 - Math.pow(2 * t - 1, 2));
+      return sagging + hogging;
+    });
+  }
 
   const vMax = Math.max(...ys, 0.1);
   const vMin = Math.min(...ys, -0.1);
   const zeroY = mapY(0, vMin, vMax);
+
+  // Find the global peak sagging position for the marker
+  const maxYIdx = ys.reduce((bestI, v, i) => (v > ys[bestI] ? i : bestI), 0);
+  const peakX = xs[maxYIdx];
+  const peakY = ys[maxYIdx];
 
   const handleDownload = useCallback(
     () => downloadSvg(svgRef.current, `${memberId}_BMD.svg`),
@@ -226,18 +325,18 @@ export function BMDRenderer({
           strokeLinejoin="round"
         />
 
-        {/* Max sagging marker */}
-        {mSag > 0 && (
+        {/* Peak sagging marker */}
+        {peakY > 0 && (
           <>
-            <circle cx={mapX(0.5)} cy={mapY(mSag * 0.98, vMin, vMax)} r="3" fill="#818cf8" />
+            <circle cx={mapX(peakX)} cy={mapY(peakY, vMin, vMax)} r="3" fill="#818cf8" />
             <text
-              x={mapX(0.5) + 6}
-              y={mapY(mSag * 0.98, vMin, vMax) + 4}
+              x={mapX(peakX) + 6}
+              y={mapY(peakY, vMin, vMax) + 4}
               fontSize="9"
               fill="#818cf8"
               fontFamily="JetBrains Mono, monospace"
             >
-              {mSag.toFixed(1)} kNm
+              {peakY.toFixed(1)} kNm
             </text>
           </>
         )}
@@ -261,7 +360,7 @@ export function BMDRenderer({
         />
 
         <AxisLabels vMin={vMin} vMax={vMax} unit="kNm" />
-        <SpanAxis spanM={spanM} />
+        <SpanAxis spanM={totalSpan} spansM={isMultiSpan ? effectiveSpansM : undefined} />
 
         {/* Label */}
         <text
@@ -283,23 +382,80 @@ export function BMDRenderer({
 export function SFDRenderer({
   resultants,
   reactions,
+  spansM = [],
   spanM = 6,
   memberId,
 }: {
   resultants: StressResultants;
   reactions: number[];
+  spansM?: number[];
   spanM?: number;
   memberId: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const xs = linspace(0, 1, N_PTS);
-  const vMax = resultants.V_max_kN;
-  const RA = reactions[0] ?? vMax;
-  const RB = reactions[1] ?? -vMax;
+  const effectiveSpansM = spansM.length > 0 ? spansM : [spanM];
+  const totalSpan = effectiveSpansM.reduce((a, b) => a + b, 0) || spanM;
+  const isMultiSpan = effectiveSpansM.length > 1 && reactions.length < 2;
 
-  // Linear variation for UDL: V(x) = RA - (RA - RB) * x
-  const ys = xs.map((t) => RA - (RA - RB) * t);
+  let xs: number[];
+  let ys: number[];
+  let isApproximate = false;
+
+  if (isMultiSpan) {
+    isApproximate = true;
+    xs = [];
+    ys = [];
+
+    // Cumulative normalised boundaries
+    const cumNorm: number[] = [0];
+    let cumLen = 0;
+    for (const L of effectiveSpansM) {
+      cumLen += L;
+      cumNorm.push(cumLen / totalSpan);
+    }
+
+    // Approximate reactions using BS 8110 Table 3.5 shear coefficients
+    // End spans: outer=0.45F, inner=0.60F; Interior spans: 0.50F each side
+    const N = effectiveSpansM.length;
+    const spanReactions: { left: number; right: number }[] = effectiveSpansM.map(
+      (L, k) => {
+        const Fi = resultants.V_max_kN * (L / totalSpan) * 2;
+        if (k === 0) return { left: 0.45 * Fi, right: 0.60 * Fi };
+        if (k === N - 1) return { left: 0.60 * Fi, right: 0.45 * Fi };
+        return { left: 0.50 * Fi, right: 0.50 * Fi };
+      }
+    );
+
+    const pts = 20;
+    for (let k = 0; k < effectiveSpansM.length; k++) {
+      const xL = cumNorm[k];
+      const xR = cumNorm[k + 1];
+      const { left: RL, right: RR } = spanReactions[k];
+
+      // Jump at left support
+      xs.push(xL, xL);
+      ys.push(0, RL);
+
+      // Linear drop across span (UDL shear)
+      for (let p = 0; p < pts; p++) {
+        const t = p / (pts - 1);
+        xs.push(xL + t * (xR - xL));
+        ys.push(RL - (RL + RR) * t);
+      }
+
+      // Jump at right support (reversed sign)
+      xs.push(xR, xR);
+      ys.push(-RR, 0);
+    }
+  } else {
+    // Single-span: original linear variation
+    const vMax = resultants.V_max_kN;
+    const RA = reactions[0] ?? vMax;
+    const RB = reactions[1] ?? -vMax;
+    xs = linspace(0, 1, N_PTS);
+    ys = xs.map((t) => RA - (RA - RB) * t);
+  }
 
   const yMax = Math.max(...ys, 0.1);
   const yMin = Math.min(...ys, -0.1);
@@ -309,6 +465,9 @@ export function SFDRenderer({
     () => downloadSvg(svgRef.current, `${memberId}_SFD.svg`),
     [memberId]
   );
+
+  const RA = isMultiSpan ? ys[2] ?? resultants.V_max_kN : (reactions[0] ?? resultants.V_max_kN);
+  const RB = isMultiSpan ? ys[ys.length - 3] ?? -resultants.V_max_kN : (reactions[1] ?? -resultants.V_max_kN);
 
   return (
     <div className="relative">
@@ -382,7 +541,7 @@ export function SFDRenderer({
           strokeWidth="2"
         />
 
-        {/* Peak markers */}
+        {/* End support markers */}
         <circle cx={mapX(0.01)} cy={mapY(RA, yMin, yMax)} r="3" fill="#22c55e" />
         <text
           x={mapX(0.03)}
@@ -423,7 +582,7 @@ export function SFDRenderer({
         />
 
         <AxisLabels vMin={yMin} vMax={yMax} unit="kN" />
-        <SpanAxis spanM={spanM} />
+        <SpanAxis spanM={totalSpan} spansM={isMultiSpan ? effectiveSpansM : undefined} />
 
         <text
           x={MARGIN.left + 4}
@@ -434,6 +593,20 @@ export function SFDRenderer({
         >
           SHEAR FORCE DIAGRAM
         </text>
+
+        {/* Approximate annotation for multi-span */}
+        {isApproximate && (
+          <text
+            x={MARGIN.left + PLOT_W}
+            y={MARGIN.top + PLOT_H + 30}
+            textAnchor="end"
+            fontSize="8"
+            fill="#64748b"
+            fontFamily="JetBrains Mono, monospace"
+          >
+            (approx) shear from coefficient method
+          </text>
+        )}
       </svg>
     </div>
   );

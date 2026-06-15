@@ -50,10 +50,23 @@ export interface CalculationTraceStep {
   step: number;
   description: string;
   formula?: string;
-  inputs?: Record<string, number | string | boolean>;
-  result: number | string | boolean | null;
+  inputs?: Record<string, any>;
+  result: any;
   clause?: string;
 }
+
+/**
+ * Per-span moment data from MomentCoefficientSolver.critical_sections.
+ * Keys follow the pattern "span_1", "span_2", etc.
+ */
+export interface SpanCriticalSection {
+  M_sagging: number;
+  F: number;
+}
+
+export type MultiSpanCriticalSections = {
+  [K in `span_${number}`]: SpanCriticalSection;
+};
 
 /**
  * Full analysis result for a single member, as returned by
@@ -64,7 +77,7 @@ export interface MemberFullAnalysisResult {
   member_type: AnalysisMemberType;
   analysis_method: string;
   stress_resultants: StressResultants;
-  critical_sections: Record<string, unknown>;
+  critical_sections: Record<string, unknown> | MultiSpanCriticalSections;
   reactions_kN: number[];
   governing_pattern?: string;
   SLS_checks?: SLSChecks;

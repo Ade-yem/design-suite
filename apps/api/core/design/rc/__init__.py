@@ -136,6 +136,34 @@ def design_member(
             res["design_code"] = "BS8110"
             return res
             
+        elif member_type == "footing":
+            from models.bs8110.footing import PadFooting
+            from core.design.rc.bs8110.footing import design_pad_footing
+
+            critical = analysis_result.get("critical_sections", {})
+            geom = critical.get("geometry", {}) if isinstance(critical, dict) else {}
+            B_m = float(geom.get("B_m", 1.5))
+            L_m = float(geom.get("L_m", 1.5))
+            h_mm = float(geometry_meta.get("h_footing_mm", 500))
+            c1 = float(geometry_meta.get("c1", 300))
+            c2 = float(geometry_meta.get("c2", 300))
+            section = PadFooting(
+                lx=B_m * 1000, ly=L_m * 1000,
+                h=h_mm,
+                cover=float(geometry_meta.get("cover_mm") or geometry_meta.get("cover") or 50.0),
+                fcu=float(geometry_meta.get("fcu_MPa") or geometry_meta.get("fcu") or 30.0),
+                fy=float(geometry_meta.get("fy_MPa") or geometry_meta.get("fy") or 460.0),
+                column_cx=c1, column_cy=c2,
+                bar_dia=float(geometry_meta.get("bar_dia_mm") or geometry_meta.get("bar_dia") or 16.0),
+            )
+            N_uls_N = float(geometry_meta.get("N_uls", 0.0)) * 1_000
+            M_uls_Nmm = float(geometry_meta.get("M_uls", 0.0)) * 1e6
+            res = design_pad_footing(section, N=N_uls_N, Mx=M_uls_Nmm, My=0.0)
+            res["member_id"] = analysis_result.get("member_id", "unknown")
+            res["member_type"] = "footing"
+            res["design_code"] = "BS8110"
+            return res
+
         else:
             return {
                 "member_id": analysis_result.get("member_id", "unknown"),
@@ -147,7 +175,7 @@ def design_member(
                 "notes": [f"Member type {member_type} design skipped."],
                 "warnings": []
             }
-            
+
     else:  # EC2
         if member_type == "beam":
             from models.ec2.beam import EC2BeamSection
@@ -170,6 +198,34 @@ def design_member(
             res["design_code"] = "EC2"
             return res
             
+        elif member_type == "footing":
+            from core.design.rc.eurocode2.footing import design_pad_footing as design_pad_footing_ec2
+            from models.bs8110.footing import PadFooting
+
+            critical = analysis_result.get("critical_sections", {})
+            geom = critical.get("geometry", {}) if isinstance(critical, dict) else {}
+            B_m = float(geom.get("B_m", 1.5))
+            L_m = float(geom.get("L_m", 1.5))
+            h_mm = float(geometry_meta.get("h_footing_mm", 500))
+            c1 = float(geometry_meta.get("c1", 300))
+            c2 = float(geometry_meta.get("c2", 300))
+            section = PadFooting(
+                lx=B_m * 1000, ly=L_m * 1000,
+                h=h_mm,
+                cover=float(geometry_meta.get("cover_mm") or geometry_meta.get("cover") or 50.0),
+                fcu=float(geometry_meta.get("fck_MPa") or geometry_meta.get("fck") or 30.0),
+                fy=float(geometry_meta.get("fyk_MPa") or geometry_meta.get("fyk") or 500.0),
+                column_cx=c1, column_cy=c2,
+                bar_dia=float(geometry_meta.get("bar_dia_mm") or geometry_meta.get("bar_dia") or 16.0),
+            )
+            N_uls_N = float(geometry_meta.get("N_uls", 0.0)) * 1_000
+            M_uls_Nmm = float(geometry_meta.get("M_uls", 0.0)) * 1e6
+            res = design_pad_footing_ec2(section, N=N_uls_N, Mx=M_uls_Nmm, My=0.0)
+            res["member_id"] = analysis_result.get("member_id", "unknown")
+            res["member_type"] = "footing"
+            res["design_code"] = "EC2"
+            return res
+
         else:
             return {
                 "member_id": analysis_result.get("member_id", "unknown"),

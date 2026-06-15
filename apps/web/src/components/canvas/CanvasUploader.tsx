@@ -4,8 +4,6 @@ import * as React from "react";
 import { useState, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
 import {
   Upload,
-  FileUp,
-  FileText,
   CheckCircle2,
   Loader2,
   AlertCircle,
@@ -39,9 +37,9 @@ type UploadState = "idle" | "uploading" | "parsing" | "error";
 
 /**
  * CanvasUploader component.
- * Implements a premium, high-fidelity double-file staging area UX.
- * Allows structural engineers to stage both the Required primary DXF drawing and
- * the Optional reference PDF, verifying their metadata before triggering vision parsing.
+ * Implements a premium, high-fidelity DXF drawing staging and guidelines UX.
+ * Allows structural engineers to stage their primary DXF drawing, review detailed CAD guidelines
+ * to ensure parsing success, and trigger the classification pipeline.
  *
  * @param {CanvasUploaderProps} props - Component properties.
  * @param {React.Ref<CanvasUploaderHandle>} ref - Exposed handler interface.
@@ -53,17 +51,15 @@ export const CanvasUploader = forwardRef<CanvasUploaderHandle, CanvasUploaderPro
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [isDragOver, setIsDragOver] = useState(false);
 
-    // Staged files local state
+    // Staged DXF file state
     const [stagedDxf, setStagedDxf] = useState<File | null>(null);
-    const [stagedPdf, setStagedPdf] = useState<File | null>(null);
 
     const [activeJobId, setActiveJobId] = useState<string | null>(null);
     const [progressPct, setProgressPct] = useState<number>(0);
     const [currentStep, setCurrentStep] = useState<string>("Initializing vision agent...");
 
-    // Input triggers refs
+    // Input trigger ref
     const dxfInputRef = useRef<HTMLInputElement>(null);
-    const pdfInputRef = useRef<HTMLInputElement>(null);
 
     // Establish dynamic WebSocket connection for live progress updates
     useProjectSocket(projectId, {
@@ -94,7 +90,7 @@ export const CanvasUploader = forwardRef<CanvasUploaderHandle, CanvasUploaderPro
     }));
 
     /**
-     * Sorts and stages files into their respective DXF or PDF slot based on file extensions.
+     * Stages the selected drawing file, validating the DXF format.
      *
      * @param {FileList} files - The selected or dropped list of files.
      */
@@ -104,10 +100,8 @@ export const CanvasUploader = forwardRef<CanvasUploaderHandle, CanvasUploaderPro
         const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
         if (ext === "dxf") {
           setStagedDxf(file);
-        } else if (ext === "pdf") {
-          setStagedPdf(file);
         } else {
-          setUploadError("Unsupported file type. Please upload a .dxf or .pdf drawing.");
+          setUploadError("Unsupported file type. Please upload a .dxf drawing.");
         }
       });
     }, []);
@@ -132,22 +126,13 @@ export const CanvasUploader = forwardRef<CanvasUploaderHandle, CanvasUploaderPro
       if (e.target.files) stageFiles(e.target.files);
     };
 
-    const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files) stageFiles(e.target.files);
-    };
-
     const handleRemoveDxf = (e: React.MouseEvent) => {
       e.stopPropagation();
       setStagedDxf(null);
     };
 
-    const handleRemovePdf = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      setStagedPdf(null);
-    };
-
     /**
-     * Initiates multi-file form upload and registers the job ID to trigger WebSocket progress updates.
+     * Initiates DXF form upload and registers the job ID to trigger WebSocket progress updates.
      */
     const handleUploadAndParse = async () => {
       if (!stagedDxf) {
@@ -159,14 +144,11 @@ export const CanvasUploader = forwardRef<CanvasUploaderHandle, CanvasUploaderPro
       setUploadState("uploading");
       setUploadError(null);
       setProgressPct(0);
-      setCurrentStep("Uploading drawing files to pipeline...");
+      setCurrentStep("Uploading drawing file to pipeline...");
 
       try {
         const form = new FormData();
         form.append("file", stagedDxf);
-        if (stagedPdf) {
-          form.append("pdf_file", stagedPdf);
-        }
 
         const { data: job } = await apiClient.post<{ job_id: string }>(
           `/api/v1/files/upload/${projectId}`,
@@ -209,7 +191,7 @@ export const CanvasUploader = forwardRef<CanvasUploaderHandle, CanvasUploaderPro
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Invisible file input triggers */}
+        {/* Invisible file input trigger */}
         <input
           ref={dxfInputRef}
           type="file"
@@ -217,144 +199,148 @@ export const CanvasUploader = forwardRef<CanvasUploaderHandle, CanvasUploaderPro
           className="hidden"
           onChange={handleDxfChange}
         />
-        <input
-          ref={pdfInputRef}
-          type="file"
-          accept=".pdf"
-          className="hidden"
-          onChange={handlePdfChange}
-        />
 
         {uploadState === "idle" && (
           <div
             className={cn(
-              "flex flex-col items-center gap-6 p-8 rounded-xl border-2 border-dashed transition-all bg-card/40 backdrop-blur-sm shadow-md max-w-2xl w-full",
-              isDragOver
-                ? "border-primary bg-primary/5 scale-102"
-                : "border-border hover:border-muted-foreground",
+              "grid grid-cols-1 md:grid-cols-12 gap-8 p-8 rounded-xl border border-border/60 bg-card/25 backdrop-blur-md shadow-2xl max-w-5xl w-full transition-all",
+              isDragOver && "border-primary/45 bg-primary/2 scale-[1.01]"
             )}
           >
-            <div className="text-center space-y-1">
-              <h3 className="text-sm font-semibold tracking-wide uppercase font-mono text-primary">
-                Initialize Drawing Workspace
-              </h3>
-              <p className="text-xs text-muted-foreground max-w-md">
-                Drag and drop your structural drawing files or click cards to browse.
-                A DXF vector file is required to build the geometry nodes.
-              </p>
-            </div>
+            {/* Left Column: File Drop & Actions */}
+            <div className="md:col-span-5 flex flex-col justify-between gap-6 border-b md:border-b-0 md:border-r border-border/40 pb-6 md:pb-0 md:pr-8">
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold tracking-wider uppercase font-mono text-primary">
+                  Initialize Workspace
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Drag and drop your CAD drawing or click the zone to select. A valid DXF file is required to build the 3D geometry.
+                </p>
+              </div>
 
-            {/* Staging grids */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-              {/* DXF Card (Required) */}
+              {/* DXF Card Zone */}
               <div
                 onClick={() => !stagedDxf && dxfInputRef.current?.click()}
                 className={cn(
-                  "relative group flex flex-col items-center justify-center gap-3 p-6 rounded-lg border border-dashed transition-all cursor-pointer bg-muted/20",
+                  "relative group flex flex-col items-center justify-center gap-4 p-8 rounded-lg border-2 border-dashed transition-all cursor-pointer min-h-[160px]",
                   stagedDxf
-                    ? "border-green-500/35 bg-green-500/5 cursor-default"
-                    : "border-border hover:border-primary/50 hover:bg-muted/40",
+                    ? "border-green-500/40 bg-green-500/3 cursor-default"
+                    : isDragOver
+                      ? "border-primary bg-primary/5 scale-102"
+                      : "border-border/80 hover:border-primary/50 hover:bg-muted/10",
                 )}
               >
                 {stagedDxf ? (
                   <>
-                    <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-400">
-                      <CheckCircle2 className="h-5 w-5" />
+                    <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center text-green-400">
+                      <CheckCircle2 className="h-6 w-6 animate-pulse" />
                     </div>
                     <div className="text-center min-w-0 w-full px-2">
                       <p className="text-xs font-semibold font-mono truncate text-green-400">
                         {stagedDxf.name}
                       </p>
-                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                        DXF Model • {formatSize(stagedDxf.size)}
+                      <p className="text-[10px] text-muted-foreground font-mono mt-1">
+                        CAD DXF Model • {formatSize(stagedDxf.size)}
                       </p>
                     </div>
                     <button
                       onClick={handleRemoveDxf}
-                      className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      className="absolute top-3 right-3 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                       title="Remove File"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-4 w-4" />
                     </button>
                   </>
                 ) : (
                   <>
-                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                      <Upload className="h-4 w-4" />
+                    <div className="h-12 w-12 rounded-full bg-muted/45 flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                      <Upload className="h-5 w-5" />
                     </div>
                     <div className="text-center">
                       <p className="text-xs font-semibold">CAD Drawing (.DXF)</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wider font-mono font-bold">
-                        Required
+                      <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider font-mono font-bold">
+                        Drop file here
                       </p>
                     </div>
                   </>
                 )}
               </div>
 
-              {/* PDF Card (Optional) */}
-              <div
-                onClick={() => !stagedPdf && pdfInputRef.current?.click()}
-                className={cn(
-                  "relative group flex flex-col items-center justify-center gap-3 p-6 rounded-lg border border-dashed transition-all cursor-pointer bg-muted/20",
-                  stagedPdf
-                    ? "border-primary/35 bg-primary/5 cursor-default"
-                    : "border-border hover:border-primary/50 hover:bg-muted/40",
-                )}
-              >
-                {stagedPdf ? (
-                  <>
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                      <FileText className="h-5 w-5" />
-                    </div>
-                    <div className="text-center min-w-0 w-full px-2">
-                      <p className="text-xs font-semibold font-mono truncate text-primary">
-                        {stagedPdf.name}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                        Reference PDF • {formatSize(stagedPdf.size)}
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleRemovePdf}
-                      className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      title="Remove File"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                      <FileUp className="h-4 w-4" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs font-semibold">Architectural PDF</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wider font-mono">
-                        Optional Overlay
-                      </p>
-                    </div>
-                  </>
+              {/* Action Trigger */}
+              <div className="space-y-3 pt-4 border-t border-border/60">
+                <button
+                  onClick={handleUploadAndParse}
+                  disabled={!stagedDxf}
+                  className="w-full py-3 bg-primary text-primary-foreground text-xs font-bold tracking-wider uppercase rounded-lg hover:bg-primary/95 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  Parse CAD Geometry
+                </button>
+                {uploadError && (
+                  <div className="flex items-center gap-1.5 justify-center text-xs text-destructive font-mono">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span>{uploadError}</span>
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* Action Trigger */}
-            <div className="w-full flex flex-col gap-2 pt-2 border-t border-border/60">
-              <button
-                onClick={handleUploadAndParse}
-                disabled={!stagedDxf}
-                className="w-full py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                Initialize AI Geometry Classifier
-              </button>
-              {uploadError && (
-                <div className="flex items-center gap-1.5 justify-center text-xs text-destructive font-mono mt-1">
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  <span>{uploadError}</span>
+            {/* Right Column: Detailed CAD Guidelines */}
+            <div className="md:col-span-7 flex flex-col gap-6 pl-0 md:pl-4">
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold tracking-wider uppercase font-mono text-[#00ffff]">
+                  DXF Drawing Guidelines
+                </h4>
+                <p className="text-[11px] text-muted-foreground">
+                  Follow these specifications to ensure high-accuracy automated geometry classification:
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 overflow-y-auto max-h-[350px] pr-2 scrollbar-thin">
+                {/* Guideline 1 */}
+                <div className="p-3.5 rounded-lg border border-border/40 bg-muted/5 flex gap-3.5 items-start">
+                  <div className="p-2 rounded bg-amber-500/10 text-amber-400 mt-0.5 font-mono text-xs font-bold shrink-0">01</div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-foreground">Separate Layout Sheets</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Place different floor plans on separate **DXF Layout tabs** (e.g. Ground Floor, First Floor). Drawings placed side-by-side in Model space will be rejected.
+                    </p>
+                  </div>
                 </div>
-              )}
+
+                {/* Guideline 2 */}
+                <div className="p-3.5 rounded-lg border border-border/40 bg-muted/5 flex gap-3.5 items-start">
+                  <div className="p-2 rounded bg-amber-500/10 text-amber-400 mt-0.5 font-mono text-xs font-bold shrink-0">02</div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-foreground">Layer Naming Conventions</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Members must reside on designated layers: Beams on <code className="text-amber-300 font-mono">beam*</code>, Columns on <code className="text-amber-300 font-mono">column*</code> or <code className="text-amber-300 font-mono">c-column*</code>, Slabs on <code className="text-amber-300 font-mono">slab*</code>, and Walls on <code className="text-amber-300 font-mono">wall*</code>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Guideline 3 */}
+                <div className="p-3.5 rounded-lg border border-border/40 bg-muted/5 flex gap-3.5 items-start">
+                  <div className="p-2 rounded bg-amber-500/10 text-amber-400 mt-0.5 font-mono text-xs font-bold shrink-0">03</div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-foreground">Consistent Drawing Units</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Ensure the entire drawing uses a uniform scale: either **millimeters (mm)** or **meters (m)**. Mixed units or incorrect coordinate scaling will cause calculation failures.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Guideline 4 */}
+                <div className="p-3.5 rounded-lg border border-border/40 bg-muted/5 flex gap-3.5 items-start">
+                  <div className="p-2 rounded bg-amber-500/10 text-amber-400 mt-0.5 font-mono text-xs font-bold shrink-0">04</div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-foreground">Vertical Centroid Alignment</p>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Columns that stack vertically must share identical XY coordinates. The system links columns with a tolerance of **300mm** to establish load path stacks.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -366,7 +352,7 @@ export const CanvasUploader = forwardRef<CanvasUploaderHandle, CanvasUploaderPro
               <Loader2 className="h-10 w-10 text-primary animate-spin" />
               <p className="text-sm font-medium">
                 {uploadState === "uploading"
-                  ? "Uploading drawing files to pipeline…"
+                  ? "Uploading drawing file to pipeline…"
                   : `Classifying Geometry (${progressPct.toFixed(0)}%)…`}
               </p>
               <p className="text-xs text-muted-foreground font-mono">
