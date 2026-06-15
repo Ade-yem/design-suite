@@ -72,7 +72,25 @@ export function normalizeBackendMember(raw: unknown): GeometricMember {
     boundary_polygon: polygon,
     meta,
     spans_m: Array.isArray(m.spans_m) ? (m.spans_m as number[]) : undefined,
+    storey: (m.storey ?? null) as string | null,
+    elevation_m:
+      m.elevation_m === undefined || m.elevation_m === null
+        ? null
+        : Number(m.elevation_m),
   };
+}
+
+/**
+ * Sorted list of distinct storey codes present in a member set (e.g.
+ * `["L01", "L02"]`). Empty when the geometry has not been extrapolated into
+ * storeys yet (single typical floor).
+ */
+export function deriveStoreys(members: GeometricMember[]): string[] {
+  const set = new Set<string>();
+  for (const m of members) {
+    if (m.storey) set.add(m.storey);
+  }
+  return Array.from(set).sort();
 }
 
 // ── Store Interface ─────────────────────────────────────────────────────────
@@ -148,6 +166,12 @@ interface CanvasState {
    * Takes effect even when the member's type is not in `hiddenLabelTypes`.
    */
   hiddenLabelIds: Set<string>;
+
+  /**
+   * Currently active storey filter (e.g. "L01"), or null to show all storeys.
+   * Only meaningful once geometry has been extrapolated into multiple storeys.
+   */
+  activeStorey: string | null;
 }
 
 /**
@@ -161,6 +185,13 @@ interface CanvasActions {
    * @param data - Full parsed geometry payload from the API.
    */
   loadGeometry: (data: ParsedGeometry) => void;
+
+  /**
+   * Set the active storey filter, or null to show every storey.
+   *
+   * @param storey - Storey code (e.g. "L01") or null.
+   */
+  setActiveStorey: (storey: string | null) => void;
 
   /**
    * Set the zoom level.
@@ -332,6 +363,7 @@ const INITIAL_STATE: CanvasState = {
   memberAnalysisMap: new Map(),
   hiddenLabelTypes: new Set(),
   hiddenLabelIds: new Set(),
+  activeStorey: null,
 };
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -342,6 +374,7 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
   loadGeometry: (data) => {
     const members = (data.members ?? []).map(normalizeBackendMember);
     const bounds = computeBounds(members);
+    const storeys = deriveStoreys(members);
     set({
       members,
       scale: data.scale ?? null,
@@ -351,8 +384,13 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
       verifyError: null,
       selectedMemberId: null,
       hoveredMemberId: null,
+      // Multi-storey plans overlap in plan view, so default to the lowest
+      // storey; single-floor geometry shows everything (null filter).
+      activeStorey: storeys.length > 1 ? storeys[0] : null,
     });
   },
+
+  setActiveStorey: (storey) => set({ activeStorey: storey }),
 
   setZoom: (z) => {
     const clamped = Math.max(0.01, Math.min(100, z));
