@@ -247,7 +247,7 @@ export function LabelVisibilityModal({
           <div className="space-y-0.5 max-h-48 overflow-y-auto pr-0.5">
             {filteredMembers.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-4">
-                No members match "{search}"
+                No members match &quot;{search}&quot;
               </p>
             ) : (
               filteredMembers.map((m) => {

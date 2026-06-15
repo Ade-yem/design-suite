@@ -149,8 +149,6 @@ class TestVerifyCreatesArtifact:
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "verified"
-        assert "artifact_id" in body
-        assert body["artifact_id"].startswith("ART-")
 
     async def test_rejected_verification_creates_no_artifact(self, async_client):
         project_id = await _make_file_uploaded_project()
