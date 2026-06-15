@@ -24,7 +24,7 @@ import type {
  * @param v - The raw value to format.
  * @returns The formatted string representation of the value.
  */
-function formatValue(v: any): string {
+function formatValue(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(3);
   if (typeof v === "boolean") return v ? "true" : "false";
@@ -91,7 +91,7 @@ function StepBlock({ step }: { step: CalculationTraceStep }) {
           <span className="text-muted-foreground">⇒ </span>
           {isObjectResult ? (
             <div className="flex flex-wrap gap-x-2 gap-y-1">
-              {Object.entries(step.result as Record<string, any>).map(([key, val]) => (
+              {Object.entries(step.result as Record<string, unknown>).map(([key, val]) => (
                 <span
                   key={key}
                   className="px-1.5 py-0.5 rounded bg-primary/5 border border-primary/10 text-primary font-semibold text-[11px]"
@@ -171,17 +171,20 @@ export function CalcSheetTab({
   designCode: string;
 }) {
   // Merge analysis trace with any design notes (rendered as trailing steps).
-  const steps: CalculationTraceStep[] = [...(analysis?.calculation_trace ?? [])];
-  if (design?.notes?.length) {
-    const base = steps.length;
-    design.notes.forEach((note, i) => {
-      steps.push({
-        step: base + i + 1,
-        description: note,
-        result: null,
+  const steps = React.useMemo((): CalculationTraceStep[] => {
+    const arr: CalculationTraceStep[] = [...(analysis?.calculation_trace ?? [])];
+    if (design?.notes?.length) {
+      const base = arr.length;
+      design.notes.forEach((note, i) => {
+        arr.push({
+          step: base + i + 1,
+          description: note,
+          result: null,
+        });
       });
-    });
-  }
+    }
+    return arr;
+  }, [analysis, design]);
 
   const handleDownload = useCallback(() => {
     if (!analysis) return;
