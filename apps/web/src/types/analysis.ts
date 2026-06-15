@@ -50,8 +50,8 @@ export interface CalculationTraceStep {
   step: number;
   description: string;
   formula?: string;
-  inputs?: Record<string, any>;
-  result: any;
+  inputs?: Record<string, unknown>;
+  result: unknown;
   clause?: string;
 }
 
