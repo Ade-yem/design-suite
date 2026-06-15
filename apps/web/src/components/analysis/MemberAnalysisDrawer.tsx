@@ -250,7 +250,9 @@ export function MemberAnalysisDrawer() {
           {activeTab === "loads" && (
             <LoadsTab analysis={analysis} spanM={spanM} />
           )}
-          {activeTab === "rebar" && <RebarTab design={design} />}
+          {activeTab === "rebar" && (
+            <RebarTab design={design} memberId={selectedMemberId} />
+          )}
           {activeTab === "calc" && (
             <CalcSheetTab
               analysis={analysis}

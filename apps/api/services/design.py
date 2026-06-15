@@ -282,11 +282,24 @@ class DesignService:
         for field in ("b_mm", "h_mm", "cover_mm", "fck_MPa", "fcu_MPa", "fy_MPa"):
             if override.get(field) is not None:
                 member[field] = override[field]
-        member.update(override.get("meta_updates", {}))
+        meta_updates = override.get("meta_updates", {}) or {}
+        member.update(meta_updates)
         member["override_reason"] = override.get("reason", "")
         member["override_at"] = datetime.now(timezone.utc).isoformat()
 
-        # Stub re-check (integrate with design_member when available)
+        # Re-run the design for this member with the overridden parameters so the
+        # reinforcement (As_req/As_prov, links, status) reflects the change —
+        # e.g. an engineer selecting a different bar diameter. Falls back to the
+        # field-merge result if inputs for a full recompute are unavailable.
+        recomputed = self._recompute_member_design(project_id, member_id, member, override)
+        if recomputed is not None:
+            recomputed["override_reason"] = member.get("override_reason", "")
+            recomputed["override_at"] = member["override_at"]
+            idx = store["members"].index(member)
+            store["members"][idx] = recomputed
+            member = recomputed
+
+        # Self-weight convergence check
         new_sw = member.get("self_weight_kNm", original_sw)
         sw_change_pct = (
             abs(new_sw - original_sw) / original_sw * 100 if original_sw else 0.0
@@ -316,6 +329,74 @@ class DesignService:
             "reanalysis_needed": reanalysis_needed,
             "self_weight_change_pct": round(sw_change_pct, 2),
         }
+
+    def _recompute_member_design(
+        self,
+        project_id: str,
+        member_id: str,
+        member: dict,
+        override: dict,
+    ) -> Optional[dict]:
+        """
+        Re-run ``design_member`` for a single member using the overridden
+        geometry/parameters merged over the parsed geometry meta.
+
+        Returns the recomputed design dict, or ``None`` if the inputs needed for
+        a full recompute (parsed geometry meta + analysis result) are missing,
+        in which case the caller keeps the field-merged member.
+        """
+        try:
+            from core.design.rc import design_member
+            from services.files import file_service
+            from services.analysis import analysis_service
+
+            parsed = file_service._store.get_parsed(project_id) or {}
+            parsed_members = {m["member_id"]: m for m in parsed.get("members", [])}
+            geometry_meta = dict(parsed_members.get(member_id, {}).get("meta", {}))
+
+            # Merge the override on top of the parsed meta.
+            for src, dst in (("b_mm", "b_mm"), ("h_mm", "h_mm"), ("cover_mm", "cover_mm"),
+                             ("fck_MPa", "fck_MPa"), ("fcu_MPa", "fcu_MPa"), ("fy_MPa", "fy_MPa")):
+                if override.get(src) is not None:
+                    geometry_meta[dst] = override[src]
+            geometry_meta.update(override.get("meta_updates", {}) or {})
+            geometry_meta.setdefault(
+                "member_type", member.get("member_type", "beam")
+            )
+
+            try:
+                analysis = analysis_service.get_results(project_id)
+            except (KeyError, ValueError):
+                return None
+            analysis_member = next(
+                (m for m in analysis.get("members", []) if m.get("member_id") == member_id),
+                None,
+            )
+            if analysis_member is None:
+                return None
+
+            design_code = (
+                self._store_design_code(project_id) or member.get("design_code", "BS8110")
+            )
+            result = design_member(
+                analysis_result=analysis_member,
+                geometry_meta=geometry_meta,
+                design_code=design_code,
+            )
+            result["member_id"] = member_id
+            # Preserve any overridden geometry on the stored member for the next edit.
+            for field in ("b_mm", "h_mm", "cover_mm", "fck_MPa", "fcu_MPa", "fy_MPa"):
+                if override.get(field) is not None:
+                    result[field] = override[field]
+            return result
+        except Exception as exc:  # defensive: never break the override on recompute
+            logger.warning("Member recompute failed for %s: %s", member_id, exc)
+            return None
+
+    def _store_design_code(self, project_id: str) -> Optional[str]:
+        """Return the design code recorded on the cached design results, if any."""
+        store = _store.get(project_id)
+        return store.get("design_code") if isinstance(store, dict) else None
 
     async def rerun_member(self, project_id: str, member_id: str) -> dict:
         """
