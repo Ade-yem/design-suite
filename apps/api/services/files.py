@@ -28,7 +28,7 @@ from typing import Any, Optional
 
 from core.parsing import parse_file
 from storage.project_store import project_store
-from schemas.project import ProjectStatus
+from schemas.project import ProjectStatus, ProjectUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +303,103 @@ class FileService:
             unit_label,
         )
         return new_scale
+
+    async def apply_storeys(
+        self,
+        project_id: str,
+        num_storeys: int,
+        storey_height_m: float,
+    ) -> dict:
+        """
+        Persist the building's storey count/height and extrapolate the typical
+        floor into a multi-storey model **before Gate-1**.
+
+        This is what keeps the audit trail coherent: by extrapolating here (at the
+        upload/parse step) rather than during the later loading stage, the geometry
+        the engineer verifies — and that Gate-1 snapshots — is the true
+        multi-storey set, not the 2-D typical floor.
+
+        Re-runs are idempotent: the original typical floor is cached once as
+        ``typical_members`` and every call re-extrapolates from it, so changing the
+        storey count simply rebuilds the model.
+
+        Parameters
+        ----------
+        project_id : str
+        num_storeys : int
+            Number of storeys (>= 1).
+        storey_height_m : float
+            Typical storey height (m).
+
+        Returns
+        -------
+        dict
+            ``{num_storeys, storey_height_m, member_count}``
+
+        Raises
+        ------
+        ValueError
+            If no parsed geometry exists for the project.
+        """
+        try:
+            parsed = await self.get_parsed(project_id)
+        except KeyError as exc:
+            raise ValueError(
+                f"Cannot set storeys for project '{project_id}': no parsed data found."
+            ) from exc
+
+        # Persist on the project so extrapolation is self-contained and the
+        # analyst/loading stages can read it without the LangGraph dialogue.
+        await project_store.update(
+            project_id,
+            ProjectUpdate(num_storeys=num_storeys, storey_height_m=storey_height_m),
+            bypass_tenant_check=True,
+        )
+
+        # Preserve the original (single typical floor) once, so re-runs rebuild
+        # from it rather than compounding.
+        if "typical_members" not in parsed:
+            import copy
+
+            parsed["typical_members"] = copy.deepcopy(parsed.get("members", []))
+
+        from core.parsing.storey_generator import extrapolate_storeys
+
+        layouts = parsed.get("layouts_processed") or ["Model"]
+        extrapolated = extrapolate_storeys(
+            typical_members=parsed["typical_members"],
+            num_storeys=num_storeys,
+            storey_height_m=storey_height_m,
+            layouts_processed=layouts,
+        )
+
+        parsed["members"] = extrapolated
+        await self.register_geometry(project_id, parsed)
+
+        new_mids = [m["member_id"] for m in extrapolated if m.get("member_id")]
+        await project_store.register_members_batch(project_id, new_mids)
+
+        # Keep LangGraph state in sync so agents/views see the extrapolated model.
+        try:
+            from agents.graph import app as graph_app
+
+            config = {"configurable": {"thread_id": project_id}}
+            await graph_app.aupdate_state(config, {"parsed_structural_json": parsed})
+        except Exception as exc:  # pragma: no cover - best-effort state sync
+            logger.warning("Failed to update LangGraph state with storeys: %s", exc)
+
+        logger.info(
+            "Storeys applied for project %s: %d storey(s) @ %.2f m → %d member(s).",
+            project_id,
+            num_storeys,
+            storey_height_m,
+            len(extrapolated),
+        )
+        return {
+            "num_storeys": num_storeys,
+            "storey_height_m": storey_height_m,
+            "member_count": len(extrapolated),
+        }
 
     async def verify_geometry(
         self,

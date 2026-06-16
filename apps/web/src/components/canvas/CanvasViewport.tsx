@@ -42,6 +42,8 @@ import { FloorSwitcher } from "./FloorSwitcher";
 import { CoordinateReadout } from "./CoordinateReadout";
 import { MemberTooltip } from "./MemberTooltip";
 import { PropertyInspector, type MemberPropertyPatch } from "./PropertyInspector";
+import { StaircasePanel } from "./StaircasePanel";
+import { FoundationSchedule } from "./FoundationSchedule";
 import { CanvasUploader, type CanvasUploaderHandle } from "./CanvasUploader";
 import { MembersPanel } from "./MembersPanel";
 import { GeometryGate } from "./GeometryGate";
@@ -142,6 +144,13 @@ export const CanvasViewport = forwardRef<
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [isConfirmingScale, setIsConfirmingScale] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
+
+  // Building height — collected here (before Gate-1) so the typical floor is
+  // extrapolated into the real multi-storey model the engineer verifies.
+  const [numStoreys, setNumStoreys] = useState<number>(1);
+  const [storeyHeight, setStoreyHeight] = useState<number>(3.0);
+  const [isApplyingStoreys, setIsApplyingStoreys] = useState(false);
+  const [showFoundations, setShowFoundations] = useState(false);
 
 
   // Regeneration state
@@ -311,6 +320,23 @@ export const CanvasViewport = forwardRef<
       setIsConfirmingScale(false);
     }
   }, [projectId, scaleFactor, scaleUnit, fetchExistingGeometry]);
+
+  const handleApplyStoreys = useCallback(async () => {
+    setIsApplyingStoreys(true);
+    try {
+      await apiClient.put(`/api/v1/files/${projectId}/storeys`, {
+        num_storeys: numStoreys,
+        storey_height_m: storeyHeight,
+      });
+      // Reload so the canvas shows the extrapolated multi-storey model (L01–L0n)
+      // with the FloorSwitcher live, before the engineer signs off.
+      await fetchExistingGeometry();
+    } catch {
+      // Non-fatal — engineer can retry.
+    } finally {
+      setIsApplyingStoreys(false);
+    }
+  }, [projectId, numStoreys, storeyHeight, fetchExistingGeometry]);
 
   // ── Drawing loop using requestAnimationFrame ─────────────────────────────
   const draw = useCallback(() => {
@@ -534,7 +560,21 @@ export const CanvasViewport = forwardRef<
   const handleConfirmGeometry = async (notes?: string) => {
     setVerificationStatus("submitting");
     try {
-      const corrections = members.map((m) => ({
+      // Guarantee the audit invariant: the verified geometry must be the
+      // extrapolated multi-storey model. If the engineer never applied storeys
+      // explicitly, do it now (default 1 storey just tags L01) so Gate-1
+      // snapshots the same geometry the loading stage will use.
+      const needsStoreys = !useCanvasStore
+        .getState()
+        .members.some((m) => m.storey);
+      if (needsStoreys) {
+        await handleApplyStoreys();
+      }
+
+      // Read the freshest members from the store (apply-storeys may have
+      // re-registered them with storey-prefixed ids).
+      const liveMembers = useCanvasStore.getState().members;
+      const corrections = liveMembers.map((m) => ({
         member_id: m.member_id,
         member_type: m.member_type,
         start_point: m.start_point,
@@ -559,7 +599,7 @@ export const CanvasViewport = forwardRef<
       setVerificationStatus("verified");
       if (onParsedRef.current) {
         onParsedRef.current({
-          memberCount: members.length,
+          memberCount: liveMembers.length,
           scale: scale ?? { factor: 1, unit: "mm" },
         });
       }
@@ -633,6 +673,12 @@ export const CanvasViewport = forwardRef<
               onScaleUnitChange={setScaleUnit}
               onConfirmScale={handleConfirmScale}
               isConfirmingScale={isConfirmingScale}
+              numStoreys={numStoreys}
+              storeyHeight={storeyHeight}
+              onNumStoreysChange={setNumStoreys}
+              onStoreyHeightChange={setStoreyHeight}
+              onApplyStoreys={handleApplyStoreys}
+              isApplyingStoreys={isApplyingStoreys}
               verificationStatus={verificationStatus}
               memberCount={members.length}
               onConfirmGeometry={handleConfirmGeometry}
@@ -692,12 +738,36 @@ export const CanvasViewport = forwardRef<
             {/* Geometry editor is only for the pre-analysis phase; once
                 analysis is complete the member analysis drawer takes over. */}
             {selectedMember && !analysisReady && (
-              <PropertyInspector
-                selectedMember={selectedMember}
-                onDeselect={() => selectMember(null)}
-                onDelete={handleDeleteMember}
-                onSave={handleSaveProperties}
-              />
+              selectedMember.member_type === "staircase" ? (
+                <StaircasePanel
+                  projectId={projectId}
+                  member={selectedMember}
+                  onSave={(patch) => {
+                    if (selectedMemberId) updateMember(selectedMemberId, patch);
+                    selectMember(null);
+                  }}
+                  onClose={() => selectMember(null)}
+                />
+              ) : (
+                <PropertyInspector
+                  selectedMember={selectedMember}
+                  onDeselect={() => selectMember(null)}
+                  onDelete={handleDeleteMember}
+                  onSave={handleSaveProperties}
+                />
+              )
+            )}
+
+            {members.some((m) => m.member_type === "footing") && (
+              <button
+                onClick={() => setShowFoundations((v) => !v)}
+                className="absolute top-4 right-4 z-30 px-3 py-1.5 text-xs rounded-lg bg-card/90 border border-border shadow-sm text-foreground hover:bg-muted/60 transition-colors"
+              >
+                Foundations
+              </button>
+            )}
+            {showFoundations && (
+              <FoundationSchedule onClose={() => setShowFoundations(false)} />
             )}
 
             {analysisReady && (

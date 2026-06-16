@@ -365,7 +365,144 @@ class VerticalLoadTakedownEngine:
 
             logger.info("Auto-generated footing %s: N_uls=%.1f kN, N_sls=%.1f kN", fid, N_uls, N_sls)
 
+        # ── Group adjacent base columns into combined footings ────────────
+        # Where two columns' estimated (SLS) pad footings would overlap, designing
+        # them as separate pads is wrong — merge them into a single combined
+        # footing fed to the CombinedFootingSolver. Greedy nearest-pair: each
+        # column pairs at most once. center_point coordinates are in millimetres.
+        footing_members, footing_loads = _group_combined_footings(
+            footing_members, footing_loads, qa_kpa, design_code
+        )
+
         return column_axial_loads, footing_members, footing_loads
+
+
+# ── Combined-footing grouping ─────────────────────────────────────────────────
+
+def _estimate_pad_B_m(N_sls_kN: float, qa_kpa: float) -> float:
+    """SLS-sized square pad side (m), matching PadFootingSolver's sizing rule."""
+    if qa_kpa <= 0:
+        return 0.0
+    area = (N_sls_kN * 1.1) / qa_kpa  # +10% self-weight allowance
+    return math.sqrt(area) if area > 0 else 0.0
+
+
+def _group_combined_footings(
+    footing_members: list[dict],
+    footing_loads: list[dict],
+    qa_kpa: float,
+    design_code: str,
+) -> tuple[list[dict], list[dict]]:
+    """
+    Merge pairs of base-column footings whose estimated pads would overlap into
+    single combined footings.
+
+    Greedy nearest-pair: iterate footings, pair each unpaired one with its nearest
+    unpaired neighbour when their pads overlap (centre spacing < ½B_i + ½B_j). The
+    combined footing carries both column loads and the inputs the
+    ``CombinedFootingSolver`` needs (``neighbour_N_uls``, ``neighbour_dist_m``,
+    ``edge_distance_m``). Unpaired footings stay as pads.
+    """
+    n = len(footing_members)
+    if n < 2:
+        return footing_members, footing_loads
+
+    paired: set[int] = set()
+    combined_members: list[dict] = []
+    combined_loads: list[dict] = []
+
+    def _centre(fm: dict) -> tuple[float, float] | None:
+        cp = fm.get("center_point") or {}
+        if "x" not in cp or "y" not in cp:
+            return None
+        return float(cp["x"]), float(cp["y"])
+
+    for i in range(n):
+        if i in paired:
+            continue
+        ci = _centre(footing_members[i])
+        if ci is None:
+            continue
+        B_i = _estimate_pad_B_m(footing_members[i]["meta"]["N_sls"], qa_kpa)
+
+        best_j: int | None = None
+        best_d_mm: float | None = None
+        for j in range(n):
+            if j == i or j in paired:
+                continue
+            cj = _centre(footing_members[j])
+            if cj is None:
+                continue
+            d_mm = math.hypot(ci[0] - cj[0], ci[1] - cj[1])
+            if best_d_mm is None or d_mm < best_d_mm:
+                best_d_mm, best_j = d_mm, j
+
+        if best_j is None or best_d_mm is None:
+            continue
+
+        fj = footing_members[best_j]
+        B_j = _estimate_pad_B_m(fj["meta"]["N_sls"], qa_kpa)
+        d_m = best_d_mm / 1000.0
+        if d_m <= 0 or d_m >= (B_i / 2.0 + B_j / 2.0):
+            continue  # pads clear — keep both as pads
+
+        # Merge i and best_j into one combined footing.
+        paired.add(i)
+        paired.add(best_j)
+        fi = footing_members[i]
+        cj = _centre(fj)
+        assert cj is not None
+        mid = {"x": (ci[0] + cj[0]) / 2.0, "y": (ci[1] + cj[1]) / 2.0}
+        src_i = fi["meta"].get("_source_column", fi["member_id"])
+        src_j = fj["meta"].get("_source_column", fj["member_id"])
+        cid = f"FC-{src_i}-{src_j}"
+        N_uls_total = fi["meta"]["N_uls"] + fj["meta"]["N_uls"]
+        N_sls_total = fi["meta"]["N_sls"] + fj["meta"]["N_sls"]
+
+        combined_members.append({
+            "member_id": cid,
+            "member_type": "footing",
+            "type": "footing",
+            "center_point": mid,
+            "start_point": None,
+            "end_point": None,
+            "boundary_polygon": None,
+            "is_void": False,
+            "spans": [],
+            "spans_m": [],
+            "meta": {
+                "footing_type": "combined",
+                "qa": qa_kpa,
+                "N_uls": fi["meta"]["N_uls"],
+                "N_sls": N_sls_total,
+                "neighbour_N_uls": fj["meta"]["N_uls"],
+                "neighbour_dist_m": round(d_m, 3),
+                "edge_distance_m": round(min(d_m * 0.5, 0.5), 3),
+                "M_uls": 0.0,
+                "_source_columns": [src_i, src_j],
+            },
+        })
+        combined_loads.append({
+            "member_id": cid,
+            "member_type": "footing",
+            "design_code": design_code,
+            "spans": [{
+                "span_id": "S1",
+                "length_m": round(d_m, 3) or 1.0,
+                "loads": {"n_uls": N_uls_total, "n_sls": N_sls_total},
+            }],
+            "combination_used": "1.4Gk+1.6Qk",
+            "notes": f"Combined footing for columns {src_i} & {src_j}",
+        })
+        logger.info("Grouped %s + %s into combined footing %s (spacing %.2f m)", src_i, src_j, cid, d_m)
+
+    if not paired:
+        return footing_members, footing_loads
+
+    kept_members = [fm for k, fm in enumerate(footing_members) if k not in paired] + combined_members
+    kept_ids = {fm["member_id"] for fm in kept_members}
+    kept_loads = [fl for fl in footing_loads if fl["member_id"] in kept_ids] + combined_loads
+    return kept_members, kept_loads
 
 
 # ── UDL Gk/Qk extraction helper ──────────────────────────────────────────────
