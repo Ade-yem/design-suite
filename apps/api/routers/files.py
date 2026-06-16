@@ -96,6 +96,26 @@ class ScaleCorrectionRequest(BaseModel):
     confirmed: bool = Field(False, description="Acceptance flag.")
 
 
+class StoreyDefinitionRequest(BaseModel):
+    """
+    Request body for PUT /api/v1/files/{project_id}/storeys.
+
+    Collected at the upload/parse step (after a typical floor is parsed) so the
+    typical-floor geometry can be extrapolated into a multi-storey model *before*
+    Gate-1 freezes its audit snapshot.
+
+    Attributes
+    ----------
+    num_storeys : int
+        Number of storeys in the building (>= 1).
+    storey_height_m : float
+        Typical storey height in metres.
+    """
+
+    num_storeys: int = Field(1, ge=1, le=200, description="Number of storeys.")
+    storey_height_m: float = Field(3.0, gt=0, le=20, description="Typical storey height (m).")
+
+
 class UploadResponse(BaseModel):
     """
     Immediate response for POST /api/v1/files/upload/{project_id}.
@@ -664,6 +684,49 @@ async def confirm_scale(
         scale_factor=payload.scale_factor,
         unit_label=payload.unit_label,
     )
+
+
+@router.put("/{project_id}/storeys")
+async def define_storeys(
+    project_id: str,
+    payload: StoreyDefinitionRequest,
+    project: ProjectResponse = Depends(require_file_uploaded),
+) -> dict:
+    """
+    Define the building's storey count/height and extrapolate the typical floor
+    into a multi-storey model **before Gate-1**.
+
+    Running extrapolation here (rather than during the later loading stage) keeps
+    the audit trail coherent — the geometry the engineer verifies and that Gate-1
+    snapshots is the true multi-storey model. The call is idempotent.
+
+    Parameters
+    ----------
+    project_id : str
+        Target project.
+    payload : StoreyDefinitionRequest
+        Storey count and typical height.
+    project : ProjectResponse
+        Gate dependency — project must have a file uploaded.
+
+    Returns
+    -------
+    dict
+        ``{num_storeys, storey_height_m, member_count}``.
+    """
+    try:
+        return await file_service.apply_storeys(
+            project_id,
+            num_storeys=payload.num_storeys,
+            storey_height_m=payload.storey_height_m,
+        )
+    except ValueError as exc:
+        raise StructuralError(
+            "FILE_PARSE_ERROR",
+            stage="storey_definition",
+            details={"reason": str(exc)},
+            status_code=400,
+        ) from exc
 
 
 # ─── File Listing & Downloading Endpoints ─────────────────────────────────────

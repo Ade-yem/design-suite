@@ -19,7 +19,7 @@ from db.models.organisation import Organisation
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UUID
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
@@ -68,6 +68,10 @@ class Project(Base):
     reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
     client: Mapped[str | None] = mapped_column(String(255), nullable=True)
     design_code: Mapped[str] = mapped_column(String(20), default="BS8110")
+    # Building height — collected at upload, drives multi-storey extrapolation
+    # (before Gate-1) and downstream stair geometry.
+    num_storeys: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    storey_height_m: Mapped[float] = mapped_column(Float, default=3.0, server_default="3.0")
     pipeline_status: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

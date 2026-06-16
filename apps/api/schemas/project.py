@@ -101,6 +101,8 @@ class ProjectUpdate(BaseModel):
     reference: Optional[str] = Field(None, max_length=50)
     client: Optional[str] = Field(None, max_length=200)
     design_code: Optional[str] = Field(None, pattern="^(BS8110|EC2)$")
+    num_storeys: Optional[int] = Field(None, ge=1, le=200, description="Number of storeys.")
+    storey_height_m: Optional[float] = Field(None, gt=0, le=20, description="Typical storey height (m).")
 
 
 # ─── Response Models ──────────────────────────────────────────────────────────
@@ -150,6 +152,8 @@ class ProjectResponse(BaseModel):
     member_count: int
     organisation_id: Optional[str] = None
     created_by: Optional[Any] = None
+    num_storeys: int = 1
+    storey_height_m: float = 3.0
 
 
 

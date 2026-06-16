@@ -401,20 +401,37 @@ class LoadingService:
         except KeyError:
             parsed = {}
 
-        if parsed:
-            # Retrieve project parameters (num_storeys, storey_height_m) from the LangGraph state
+        # Storey extrapolation now happens BEFORE Gate-1 (file_service.apply_storeys)
+        # so the audited geometry matches the working geometry. This block is a
+        # no-regression fallback for projects that never hit that path: it only
+        # runs when the geometry has not already been extrapolated (no member
+        # carries a `storey` tag), and it never re-mutates a verified model.
+        already_extrapolated = bool(parsed) and any(
+            m.get("storey") for m in parsed.get("members", [])
+        )
+        if parsed and not already_extrapolated:
+            # Prefer the storeys persisted on the project; fall back to the
+            # LangGraph project_parameters for older threads.
             num_storeys = 1
             storey_height_m = 3.0
             try:
-                from agents.graph import app as graph_app
-                config = {"configurable": {"thread_id": project_id}}
-                state = await graph_app.aget_state(config)
-                if state and state.values:
-                    params = state.values.get("project_parameters") or {}
-                    num_storeys = params.get("num_storeys", 1)
-                    storey_height_m = params.get("storey_height_m", 3.0)
+                proj = await project_store.get(project_id, bypass_tenant_check=True)
+                if proj:
+                    num_storeys = getattr(proj, "num_storeys", 1) or 1
+                    storey_height_m = getattr(proj, "storey_height_m", 3.0) or 3.0
             except Exception as exc:
-                logger.warning("Failed to retrieve project parameters from state: %s", exc)
+                logger.warning("Failed to read storeys from project: %s", exc)
+            if num_storeys == 1:
+                try:
+                    from agents.graph import app as graph_app
+                    config = {"configurable": {"thread_id": project_id}}
+                    state = await graph_app.aget_state(config)
+                    if state and state.values:
+                        params = state.values.get("project_parameters") or {}
+                        num_storeys = params.get("num_storeys", num_storeys)
+                        storey_height_m = params.get("storey_height_m", storey_height_m)
+                except Exception as exc:
+                    logger.warning("Failed to retrieve project parameters from state: %s", exc)
 
             # Store the original typical members if we haven't already
             if "typical_members" not in parsed:
