@@ -75,6 +75,56 @@ export interface MemberMeta {
   L_clear?: number;
   Lx?: number;
   Ly?: number;
+
+  // ── Beam classification (geometry only) ────────────────────────────────
+  /** "rectangular" | "flanged" — flanged reveals bf/hf. */
+  section_type?: string;
+  /** "simple" | "continuous" | "cantilever". */
+  support_condition?: string;
+  /** Flange width (mm) for flanged (T/L) beams. */
+  bf?: number;
+  /** Flange thickness (mm) for flanged (T/L) beams. */
+  hf?: number;
+
+  // ── Slab structural system + geometry ──────────────────────────────────
+  /** Structural system: "solid" | "ribbed" | "waffle" | "flat". */
+  slab_system?: string;
+  /** Spanning behaviour: "one-way" | "two-way". */
+  slab_type?: string;
+  /** Two-way panel edge code (code-specific, e.g. "interior" / "CCCC"). */
+  panel_type?: string;
+  /** Ribbed/waffle: rib web width (mm). */
+  rib_width?: number;
+  /** Ribbed/waffle: centre-to-centre rib spacing (mm). */
+  rib_spacing?: number;
+  /** Ribbed/waffle: structural topping thickness (mm). */
+  topping_thickness?: number;
+  /** Flat slab: supporting column dimension (mm). */
+  column_c?: number;
+  /** Flat slab: drop panel present. */
+  is_drop_panel?: boolean;
+  /** Flat slab: extra drop-panel thickness below soffit (mm). */
+  drop_thickness_extra?: number;
+  /** Flat slab: drop-panel extent in lx / ly (mm). */
+  drop_lx?: number;
+  drop_ly?: number;
+  /** Flat slab: panel position "interior" | "edge" | "corner". */
+  edge_condition?: string;
+
+  // ── Column / wall geometry ─────────────────────────────────────────────
+  /** Column: braced against sway. */
+  braced?: boolean;
+  /** Column effective lengths (mm). */
+  l_ex?: number;
+  l_ey?: number;
+  /** Wall: length (mm). */
+  l_w?: number;
+  /** Wall: effective height (mm). */
+  l_e?: number;
+
+  /** DXF source layer (read-only context). */
+  layer?: string;
+
   [key: string]: unknown;
 }
 
