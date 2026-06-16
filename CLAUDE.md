@@ -143,7 +143,7 @@ AuthGuard → AppHeader (+ StageTracker) → CanvasViewport + ChatSidebar
 ```
 
 - **CanvasViewport** — SVG canvas rendering geometry/reinforcement; file upload zone
-- **ChatSidebar** — Agent message stream; currently uses mock timeouts, WebSocket integration is pending
+- **ChatSidebar** — Agent message stream, wired to the live WebSocket via `useProjectSocket` (`/ws/chat`, `/ws/pipeline`): real agent messages, status logs, gate prompts, and job progress with reconnect/backoff
 - **StageTracker** — Visual pipeline progress indicator (parsing → verification → analysis → drafting)
 
 Global auth state lives in `src/stores/authStore.ts` (Zustand). The API client is at `src/lib/api.ts` — an Axios instance with a JWT token interceptor.
