@@ -12,6 +12,13 @@ interface GeometryGateProps {
   onConfirmScale: () => Promise<void>;
   isConfirmingScale: boolean;
 
+  numStoreys: number;
+  storeyHeight: number;
+  onNumStoreysChange: (n: number) => void;
+  onStoreyHeightChange: (h: number) => void;
+  onApplyStoreys: () => Promise<void>;
+  isApplyingStoreys: boolean;
+
   verificationStatus: VerificationStatus;
   memberCount: number;
   onConfirmGeometry: (notes?: string) => Promise<void>;
@@ -27,6 +34,12 @@ export const GeometryGate: React.FC<GeometryGateProps> = ({
   onScaleUnitChange,
   onConfirmScale,
   isConfirmingScale,
+  numStoreys,
+  storeyHeight,
+  onNumStoreysChange,
+  onStoreyHeightChange,
+  onApplyStoreys,
+  isApplyingStoreys,
   verificationStatus,
   memberCount,
   onConfirmGeometry,
@@ -101,16 +114,55 @@ export const GeometryGate: React.FC<GeometryGateProps> = ({
           )}
         </div>
 
-        {/* Step 2: Review Members */}
-        <div className="flex-1 flex flex-col gap-3 px-4 py-3">
+        {/* Step 2: Building height & member review */}
+        <div className="flex-1 flex flex-col gap-2 px-4 py-3">
           <div className="flex items-center gap-2">
             <Check className="h-4 w-4 text-green-400" />
             <span className="text-xs font-semibold text-amber-200">
-              Step 2: Review {memberCount} Members
+              Step 2: Building &amp; {memberCount} Members
             </span>
           </div>
-          <span className="text-xs text-amber-200/70">
-            Use the Members panel (left) to verify all members are detected correctly.
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="text-xs text-amber-200/70">Storeys</label>
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={numStoreys}
+              onChange={(e) =>
+                onNumStoreysChange(Math.max(1, parseInt(e.target.value || "1", 10)))
+              }
+              disabled={!step1Done}
+              className="w-14 bg-muted/60 border border-border text-xs rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 text-foreground disabled:opacity-40"
+            />
+            <label className="text-xs text-amber-200/70">Ht (m)</label>
+            <input
+              type="number"
+              min={0.1}
+              step={0.1}
+              value={storeyHeight}
+              onChange={(e) =>
+                onStoreyHeightChange(Math.max(0.1, parseFloat(e.target.value || "3")))
+              }
+              disabled={!step1Done}
+              className="w-16 bg-muted/60 border border-border text-xs rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400 text-foreground disabled:opacity-40"
+            />
+            <button
+              onClick={onApplyStoreys}
+              disabled={!step1Done || isApplyingStoreys}
+              className="ml-auto flex items-center gap-1 px-3 py-1 border border-amber-500/40 text-amber-200 text-xs font-semibold rounded hover:bg-amber-500/10 transition-all disabled:opacity-40"
+            >
+              {isApplyingStoreys ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Check className="h-3 w-3" />
+              )}
+              Apply
+            </button>
+          </div>
+          <span className="text-[11px] text-amber-200/60">
+            Extrapolates the typical floor before sign-off. Review members in the
+            left panel.
           </span>
         </div>
 
