@@ -9,8 +9,12 @@
  * document of the trace.
  */
 
-import React, { useCallback } from "react";
-import { Download, FileText } from "lucide-react";
+import React, { useCallback, useState } from "react";
+import { Download, FileText, FileDown } from "lucide-react";
+import { toast } from "sonner";
+import { apiClient } from "@/lib/api";
+import { downloadFromApi } from "@/lib/download";
+import { useProjectStore } from "@/stores/projectStore";
 import type {
   CalculationTraceStep,
   MemberFullAnalysisResult,
@@ -186,6 +190,10 @@ export function CalcSheetTab({
     return arr;
   }, [analysis, design]);
 
+  const projectId = useProjectStore((s) => s.activeProject?.project_id);
+  const projectRef = useProjectStore((s) => s.activeProject?.reference);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
   const handleDownload = useCallback(() => {
     if (!analysis) return;
     const html = buildSheetHtml(analysis.member_id, designCode, steps);
@@ -197,6 +205,32 @@ export function CalcSheetTab({
     a.click();
     URL.revokeObjectURL(url);
   }, [analysis, designCode, steps]);
+
+  // Generate a proper PDF calc sheet server-side (WeasyPrint), then download it.
+  const handleDownloadPdf = useCallback(async () => {
+    if (!projectId) return;
+    setDownloadingPdf(true);
+    try {
+      const { data } = await apiClient.post(
+        `/api/v1/reports/${projectId}/from-project`,
+        null,
+        { params: { report_type: "calculation_sheets", fmt: "pdf" } }
+      );
+      await downloadFromApi(
+        `/api/v1/reports/${data.report_id}/download`,
+        `${projectRef || projectId}_calc_sheet.pdf`
+      );
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      toast.error(
+        status === 503
+          ? "PDF export is unavailable on the server (WeasyPrint not installed)."
+          : "Could not generate the PDF report."
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }, [projectId, projectRef]);
 
   if (!analysis || steps.length === 0) {
     return (
@@ -216,13 +250,24 @@ export function CalcSheetTab({
           <FileText className="w-3 h-3" />
           {steps.length} steps · {designCode}
         </div>
-        <button
-          onClick={handleDownload}
-          className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-border/50 text-foreground/80 hover:bg-muted/40 transition-colors"
-        >
-          <Download className="w-3 h-3" />
-          Download Sheet
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-border/50 text-foreground/80 hover:bg-muted/40 transition-colors"
+          >
+            <Download className="w-3 h-3" />
+            HTML
+          </button>
+          <button
+            onClick={handleDownloadPdf}
+            disabled={downloadingPdf || !projectId}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-border/50 text-foreground/80 hover:bg-muted/40 transition-colors disabled:opacity-50"
+            title="Generate a PDF calculation report"
+          >
+            <FileDown className="w-3 h-3" />
+            {downloadingPdf ? "Generating…" : "PDF"}
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2">

@@ -60,7 +60,7 @@ from core.reporting.pdf_export import PDFExportEngine
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/reports", tags=["reports"])
+router = APIRouter(tags=["reports"])
 
 # ---------------------------------------------------------------------------
 # In-process report store  (replace with persistent store in production)
@@ -194,80 +194,85 @@ async def generate_report(
     # Enforce tenant check first
     await project_store.get_or_404(request.project_id, organisation_id=user.organisation_id)
 
-    report_id = f"RPT-{uuid.uuid4().hex[:8].upper()}"
-    logger.info("Generating report %s for project %s.", report_id, request.project_id)
+    return _build_and_store_report(
+        project_id=request.project_id,
+        project_meta=request.project,
+        members=request.members,
+        report_type=request.report_type,
+        member_ids=request.member_ids,
+        fmt=request.format,
+        background_tasks=background_tasks,
+    )
 
-    # 1. Filter members by member_ids
-    members = request.members
-    if request.member_ids != "all" and isinstance(request.member_ids, list):
-        id_set = set(request.member_ids)
-        members = [m for m in members if m.get("member_id") in id_set]
 
-    # 2. Normalise
-    try:
-        rdm = _normalizer.normalize(
-            project_meta=request.project.model_dump(),
-            members=members,
-        )
-    except ValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+@router.post("/{project_id}/from-project", response_model=GenerateReportResponse, status_code=201)
+async def generate_project_report(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    report_type: Literal[
+        "calculation_sheets", "schedule", "quantities", "compliance", "summary", "full"
+    ] = "calculation_sheets",
+    fmt: Literal["html", "pdf"] = "pdf",
+    user: User = Depends(current_active_user),
+) -> GenerateReportResponse:
+    """
+    Generate a report directly from a project's stored stage results.
 
-    # 3. Run modules
-    try:
-        rebar_schedule = _rebar_engine.build(rdm)
-        quantities = _qty_engine.build(rdm, rebar_schedule)
-        compliance = _compliance_engine.build(rdm)
-        summary = _summary_engine.build(rdm, quantities, compliance)
-    except Exception as exc:
-        logger.exception("Module execution failed for report %s.", report_id)
+    Unlike ``POST /reports/generate`` (which expects the caller to assemble the
+    full member payload), this endpoint reads the loading, analysis and design
+    outputs already stored for the project and assembles the report server-side.
+    The frontend can therefore request a PDF with only the project id.
+
+    Parameters
+    ----------
+    project_id : str
+        Target project identifier.
+    background_tasks : BackgroundTasks
+        FastAPI background tasks queue.
+    report_type : str
+        Which report type to generate. Defaults to ``calculation_sheets``.
+    fmt : str
+        ``"pdf"`` to pre-generate a PDF, ``"html"`` for preview only.
+    user : User
+        The authenticated current user.
+
+    Returns
+    -------
+    GenerateReportResponse
+        ``report_id`` plus preview/download URLs.
+
+    Raises
+    ------
+    404 Not Found
+        If the project does not exist / belong to the org, or has no design
+        results to report on.
+    400 Bad Request
+        If the assembled member data fails validation.
+    """
+    project = await project_store.get_or_404(project_id, organisation_id=user.organisation_id)
+
+    members = _assemble_members_from_stores(project_id, getattr(project, "design_code", "BS8110"))
+    if not members:
         raise HTTPException(
-            status_code=500, detail=f"Reporting module error: {exc}"
-        ) from exc
-
-    # 4. Render HTML
-    try:
-        html = _render_report(
-            report_type=request.report_type,
-            rdm=rdm,
-            rebar_schedule=rebar_schedule,
-            quantities=quantities,
-            compliance=compliance,
-            summary=summary,
+            status_code=404,
+            detail=f"No design results to report for project '{project_id}'. Run design first.",
         )
-    except Exception as exc:
-        logger.exception("Template rendering failed for report %s.", report_id)
-        raise HTTPException(
-            status_code=500, detail=f"Template rendering error: {exc}"
-        ) from exc
 
-    # 5. Store
-    _report_store[report_id] = {
-        "report_id": report_id,
-        "project_id": request.project_id,
-        "html": html,
-        "pdf": None,  # generated on demand at /download
-        "report_type": request.report_type,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "member_count": len(rdm.members),
-        "format": request.format,
-        "rdm": rdm,
-        "rebar_schedule": rebar_schedule,
-        "quantities": quantities,
-        "compliance": compliance,
-        "summary": summary,
-    }
+    project_meta = ProjectMeta(
+        name=getattr(project, "name", project_id),
+        reference=getattr(project, "reference", project_id) or project_id,
+        client=getattr(project, "client", "") or "",
+        design_code=getattr(project, "design_code", "BS8110") or "BS8110",
+    )
 
-    # 6. Pre-generate PDF in background if requested
-    if request.format == "pdf":
-        background_tasks.add_task(_generate_pdf_background, report_id, html)
-
-    return GenerateReportResponse(
-        report_id=report_id,
-        preview_url=f"/reports/{report_id}/preview",
-        download_url=f"/reports/{report_id}/download",
-        status="ready" if request.format == "html" else "generating_pdf",
-        generated_at=_report_store[report_id]["generated_at"],
-        member_count=len(rdm.members),
+    return _build_and_store_report(
+        project_id=project_id,
+        project_meta=project_meta,
+        members=members,
+        report_type=report_type,
+        member_ids="all",
+        fmt=fmt,
+        background_tasks=background_tasks,
     )
 
 
@@ -408,6 +413,130 @@ async def report_status(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _build_and_store_report(
+    *,
+    project_id: str,
+    project_meta: "ProjectMeta",
+    members: list[dict[str, Any]],
+    report_type: str,
+    member_ids: Any,
+    fmt: str,
+    background_tasks: BackgroundTasks,
+) -> "GenerateReportResponse":
+    """
+    Normalise members, run the reporting modules, render HTML, store the result
+    and (optionally) queue PDF generation. Shared by both report endpoints.
+    """
+    report_id = f"RPT-{uuid.uuid4().hex[:8].upper()}"
+    logger.info("Generating report %s for project %s.", report_id, project_id)
+
+    # 1. Filter members by member_ids
+    if member_ids != "all" and isinstance(member_ids, list):
+        id_set = set(member_ids)
+        members = [m for m in members if m.get("member_id") in id_set]
+
+    # 2. Normalise
+    try:
+        rdm = _normalizer.normalize(project_meta=project_meta.model_dump(), members=members)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # 3. Run modules
+    try:
+        rebar_schedule = _rebar_engine.build(rdm)
+        quantities = _qty_engine.build(rdm, rebar_schedule)
+        compliance = _compliance_engine.build(rdm)
+        summary = _summary_engine.build(rdm, quantities, compliance)
+    except Exception as exc:
+        logger.exception("Module execution failed for report %s.", report_id)
+        raise HTTPException(status_code=500, detail=f"Reporting module error: {exc}") from exc
+
+    # 4. Render HTML
+    try:
+        html = _render_report(
+            report_type=report_type, rdm=rdm, rebar_schedule=rebar_schedule,
+            quantities=quantities, compliance=compliance, summary=summary,
+        )
+    except Exception as exc:
+        logger.exception("Template rendering failed for report %s.", report_id)
+        raise HTTPException(status_code=500, detail=f"Template rendering error: {exc}") from exc
+
+    # 5. Store
+    _report_store[report_id] = {
+        "report_id": report_id,
+        "project_id": project_id,
+        "html": html,
+        "pdf": None,  # generated on demand at /download
+        "report_type": report_type,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "member_count": len(rdm.members),
+        "format": fmt,
+        "rdm": rdm,
+        "rebar_schedule": rebar_schedule,
+        "quantities": quantities,
+        "compliance": compliance,
+        "summary": summary,
+    }
+
+    # 6. Pre-generate PDF in background if requested
+    if fmt == "pdf":
+        background_tasks.add_task(_generate_pdf_background, report_id, html)
+
+    return GenerateReportResponse(
+        report_id=report_id,
+        preview_url=f"/api/v1/reports/{report_id}/preview",
+        download_url=f"/api/v1/reports/{report_id}/download",
+        status="ready" if fmt == "html" else "generating_pdf",
+        generated_at=_report_store[report_id]["generated_at"],
+        member_count=len(rdm.members),
+    )
+
+
+def _assemble_members_from_stores(project_id: str, design_code: str) -> list[dict[str, Any]]:
+    """
+    Build the per-member report payload from the project's stored stage results.
+
+    Joins the loading, analysis and design outputs by ``member_id`` into the
+    shape required by the report normaliser (``loading_output``,
+    ``analysis_output``, ``design_output`` per member).
+    """
+    from services.loading import loading_service
+    from services.analysis import analysis_service
+    from services.design import design_service
+
+    def _members_of(payload: Any) -> list[dict[str, Any]]:
+        return payload.get("members", []) if isinstance(payload, dict) else []
+
+    def _safe(fn) -> Any:
+        try:
+            return fn()
+        except (KeyError, ValueError):
+            return None
+
+    loading = _members_of(_safe(lambda: loading_service.get_output(project_id)))
+    analysis = _members_of(_safe(lambda: analysis_service.get_results(project_id)))
+    design = _members_of(_safe(lambda: design_service.get_results(project_id)))
+
+    load_by_id = {m.get("member_id"): m for m in loading}
+    ana_by_id = {m.get("member_id"): m for m in analysis}
+
+    assembled: list[dict[str, Any]] = []
+    for dm in design:
+        mid = dm.get("member_id")
+        if dm.get("status") in ("skipped", "error"):
+            continue
+        assembled.append({
+            "member_id": mid,
+            "member_type": dm.get("member_type", "beam"),
+            "floor_level": dm.get("floor_level") or dm.get("storey") or "L01",
+            "design_code": dm.get("design_code", design_code),
+            "loading_output": load_by_id.get(mid, {}),
+            "analysis_output": ana_by_id.get(mid, {}),
+            "design_output": dm,
+        })
+    return assembled
+
 
 def _get_report_or_404(report_id: str) -> dict:
     """Return the store entry or raise 404."""

@@ -8,14 +8,17 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, status, BackgroundTasks
+from fastapi import APIRouter, Depends, status, BackgroundTasks, Response
 
 from dependencies import get_project, require_design_complete
 from schemas.jobs import JobStatus
 from schemas.project import ProjectResponse
 from storage.job_store import job_store
 from services.drawings import drawing_service
+from core.drawing.dxf_export import dxf_export_engine
 from middleware.error_handler import StructuralError
+
+_DXF_MEDIA_TYPE = "image/vnd.dxf"
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -156,6 +159,91 @@ async def regenerate_drawing(
             status_code=status.HTTP_404_NOT_FOUND,
         )
     return {"status": "regenerated"}
+
+
+@router.get("/{project_id}/export/dxf")
+async def export_project_dxf(
+    project_id: str,
+    project: ProjectResponse = Depends(get_project),
+) -> Response:
+    """
+    Export every member drawing for a project as a single DXF file.
+
+    Parameters
+    ----------
+    project_id : str
+        Target project identifier.
+    project : ProjectResponse
+        Resolved and org-scoped project dependency.
+
+    Returns
+    -------
+    Response
+        ``image/vnd.dxf`` attachment containing all member details.
+
+    Raises
+    ------
+    StructuralError
+        HTTP 404 NO_DRAWINGS if the project has no generated drawings.
+    """
+    drawings = await drawing_service.list_drawings(project_id)
+    if not drawings:
+        raise StructuralError(
+            error_code="NO_DRAWINGS",
+            details={"project_id": project_id},
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    ref = getattr(project, "reference", None) or project_id
+    data = dxf_export_engine.export(drawings, title=ref)
+    return Response(
+        content=data,
+        media_type=_DXF_MEDIA_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="{ref}.dxf"'},
+    )
+
+
+@router.get("/{project_id}/member/{member_id}/export/dxf")
+async def export_member_dxf(
+    project_id: str,
+    member_id: str,
+    project: ProjectResponse = Depends(get_project),
+) -> Response:
+    """
+    Export a single member's detail drawing as a DXF file.
+
+    Parameters
+    ----------
+    project_id : str
+        Target project identifier.
+    member_id : str
+        Target member identifier.
+    project : ProjectResponse
+        Resolved and org-scoped project dependency.
+
+    Returns
+    -------
+    Response
+        ``image/vnd.dxf`` attachment for the requested member.
+
+    Raises
+    ------
+    StructuralError
+        HTTP 404 MEMBER_NOT_FOUND if the member has no generated drawing.
+    """
+    drawing = await drawing_service.get_drawing(project_id, member_id)
+    if not drawing:
+        raise StructuralError(
+            error_code="MEMBER_NOT_FOUND",
+            member_id=member_id,
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    ref = getattr(project, "reference", None) or project_id
+    data = dxf_export_engine.export([drawing], title=ref)
+    return Response(
+        content=data,
+        media_type=_DXF_MEDIA_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="{ref}_{member_id}.dxf"'},
+    )
 
 
 @router.put("/{project_id}/confirm", response_model=dict[str, str])
