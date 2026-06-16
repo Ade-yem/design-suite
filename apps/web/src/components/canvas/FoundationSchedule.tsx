@@ -37,9 +37,10 @@ export function FoundationSchedule({ onClose }: { onClose: () => void }): React.
     const cs = (a?.critical_sections ?? {}) as Record<string, unknown>;
     const geom = (cs.geometry ?? {}) as Record<string, unknown>;
     const pressures = (cs.pressures ?? {}) as Record<string, unknown>;
+    const sources = f.meta._source_columns as string[] | undefined;
     return {
       id: f.member_id,
-      column: (f.meta._source_column as string | undefined) ?? "—",
+      column: sources?.join(" + ") ?? (f.meta._source_column as string | undefined) ?? "—",
       type: String(f.meta.footing_type ?? "pad"),
       recommended: f.meta.footing_type_recommended as string | undefined,
       B: asNum(geom.B_m),
