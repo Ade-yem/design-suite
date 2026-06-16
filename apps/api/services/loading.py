@@ -30,6 +30,49 @@ from storage.project_store import project_store
 logger = logging.getLogger(__name__)
 
 
+def _member_self_weight_kNm2(member: dict) -> float:
+    """
+    Structural self-weight (kN/m²) of a slab or staircase member, differentiated
+    by the slab **structural system** the engineer chose.
+
+    This is what lets the slab-system choice drive loading (not just design):
+    ribbed/waffle slabs are lighter than an equivalent solid slab, flat slabs are
+    a full plate. Self-weight is computed via the (previously unused) load
+    assemblers in ``core/loading``. Other member types return 0 here — column
+    self-weight is added in the takedown, beams converge via the designer loop.
+    """
+    member_type = str(member.get("member_type", "")).lower()
+    geom = member.get("meta", {}) or {}
+
+    from core.loading.tables import MaterialWeightTable
+
+    if member_type == "slab":
+        system = str(geom.get("slab_system") or "solid").lower().strip()
+        h = float(geom.get("h_mm") or geom.get("h") or 0.0)
+        if system in ("ribbed", "waffle"):
+            from core.loading.special_slabs import RibbedSlabAssembler
+
+            topping = float(geom.get("topping_thickness") or geom.get("topping_thickness_mm") or 75.0)
+            rib_width = float(geom.get("rib_width") or geom.get("rib_width_mm") or 125.0)
+            rib_spacing = float(geom.get("rib_spacing") or geom.get("rib_spacing_mm") or 700.0)
+            rib_depth = max(h - topping, 0.0)
+            return RibbedSlabAssembler.calculate_self_weight(
+                topping, rib_width, rib_depth, rib_spacing
+            )
+        # solid / flat → full-thickness plate
+        return (h / 1000.0) * MaterialWeightTable.get_rc_weight() if h else 0.0
+
+    if member_type == "staircase":
+        from core.loading.staircase import StaircaseLoadAssembler
+
+        going = float(geom.get("tread") or geom.get("going_mm") or geom.get("tread_mm") or 250.0)
+        riser = float(geom.get("riser") or geom.get("riser_mm") or 175.0)
+        waist = float(geom.get("waist") or geom.get("waist_mm") or geom.get("h_mm") or 150.0)
+        return StaircaseLoadAssembler.calculate_self_weight(going, riser, waist)
+
+    return 0.0
+
+
 # ── In-memory stores ──────────────────────────────────────────────────────────
 
 class _LoadingStore:
@@ -478,7 +521,12 @@ class LoadingService:
             member_type: str = meta.get("member_type", "beam")
             override = overrides.get(member_id, {})
 
-            effective_gk = gk_base + float(override.get("dead_extra_kNm2", 0.0))
+            # Add member structural self-weight, differentiated by slab system,
+            # on top of the superimposed dead load (finishes/screed/services/etc.).
+            self_weight = _member_self_weight_kNm2(meta)
+            effective_gk = (
+                gk_base + self_weight + float(override.get("dead_extra_kNm2", 0.0))
+            )
             effective_qk = float(override.get("imposed_override_kNm2") or qk_base)
 
             uls_udl = LoadCombinationEngine.factor_loads(
