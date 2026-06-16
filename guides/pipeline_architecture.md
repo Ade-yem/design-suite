@@ -6,7 +6,15 @@ This document specifies the pipeline architecture, data schema flows, safety gat
 
 ## 1. Architectural Overview & Topology
 
-The system is designed as a **hybrid orchestration platform** combining a **StateGraph-driven conversational supervisor** (managing human-in-the-loop gates and AI narrative generation) with a high-performance **REST-based calculation engine** (handling structural analysis, matrix solving, and code checks).
+The system is designed as a **hybrid orchestration platform** combining a **StateGraph-driven conversational supervisor** (managing human-in-the-loop gates and AI narrative generation) with a **REST-based calculation engine** (handling structural analysis and code checks).
+
+> **Current implementation note.** The runtime analysis engine uses **closed-form
+> and moment-coefficient solvers** (single/continuous beams, two-way/flat/ribbed
+> slab methods, column interaction, pad/combined/strip footings, staircase). A 2D
+> matrix-stiffness frame solver (`core/analysis/global_solver.py`,
+> `GlobalMatrixSolver`) **exists and is unit-tested but is not yet wired into the
+> per-member engine**, so references below to "matrix analysis" describe the
+> intended end state, not today's runtime. See `AUDIT.md` for the live gap list.
 
 ```mermaid
 graph TD
@@ -42,14 +50,20 @@ graph TD
 * **Inputs:** Confirmed geometry layout.
 * **Process:** 
   1. The `Analyst Agent` prompts the user with a dynamic questionnaire (based on the project's selected design code, e.g., BS 8110 or Eurocode 2) to collect load cases, building type, and exposure conditions.
-  2. The service tier validates inputs and builds load cases (dead, live, wind combinations).
+  2. The service tier validates inputs and builds factored load combinations.
+     **Current scope: gravity (dead + imposed) only** — wind/lateral and pattern
+     (alternating-span) loading are not yet implemented.
 * **Outputs:** `Load Definition JSON` containing parameters and combinations coefficients.
 
-### Stage 3: Matrix Analysis (Global Physics)
+### Stage 3: Analysis (Global Physics)
 * **Inputs:** Geometry data + Load definitions.
 * **Process:**
-  1. Calls the `AnalysisEngine` (2D Euler-Bernoulli frame solver).
-  2. Calculates support reactions, nodal displacements, and members internal force envelopes (Shear $V$, bending moment $M$, axial force $N$).
+  1. Calls the `AnalysisEngine`, which routes each member to its solver. Today
+     these are **closed-form / moment-coefficient methods** plus a vertical
+     load-takedown for columns/footings; the matrix-stiffness frame solver is
+     available but not yet routed (see implementation note above).
+  2. Calculates support reactions and member internal-force envelopes (shear $V$,
+     bending moment $M$, axial force $N$).
 * **Outputs:** `Analysis Results JSON` with moment/shear envelopes and structural calculation traces.
 * **Controls & Safety Gate 2 (`loading_confirmed`):** 
   * Bypassing is protected; the project status database is updated to `ANALYSIS_COMPLETE`.

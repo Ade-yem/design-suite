@@ -9,15 +9,33 @@
 
 The pipeline backbone is a LangGraph `StateGraph` (`agents/graph.py`) in which every node reads from and writes partial updates to a single shared object, `StructuralDesignState` (`agents/state.py`). The Parser (Vision) Agent populates geometry; the Analyst Agent collects loads, runs load combinations, and drives the structural analysis engine; results feed Gate 2 and then the Designer.
 
-The **parser stage is largely complete**: it parses DXF/PDF, resolves unit ambiguity, and emits a list of classified structural members (columns, beams, slabs/voids) into `parsed_structural_json["members"]`. The **analyst node is wired end-to-end** (load collection → combinations → analysis → narrative) and the analysis engine + solvers exist, but several **structural correctness gaps** remain between the data the parser produces and what the analysis engine actually consumes. Those gaps are enumerated in §7 and are the substance of the remaining work.
+The **parser stage is largely complete**: it parses DXF/PDF, resolves unit ambiguity, and emits a list of classified structural members (columns, beams, slabs/voids) into `parsed_structural_json["members"]`. The **analyst node is wired end-to-end** (load collection → combinations → analysis → narrative) and the analysis engine + solvers exist.
 
-Key headline findings:
+> **Status update.** Most of the structural-correctness gaps this document
+> originally enumerated have since been closed. The sections below describe the
+> data-flow and handoff structures, which remain accurate; for the **current**
+> gap list and roadmap, see the repo-root `AUDIT.md`.
 
-- The parser produces **one single-span member per beam segment**; the engine therefore analyses every beam as a **simply-supported single span**, never as a continuous member, even though the sample drawings are continuous multi-span frames.
-- A full 2D FEA solver (`global_solver.py`, `GlobalMatrixSolver`) **exists but is not wired into the engine** — `AnalysisEngine` routes beams only to the closed-form / moment-coefficient solvers. CLAUDE.md's claim that the analyst "runs 2D FEA" is not yet realised.
-- **No vertical load take-down**: columns are analysed with the placeholder `N_uls = 1000 kN`, `M_uls = 0` baked in by the parser. Slab and beam reactions are never accumulated into columns.
-- **Slabs ignore the assembled loads**: the slab routing path reads `n_uls` from geometry `meta` (which has no such key) and falls back to a hard-coded `10.0 kN/m²`, bypassing the load-combination output entirely.
-- The `pattern_loading` and `self_weight_iteration` options the Analyst passes to `analysis_service.run()` are **accepted but never used** by the engine.
+What has been resolved since the original review:
+
+- **Continuous beams** — a collinear sweeper groups contiguous segments into
+  multi-span members routed to `MomentCoefficientSolver` (no longer simply-supported per segment).
+- **Vertical load take-down** — `VerticalLoadTakedownEngine` accumulates slab/beam
+  reactions down column stacks to the foundation; columns no longer use the old
+  `N_uls = 1000 kN` placeholder, and footings are auto-generated at base columns.
+- **Multi-storey** — the typical floor is extrapolated to `L01…L0N` (now collected
+  at upload, before Gate 1), and `storey_height_m` drives stair geometry.
+- **Self-weight iteration** — the Designer triggers the re-analysis loop on a
+  >5% self-weight change.
+
+What remains open (tracked in `AUDIT.md`):
+
+- The 2D matrix solver (`global_solver.py`, `GlobalMatrixSolver`) **exists and is
+  tested but is still not wired** into `AnalysisEngine`, which routes to closed-form
+  solvers — so CLAUDE.md's "runs 2D FEA" is still aspirational.
+- **`pattern_loading`** is accepted by `analysis_service.run()` but not implemented.
+- Some analysis paths still fall back to **simplified load assumptions** where the
+  `MemberLoadOutput` schema is incomplete.
 
 ---
 
@@ -146,7 +164,7 @@ Delegates to `_handle_reanalysis`:
 
 ### 4.2 Branch B — Design considerations + load collection (`load_definition` missing)
 
-Delegates to `_collect_design_considerations`. The Analyst gathers a **complete design brief** before assembling loads — **nothing is assumed**, every input is asked of the engineer (mirrors `docs/conversational_project_setup_proposal.md`):
+Delegates to `_collect_design_considerations`. The Analyst gathers a **complete design brief** before assembling loads — **nothing is assumed**, every input is asked of the engineer:
 
 - **Opens the questionnaire** (when the last message isn't a fresh `HumanMessage`) with `_build_considerations_prompt`, grouped into four domains — _Building & use_, _Materials_, _Durability & fire_, _Loading_.
 - **LLM extraction** (`gemini-1.5-pro`, `temperature=0`, extract-only/never-invent) maps the free-text reply into a nested project brief and **deep-merges** it across turns (`_deep_merge_parameters`; `materials`/`durability`/`dead_loads`/`geotech` merged one level deep). Building usage is classified into an `occupancy_category`; concrete grade like `C30/37` is split into `fck`/`fcu`.
