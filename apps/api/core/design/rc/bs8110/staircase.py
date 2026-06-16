@@ -419,7 +419,7 @@ def calculate_landing_reinforcement(
     span        : Effective span of landing (mm)
     n           : Design UDL in N/mm²
     """
-    from models.slab import SlabSection
+    from models.bs8110.slab import SlabSection
 
     notes = []
     warnings = []

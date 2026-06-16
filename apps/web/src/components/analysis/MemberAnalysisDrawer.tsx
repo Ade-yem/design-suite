@@ -15,10 +15,13 @@
  * geometry from `canvasStore`.
  */
 
-import React, { useMemo } from "react";
-import { X } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { X, FileDown } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useCanvasStore } from "@/stores/canvasStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { downloadFromApi } from "@/lib/download";
 import {
   useAnalysisStore,
   type DiagramTab,
@@ -88,6 +91,23 @@ export function MemberAnalysisDrawer() {
   const designResults = useAnalysisStore((s) => s.designResults);
 
   const members = useCanvasStore((s) => s.members);
+  const projectId = useProjectStore((s) => s.activeProject?.project_id);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportDxf = async () => {
+    if (!projectId || !selectedMemberId) return;
+    setExporting(true);
+    try {
+      await downloadFromApi(
+        `/api/v1/drawings/${projectId}/member/${selectedMemberId}/export/dxf`,
+        `${selectedMemberId}.dxf`
+      );
+    } catch {
+      toast.error("No drawing is available to export for this member yet.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const member = useMemo(
     () => members.find((m) => m.member_id === selectedMemberId) ?? null,
@@ -140,13 +160,24 @@ export function MemberAnalysisDrawer() {
             </span>
           )}
         </div>
-        <button
-          onClick={closeDrawer}
-          className="p-1 hover:bg-muted/60 rounded transition-colors shrink-0"
-          title="Close"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={handleExportDxf}
+            disabled={exporting || !projectId}
+            className="flex items-center gap-1.5 text-xs px-2 py-1 rounded border border-border/50 text-foreground/80 hover:bg-muted/40 transition-colors disabled:opacity-50"
+            title="Export this member's detail as DXF"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            {exporting ? "Exporting…" : "DXF"}
+          </button>
+          <button
+            onClick={closeDrawer}
+            className="p-1 hover:bg-muted/60 rounded transition-colors"
+            title="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Scrollable body */}
@@ -219,7 +250,9 @@ export function MemberAnalysisDrawer() {
           {activeTab === "loads" && (
             <LoadsTab analysis={analysis} spanM={spanM} />
           )}
-          {activeTab === "rebar" && <RebarTab design={design} />}
+          {activeTab === "rebar" && (
+            <RebarTab design={design} memberId={selectedMemberId} />
+          )}
           {activeTab === "calc" && (
             <CalcSheetTab
               analysis={analysis}

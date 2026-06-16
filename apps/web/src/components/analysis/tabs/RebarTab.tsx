@@ -8,9 +8,124 @@
  * an empty state when design has not yet been run for the project.
  */
 
-import React from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import React, { useState } from "react";
+import { CheckCircle2, XCircle, Pencil } from "lucide-react";
+import { toast } from "sonner";
+import { apiClient } from "@/lib/api";
+import { useProjectStore } from "@/stores/projectStore";
+import { useAnalysisStore } from "@/stores/analysisStore";
 import type { DesignMemberResult, ShearLinkSpec } from "@/types/analysis";
+
+/** Standard reinforcement bar diameters (mm). */
+const BAR_DIAMETERS = [12, 16, 20, 25, 32, 40];
+
+/**
+ * Inline editor for overriding a member's reinforcement / section, then
+ * re-running the design via PUT /api/v1/design/{project_id}/member/{member_id}.
+ */
+function RebarEditor({ memberId }: { memberId: string }) {
+  const projectId = useProjectStore((s) => s.activeProject?.project_id);
+  const fetchDesign = useAnalysisStore((s) => s.fetchDesign);
+  const [open, setOpen] = useState(false);
+  const [barDia, setBarDia] = useState<number>(20);
+  const [depth, setDepth] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
+  const apply = async () => {
+    if (!projectId) return;
+    setSaving(true);
+    try {
+      const { data } = await apiClient.put(
+        `/api/v1/design/${projectId}/member/${memberId}`,
+        {
+          meta_updates: { bar_dia_mm: barDia },
+          h_mm: depth ? Number(depth) : undefined,
+          reason: `Rebar override: ${barDia}mm bars` + (depth ? `, h=${depth}mm` : ""),
+        }
+      );
+      // Refresh design results so every tab reflects the recompute.
+      await fetchDesign(projectId);
+      // Best-effort drawing refresh; ignore if drawings are not generated yet.
+      apiClient
+        .post(`/api/v1/drawings/${projectId}/member/${memberId}/regenerate`)
+        .catch(() => undefined);
+
+      const status = data?.result?.status;
+      if (status && status !== "OK" && status !== "pass") {
+        toast.warning(`Design re-checked: ${status}. Review the updated result.`);
+      } else {
+        toast.success("Reinforcement updated and re-checked.");
+      }
+      if (data?.warning) toast.warning(data.warning);
+      setOpen(false);
+    } catch {
+      toast.error("Could not apply the reinforcement override.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        disabled={!projectId}
+        className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-border/50 text-foreground/80 hover:bg-muted/40 transition-colors disabled:opacity-50"
+      >
+        <Pencil className="w-3 h-3" />
+        Edit reinforcement
+      </button>
+    );
+  }
+
+  return (
+    <div className="border border-border/50 rounded-md p-2.5 bg-muted/20 space-y-2">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        Override &amp; re-check
+      </div>
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Main bar ⌀ (mm)</span>
+        <select
+          value={barDia}
+          onChange={(e) => setBarDia(Number(e.target.value))}
+          className="bg-background border border-border/60 rounded px-2 py-1 font-mono"
+        >
+          {BAR_DIAMETERS.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">Section depth h (mm)</span>
+        <input
+          type="number"
+          value={depth}
+          placeholder="unchanged"
+          onChange={(e) => setDepth(e.target.value)}
+          className="w-24 bg-background border border-border/60 rounded px-2 py-1 font-mono"
+        />
+      </label>
+      <div className="flex items-center gap-1.5 pt-1">
+        <button
+          onClick={apply}
+          disabled={saving}
+          className="flex-1 text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground hover:opacity-90 transition disabled:opacity-50"
+        >
+          {saving ? "Applying…" : "Apply & re-check"}
+        </button>
+        <button
+          onClick={() => setOpen(false)}
+          disabled={saving}
+          className="text-xs px-2.5 py-1 rounded border border-border/50 hover:bg-muted/40 transition"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function AreaRow({
   label,
@@ -51,7 +166,13 @@ function isShearLinkSpec(
   return typeof v === "object" && v !== null && "diameter_mm" in v;
 }
 
-export function RebarTab({ design }: { design: DesignMemberResult | null }) {
+export function RebarTab({
+  design,
+  memberId,
+}: {
+  design: DesignMemberResult | null;
+  memberId?: string | null;
+}) {
   if (!design) {
     return (
       <div className="p-4 text-center">
@@ -159,6 +280,13 @@ export function RebarTab({ design }: { design: DesignMemberResult | null }) {
               {w}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Reinforcement override + re-check */}
+      {memberId && (
+        <div className="pt-1">
+          <RebarEditor memberId={memberId} />
         </div>
       )}
     </div>
