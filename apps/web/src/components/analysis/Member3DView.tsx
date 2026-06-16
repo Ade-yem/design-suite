@@ -74,6 +74,32 @@ function boxFaces(
   };
 }
 
+/**
+ * Build a stepped flight as a list of projected tread/riser quads, climbing in
+ * +x (going) and +z (riser). Conveys an honest staircase shape in the same
+ * isometric projection used for the other members.
+ */
+function stairFaces(steps: number, ox: number, oy: number, s: number) {
+  const run = 3.0; // total horizontal model length
+  const B = 1.0; // flight width
+  const going = run / steps;
+  const riser = going * 0.82; // pleasant slope
+  const v = (x: number, y: number, z: number) => project({ x, y, z }, ox, oy, s);
+  const poly = (pts: { x: number; y: number }[]) =>
+    pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+
+  const out: { kind: "tread" | "riser"; points: string }[] = [];
+  for (let i = 0; i < steps; i++) {
+    const x0 = i * going;
+    const z0 = i * riser;
+    const x1 = x0 + going;
+    const z1 = z0 + riser;
+    out.push({ kind: "tread", points: poly([v(x0, 0, z0), v(x1, 0, z0), v(x1, B, z0), v(x0, B, z0)]) });
+    out.push({ kind: "riser", points: poly([v(x1, 0, z0), v(x1, B, z0), v(x1, B, z1), v(x1, 0, z1)]) });
+  }
+  return out;
+}
+
 function downloadSvg(svg: SVGSVGElement | null, filename: string) {
   if (!svg) return;
   const xml = new XMLSerializer().serializeToString(svg);
@@ -112,6 +138,8 @@ export function Member3DView({
   // We scale so the member roughly fills the viewport regardless of real size.
   const isColumn = type === "column" || type === "footing";
   const isPlate = type === "slab";
+  const isStair = type === "staircase";
+  const numSteps = Math.max(3, Math.min(18, Math.round(Number(member.meta.num_steps) || 12)));
 
   // Normalize: longest dimension → ~3.2 model units.
   const lengthModel = 3.4;
@@ -136,10 +164,11 @@ export function Member3DView({
     Hh = hModel;
   }
 
-  const scale = 42;
-  const ox = W / 2 + 30;
-  const oy = H / 2 + (isColumn ? 50 : 20);
+  const scale = isStair ? 36 : 42;
+  const ox = W / 2 + (isStair ? -70 : 30);
+  const oy = H / 2 + (isColumn ? 50 : isStair ? 60 : 20);
   const faces = boxFaces(L, B, Hh, ox, oy, scale);
+  const steps = isStair ? stairFaces(numSteps, ox, oy, scale) : [];
 
   const stroke = STATUS_STROKE[status];
 
@@ -150,7 +179,7 @@ export function Member3DView({
 
   // UDL arrows along the top of a beam.
   const loadArrows: React.ReactNode[] = [];
-  if (!isColumn) {
+  if (!isColumn && !isStair) {
     const n = 6;
     for (let i = 0; i <= n; i++) {
       const t = i / n;
@@ -214,11 +243,26 @@ export function Member3DView({
         <rect width={W} height={H} fill="#0f172a" />
         <rect width={W} height={H} fill="url(#m3d-grid)" />
 
-        {/* Box faces — shaded for depth */}
-        <polygon points={faces.front} fill="rgba(99,102,241,0.28)" stroke={stroke} strokeWidth="1.2" />
-        <polygon points={faces.side} fill="rgba(99,102,241,0.16)" stroke={stroke} strokeWidth="1.2" />
-        <polygon points={faces.top} fill="rgba(129,140,248,0.40)" stroke={stroke} strokeWidth="1.2" />
-        <polygon points={faces.section} fill="rgba(165,180,252,0.5)" stroke={stroke} strokeWidth="1.4" />
+        {isStair ? (
+          /* Stepped flight — tread + riser quads climbing in isometric space */
+          steps.map((q, i) => (
+            <polygon
+              key={i}
+              points={q.points}
+              fill={q.kind === "tread" ? "rgba(129,140,248,0.40)" : "rgba(99,102,241,0.20)"}
+              stroke={stroke}
+              strokeWidth="1.1"
+            />
+          ))
+        ) : (
+          /* Box faces — shaded for depth */
+          <>
+            <polygon points={faces.front} fill="rgba(99,102,241,0.28)" stroke={stroke} strokeWidth="1.2" />
+            <polygon points={faces.side} fill="rgba(99,102,241,0.16)" stroke={stroke} strokeWidth="1.2" />
+            <polygon points={faces.top} fill="rgba(129,140,248,0.40)" stroke={stroke} strokeWidth="1.2" />
+            <polygon points={faces.section} fill="rgba(165,180,252,0.5)" stroke={stroke} strokeWidth="1.4" />
+          </>
+        )}
 
         {/* Load arrows */}
         {loadArrows}

@@ -122,6 +122,8 @@ class MemoryProjectStore:
             "updated_at": now,
             "organisation_id": organisation_id,
             "created_by": user_id,
+            "num_storeys": 1,
+            "storey_height_m": 3.0,
         }
         self._projects[project_id] = record
         self._members[project_id] = set()
@@ -202,6 +204,10 @@ class MemoryProjectStore:
             record["client"] = data.client
         if data.design_code is not None:
             record["design_code"] = data.design_code
+        if data.num_storeys is not None:
+            record["num_storeys"] = data.num_storeys
+        if data.storey_height_m is not None:
+            record["storey_height_m"] = data.storey_height_m
         record["updated_at"] = datetime.now(timezone.utc)
         return self._to_response(record)
 
@@ -286,6 +292,8 @@ class MemoryProjectStore:
             member_count=len(self._members.get(project_id, set())),
             organisation_id=record.get("organisation_id"),
             created_by=record.get("created_by"),
+            num_storeys=record.get("num_storeys", 1),
+            storey_height_m=record.get("storey_height_m", 3.0),
         )
 
 
@@ -431,6 +439,10 @@ class PostgresProjectStore:
                 row.client = data.client
             if data.design_code is not None:
                 row.design_code = data.design_code
+            if data.num_storeys is not None:
+                row.num_storeys = data.num_storeys
+            if data.storey_height_m is not None:
+                row.storey_height_m = data.storey_height_m
             row.updated_at = datetime.now(timezone.utc)
             await session.commit()
             await session.refresh(row)
@@ -698,6 +710,8 @@ class PostgresProjectStore:
             member_count=member_count,
             organisation_id=row.organisation_id,  # type: ignore[attr-defined]
             created_by=row.created_by,  # type: ignore[attr-defined]
+            num_storeys=getattr(row, "num_storeys", 1) or 1,  # type: ignore[attr-defined]
+            storey_height_m=getattr(row, "storey_height_m", 3.0) or 3.0,  # type: ignore[attr-defined]
         )
 
 

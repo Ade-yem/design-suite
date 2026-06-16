@@ -34,6 +34,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from agents.state import StructuralDesignState
 from agents import _get_llm
+from storage.project_store import project_store
 
 
 logger = logging.getLogger(__name__)
@@ -726,6 +727,21 @@ async def _collect_design_considerations(
     messages = state.get("messages", [])
     design_code = state.get("design_code", "BS8110")
     params: dict = dict(state.get("project_parameters") or {})
+
+    # Seed storeys from the project when they were defined upstream (at upload),
+    # so the engineer isn't asked a storey count they've already given. Only a
+    # genuine multi-storey (>1) is treated as authoritative; single-storey keeps
+    # the existing questioning path.
+    project_id = state.get("project_id")
+    if project_id:
+        try:
+            proj = await project_store.get(project_id, bypass_tenant_check=True)
+            if proj and getattr(proj, "num_storeys", 1) > 1:
+                params.setdefault("num_storeys", proj.num_storeys)
+                params.setdefault("storey_height_m", proj.storey_height_m)
+                params.setdefault("is_multistorey", True)
+        except Exception as exc:  # pragma: no cover - best-effort seed
+            logger.warning("Could not seed storeys from project %s: %s", project_id, exc)
 
     last = messages[-1] if messages else None
 
