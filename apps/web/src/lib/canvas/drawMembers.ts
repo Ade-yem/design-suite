@@ -243,10 +243,12 @@ export function drawSlab(
 ): void {
   let cx: number, cy: number;
   let xMin: number, yMin: number, w: number, h: number;
+  let polygonPts: Point[] | null = null;
 
   // Use true boundary polygon coordinates if available
   if (member.boundary_polygon && member.boundary_polygon.length >= 3) {
     const pts = member.boundary_polygon.map((p) => worldToScreen(p, zoom, pan, canvasHeight));
+    polygonPts = pts;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
@@ -301,9 +303,9 @@ export function drawSlab(
   }
 
   if (isSelected) {
-    drawSelectionGlow(ctx, xMin, yMin, w, h);
+    drawSelectionGlow(ctx, xMin, yMin, w, h, polygonPts ?? undefined);
   } else if (analysisStatus && analysisStatus !== "unknown") {
-    drawAnalysisOverlay(ctx, xMin, yMin, w, h, analysisStatus);
+    drawAnalysisOverlay(ctx, xMin, yMin, w, h, analysisStatus, polygonPts ?? undefined);
   }
 }
 
@@ -318,9 +320,11 @@ export function drawVoid(
 ): void {
   let xMin: number, yMin: number, w: number, h: number;
   let path: Path2D | null = null;
+  let polygonPts: Point[] | null = null;
 
   if (member.boundary_polygon && member.boundary_polygon.length >= 3) {
     const pts = member.boundary_polygon.map((p) => worldToScreen(p, zoom, pan, canvasHeight));
+    polygonPts = pts;
     path = new Path2D();
     path.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) path.lineTo(pts[i].x, pts[i].y);
@@ -358,7 +362,7 @@ export function drawVoid(
   if (path) ctx.stroke(path); else ctx.strokeRect(xMin, yMin, w, h);
 
   if (isSelected) {
-    drawSelectionGlow(ctx, xMin, yMin, w, h);
+    drawSelectionGlow(ctx, xMin, yMin, w, h, polygonPts ?? undefined);
   }
 }
 
@@ -443,24 +447,42 @@ export function drawFooting(
  * @param h      - Height of the member bounding rect (screen pixels).
  * @param status - Analysis result status driving the colour choice.
  */
+/** Trace a closed polygon path from screen-space points onto the context. */
+function tracePolygon(ctx: CanvasRenderingContext2D, points: Point[]): void {
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.closePath();
+}
+
 function drawAnalysisOverlay(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   w: number,
   h: number,
-  status: AnalysisStatus
+  status: AnalysisStatus,
+  points?: Point[]
 ): void {
   if (status === "unknown") return;
 
   ctx.save();
+
+  // For non-rectangular members (e.g. L-shaped slabs) follow the true
+  // boundary so the overlay does not bleed over neighbouring members.
+  const usePolygon = !!points && points.length >= 3;
 
   if (status === "skipped") {
     ctx.setLineDash([5, 4]);
     ctx.strokeStyle = ANALYSIS_SKIP_STROKE;
     ctx.lineWidth = 1.5;
     ctx.shadowColor = "transparent";
-    ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+    if (usePolygon) {
+      tracePolygon(ctx, points!);
+      ctx.stroke();
+    } else {
+      ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+    }
   } else {
     const strokeColor =
       status === "pass" ? ANALYSIS_PASS_STROKE : ANALYSIS_FAIL_STROKE;
@@ -470,7 +492,12 @@ function drawAnalysisOverlay(
     ctx.shadowBlur = 10;
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 2;
-    ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+    if (usePolygon) {
+      tracePolygon(ctx, points!);
+      ctx.stroke();
+    } else {
+      ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+    }
   }
 
   ctx.restore();
@@ -481,7 +508,8 @@ function drawSelectionGlow(
   x: number,
   y: number,
   w: number,
-  h: number
+  h: number,
+  points?: Point[]
 ): void {
   ctx.save();
   ctx.shadowColor = SELECTION_GLOW_SHADOW;
@@ -490,7 +518,14 @@ function drawSelectionGlow(
   ctx.lineWidth = 2;
   ctx.setLineDash([6, 4]);
   ctx.lineDashOffset = -(performance.now() / 40) % 20;
-  ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+  // Follow the true boundary polygon when available so the selection halo of a
+  // non-rectangular slab/void hugs its real shape instead of its bounding box.
+  if (points && points.length >= 3) {
+    tracePolygon(ctx, points);
+    ctx.stroke();
+  } else {
+    ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+  }
   ctx.setLineDash([]);
   ctx.restore();
 }
