@@ -42,6 +42,8 @@ import { FloorSwitcher } from "./FloorSwitcher";
 import { CoordinateReadout } from "./CoordinateReadout";
 import { MemberTooltip } from "./MemberTooltip";
 import { PropertyInspector, type MemberPropertyPatch } from "./PropertyInspector";
+import { StaircasePanel } from "./StaircasePanel";
+import { FoundationSchedule } from "./FoundationSchedule";
 import { CanvasUploader, type CanvasUploaderHandle } from "./CanvasUploader";
 import { MembersPanel } from "./MembersPanel";
 import { GeometryGate } from "./GeometryGate";
@@ -148,6 +150,7 @@ export const CanvasViewport = forwardRef<
   const [numStoreys, setNumStoreys] = useState<number>(1);
   const [storeyHeight, setStoreyHeight] = useState<number>(3.0);
   const [isApplyingStoreys, setIsApplyingStoreys] = useState(false);
+  const [showFoundations, setShowFoundations] = useState(false);
 
 
   // Regeneration state
@@ -735,12 +738,36 @@ export const CanvasViewport = forwardRef<
             {/* Geometry editor is only for the pre-analysis phase; once
                 analysis is complete the member analysis drawer takes over. */}
             {selectedMember && !analysisReady && (
-              <PropertyInspector
-                selectedMember={selectedMember}
-                onDeselect={() => selectMember(null)}
-                onDelete={handleDeleteMember}
-                onSave={handleSaveProperties}
-              />
+              selectedMember.member_type === "staircase" ? (
+                <StaircasePanel
+                  projectId={projectId}
+                  member={selectedMember}
+                  onSave={(patch) => {
+                    if (selectedMemberId) updateMember(selectedMemberId, patch);
+                    selectMember(null);
+                  }}
+                  onClose={() => selectMember(null)}
+                />
+              ) : (
+                <PropertyInspector
+                  selectedMember={selectedMember}
+                  onDeselect={() => selectMember(null)}
+                  onDelete={handleDeleteMember}
+                  onSave={handleSaveProperties}
+                />
+              )
+            )}
+
+            {members.some((m) => m.member_type === "footing") && (
+              <button
+                onClick={() => setShowFoundations((v) => !v)}
+                className="absolute top-4 right-4 z-30 px-3 py-1.5 text-xs rounded-lg bg-card/90 border border-border shadow-sm text-foreground hover:bg-muted/60 transition-colors"
+              >
+                Foundations
+              </button>
+            )}
+            {showFoundations && (
+              <FoundationSchedule onClose={() => setShowFoundations(false)} />
             )}
 
             {analysisReady && (
