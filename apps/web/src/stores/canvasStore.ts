@@ -254,7 +254,11 @@ interface CanvasActions {
    */
   updateMember: (
     id: string,
-    patch: Partial<Pick<GeometricMember, "meta">>
+    patch: {
+      meta?: Partial<MemberMeta>;
+      member_type?: MemberType;
+      spans_m?: number[];
+    }
   ) => void;
 
   /**
@@ -423,15 +427,20 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
   },
 
   updateMember: (id, patch) => {
+    // Merge meta shallowly, but also allow top-level fields (member_type
+    // reclassification, spans_m) to be patched so corrections persist through
+    // the verification gate.
+    const applyPatch = (m: GeometricMember): GeometricMember => {
+      if (m.member_id !== id) return m;
+      const next: GeometricMember = { ...m };
+      if (patch.member_type !== undefined) next.member_type = patch.member_type;
+      if (patch.spans_m !== undefined) next.spans_m = patch.spans_m;
+      if (patch.meta !== undefined) next.meta = { ...m.meta, ...patch.meta };
+      return next;
+    };
     set((state) => ({
-      members: state.members.map((m) =>
-        m.member_id === id ? { ...m, meta: { ...m.meta, ...patch.meta } } : m
-      ),
-      bounds: computeBounds(
-        state.members.map((m) =>
-          m.member_id === id ? { ...m, meta: { ...m.meta, ...patch.meta } } : m
-        )
-      ),
+      members: state.members.map(applyPatch),
+      bounds: computeBounds(state.members.map(applyPatch)),
     }));
   },
 

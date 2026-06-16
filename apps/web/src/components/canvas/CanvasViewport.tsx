@@ -41,7 +41,7 @@ import { CanvasToolbar } from "./CanvasToolbar";
 import { FloorSwitcher } from "./FloorSwitcher";
 import { CoordinateReadout } from "./CoordinateReadout";
 import { MemberTooltip } from "./MemberTooltip";
-import { PropertyInspector } from "./PropertyInspector";
+import { PropertyInspector, type MemberPropertyPatch } from "./PropertyInspector";
 import { CanvasUploader, type CanvasUploaderHandle } from "./CanvasUploader";
 import { MembersPanel } from "./MembersPanel";
 import { GeometryGate } from "./GeometryGate";
@@ -509,20 +509,9 @@ export const CanvasViewport = forwardRef<
 
   // ── Property update actions ───────────────────────────────────────────────
 
-  const handleSaveProperties = (
-    width: number,
-    depth: number,
-    span: number | undefined,
-  ) => {
+  const handleSaveProperties = (patch: MemberPropertyPatch) => {
     if (!selectedMemberId) return;
-
-    updateMember(selectedMemberId, {
-      meta: {
-        b_mm: width,
-        h_mm: depth,
-        L_clear: span,
-      },
-    });
+    updateMember(selectedMemberId, patch);
     selectMember(null);
   };
 
