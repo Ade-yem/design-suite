@@ -161,16 +161,51 @@ class AnalysisEngine:
         return solver.solve(N_axial_kN=N, beam_moment_kNm_per_m=M)
 
     def _route_footing(self, load_data: MemberLoadOutput, meta: Dict[str, Any]) -> MemberAnalysisResult:
-        f_type = meta.get("footing_type", "pad")
-        if f_type == "pad":
-            solver = PadFootingSolver(
-                member_id=load_data.member_id,
-                col_c1=meta.get("c1", 300),
-                col_c2=meta.get("c2", 300),
-                qa_allowable_kpa=meta.get("qa", 200)
-            )
-            return solver.solve(meta.get("N_sls", 500), meta.get("N_uls", 750), meta.get("M_uls", 50))
-        return None # Simplified
+        f_type = str(meta.get("footing_type", "pad")).lower()
+        member_id = load_data.member_id
+        qa = float(meta.get("qa", 200))
+        N_uls = float(meta.get("N_uls", 750))
+        N_sls = float(meta.get("N_sls", meta.get("N_uls", 500)))
+
+        # Combined footing — needs the paired column's load and spacing (supplied
+        # by a grouping pass or an engineer override). Falls back to a pad design
+        # if those inputs are absent.
+        if f_type == "combined":
+            N2 = meta.get("neighbour_N_uls")
+            dist = meta.get("neighbour_dist_m")
+            if N2 is not None and dist:
+                solver = CombinedFootingSolver(
+                    member_id=member_id,
+                    N1=N_uls,
+                    N2=float(N2),
+                    dist_between_cols=float(dist),
+                    qa_allowable_kpa=qa,
+                )
+                return solver.solve(edge_distance_c1=float(meta.get("edge_distance_m", 0.5)))
+
+        # Strip footing — needs a strip width and span.
+        if f_type == "strip":
+            width = meta.get("strip_width_m")
+            span = meta.get("strip_span_m")
+            if width and span:
+                solver = StripFootingSolver(
+                    member_id=member_id,
+                    width_m=float(width),
+                    slab_depth_mm=float(meta.get("h_footing_mm", 500)),
+                    qa_allowable_kpa=qa,
+                )
+                n_design = N_uls / (float(width) * float(span))
+                return solver.solve(n_design_kpa=n_design, span=float(span))
+
+        # Pad footing (default, and the safe fallback for combined/strip when the
+        # extra inputs aren't available yet).
+        solver = PadFootingSolver(
+            member_id=member_id,
+            col_c1=meta.get("c1", 300),
+            col_c2=meta.get("c2", 300),
+            qa_allowable_kpa=qa,
+        )
+        return solver.solve(N_sls, N_uls, float(meta.get("M_uls", 0.0)))
 
     def _route_staircase(self, load_data: MemberLoadOutput, meta: Dict[str, Any]) -> MemberAnalysisResult:
         solver = StaircaseSolver(
