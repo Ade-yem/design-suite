@@ -208,12 +208,38 @@ class AnalysisEngine:
         return solver.solve(N_sls, N_uls, float(meta.get("M_uls", 0.0)))
 
     def _route_staircase(self, load_data: MemberLoadOutput, meta: Dict[str, Any]) -> MemberAnalysisResult:
+        # Derive the flight geometry from the building storey height so the span
+        # and self-weight reflect a flight that actually connects the two floors,
+        # rather than fixed defaults. Engineer-supplied riser/going/span override.
+        from core.analysis.staircase_geometry import derive_flight_geometry
+
+        storey_height_m = float(meta.get("storey_height_m") or 3.0)
+        overrides: Dict[str, Any] = {}
+        if meta.get("R") is not None:
+            overrides["riser"] = meta["R"]
+        if meta.get("G") is not None:
+            overrides["going"] = meta["G"]
+        if meta.get("L_plan") is not None:
+            overrides["L_plan_m"] = meta["L_plan"]
+        if meta.get("h_w") is not None:
+            overrides["waist"] = meta["h_w"]
+        geom = derive_flight_geometry(storey_height_m, **overrides)
+
+        # Stamp the resolved geometry back onto meta so the design stage uses the
+        # same flight (riser/tread/num_steps/span/waist) rather than its own
+        # defaults.
+        meta.setdefault("riser", geom["riser"])
+        meta.setdefault("tread", geom["going"])
+        meta.setdefault("num_steps", geom["num_steps"])
+        meta.setdefault("span", geom["span_mm"])
+        meta.setdefault("waist", geom["waist_mm"])
+
         solver = StaircaseSolver(
             member_id=load_data.member_id,
-            L_plan=meta.get("L_plan", 4.0),
-            R=meta.get("R", 150.0),
-            G=meta.get("G", 300.0),
-            waistband_thickness=meta.get("h_w", 150.0),
+            L_plan=geom["L_plan_m"],
+            R=geom["riser"],
+            G=geom["going"],
+            waistband_thickness=geom["waist_mm"],
             finishes_kpa=meta.get("finishes", 1.0),
             live_load_kpa=meta.get("live_load", 3.0),
             design_code=self.design_code
