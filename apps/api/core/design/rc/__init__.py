@@ -3,6 +3,37 @@ Module for reinforced concrete design
 """
 from typing import Any, Dict, Optional
 
+
+def _slab_design_udl(
+    geometry_meta: Dict[str, Any],
+    M_Nmm: float,
+    lx: float,
+    support_condition: str,
+) -> float:
+    """
+    Factored design pressure n (N/mm²) for special-slab (ribbed/waffle/flat) design.
+
+    Flat- and ribbed-slab routines need the factored UDL directly (they derive
+    their own design moments), unlike solid slabs which can be designed from a
+    governing moment. Prefer an explicit design load from ``geometry_meta``;
+    otherwise back-calculate the per-metre pressure that reproduces the
+    governing analysis moment for the span.
+    """
+    n_kpa = (
+        geometry_meta.get("n_uls_kpa")
+        or geometry_meta.get("design_load_kpa")
+        or geometry_meta.get("w_uls_kpa")
+    )
+    if n_kpa is not None:
+        return float(n_kpa) / 1000.0  # kN/m² → N/mm²
+    coeff = 2.0 if support_condition == "cantilever" else (
+        10.0 if support_condition == "continuous" else 8.0
+    )
+    # M_Nmm is the governing per-metre slab moment (N·mm/m); divide by the
+    # 1000 mm strip width to recover a physical pressure in N/mm².
+    return (coeff * abs(M_Nmm)) / (1000.0 * lx ** 2) if lx else 0.0
+
+
 def design_member(
     analysis_result: Dict[str, Any],
     geometry_meta: Dict[str, Any],
@@ -113,12 +144,82 @@ def design_member(
             return res
             
         elif member_type == "slab":
-            from models.bs8110.slab import SlabSection
-            from core.design.rc.bs8110.slab import calculate_slab_reinforcement
-            
             lx = float(geometry_meta.get("lx_mm") or geometry_meta.get("lx") or span)
             ly = float(geometry_meta.get("ly_mm") or geometry_meta.get("ly") or lx)
-            
+            slab_system = str(geometry_meta.get("slab_system") or "solid").lower().strip()
+
+            if slab_system in ("ribbed", "waffle", "flat"):
+                from core.design.rc.bs8110.special_slab import (
+                    calculate_special_slab_reinforcement,
+                )
+                try:
+                    if slab_system in ("ribbed", "waffle"):
+                        from models.bs8110.special_slab import RibbedWaffleSection
+
+                        orientation = "two-way" if slab_system == "waffle" else "one-way"
+                        section = RibbedWaffleSection(
+                            h=h, cover=cover, fcu=fcu, lx=lx, ly=ly, fy=fy,
+                            slab_type=geometry_meta.get(
+                                "slab_type", "two-way" if slab_system == "waffle" else "one-way"
+                            ),
+                            panel_type=geometry_meta.get("panel_type") or "interior",
+                            support_condition=support_condition,
+                            beta_b=geometry_meta.get("beta_b", 1.0),
+                            bar_dia=bar_dia,
+                            rib_width=float(geometry_meta.get("rib_width") or geometry_meta.get("rib_width_mm") or 125.0),
+                            rib_spacing=float(geometry_meta.get("rib_spacing") or geometry_meta.get("rib_spacing_mm") or 700.0),
+                            topping_thickness=float(geometry_meta.get("topping_thickness") or geometry_meta.get("topping_thickness_mm") or 75.0),
+                            slab_orientation=orientation,
+                        )
+                        # Per-rib actions: the rib carries load over its tributary
+                        # (centre-to-centre) width. M_Nmm/V_N are per-metre slab actions.
+                        trib = section.rib_spacing / 1000.0
+                        res = calculate_special_slab_reinforcement(
+                            section,
+                            n_udl=_slab_design_udl(geometry_meta, M_Nmm, lx, support_condition),
+                            M_rib=abs(M_Nmm) * trib,
+                            V_rib=abs(V_N) * trib,
+                            span=lx,
+                        )
+                    else:  # flat
+                        from models.bs8110.special_slab import FlatSlabSection
+
+                        section = FlatSlabSection(
+                            h=h, cover=cover, fcu=fcu, lx=lx, ly=ly, fy=fy,
+                            slab_type=geometry_meta.get("slab_type", "two-way"),
+                            panel_type=geometry_meta.get("panel_type") or "interior",
+                            support_condition=support_condition,
+                            beta_b=geometry_meta.get("beta_b", 1.0),
+                            bar_dia=bar_dia,
+                            column_dia=float(geometry_meta.get("column_c") or geometry_meta.get("column_dia") or geometry_meta.get("column_c_mm") or 400.0),
+                            is_circular_col=bool(geometry_meta.get("is_circular_col", False)),
+                            is_drop_panel=bool(geometry_meta.get("is_drop_panel", False)),
+                            drop_thickness=float(geometry_meta.get("drop_thickness") or geometry_meta.get("drop_extra_thickness") or 0.0),
+                            drop_lx=float(geometry_meta.get("drop_lx") or 0.0),
+                            drop_ly=float(geometry_meta.get("drop_ly") or 0.0),
+                            edge_condition=str(geometry_meta.get("edge_condition") or "interior"),
+                        )
+                        res = calculate_special_slab_reinforcement(
+                            section,
+                            n_udl=_slab_design_udl(geometry_meta, M_Nmm, lx, support_condition),
+                        )
+                except (ValueError, TypeError) as exc:
+                    res = {
+                        "status": "Section Invalid",
+                        "reason": str(exc),
+                        "reinforcement_description": "None",
+                        "notes": [f"{slab_system.capitalize()} slab geometry rejected: {exc}"],
+                        "warnings": [str(exc)],
+                    }
+                res["member_id"] = analysis_result.get("member_id", "unknown")
+                res["member_type"] = "slab"
+                res["slab_system"] = slab_system
+                res["design_code"] = "BS8110"
+                return res
+
+            from models.bs8110.slab import SlabSection
+            from core.design.rc.bs8110.slab import calculate_slab_reinforcement
+
             section = SlabSection(
                 h=h, cover=cover, fcu=fcu, lx=lx, ly=ly, fy=fy,
                 slab_type=geometry_meta.get("slab_type", "one-way"),
@@ -133,6 +234,7 @@ def design_member(
             res = calculate_slab_reinforcement(section, n_or_M=M_Nmm, F_or_V=V_N, span_or_gk=span)
             res["member_id"] = analysis_result.get("member_id", "unknown")
             res["member_type"] = "slab"
+            res["slab_system"] = slab_system
             res["design_code"] = "BS8110"
             return res
             
@@ -292,13 +394,84 @@ def design_member(
             return res
 
         elif member_type == "slab":
-            from models.ec2.slab import EC2SlabSection
-            from core.design.rc.eurocode2.slab import calculate_slab_reinforcement
-
             lx = float(geometry_meta.get("lx_mm") or geometry_meta.get("lx") or span)
             ly = float(geometry_meta.get("ly_mm") or geometry_meta.get("ly") or lx)
             if ly < lx:
                 lx, ly = ly, lx
+            slab_system = str(geometry_meta.get("slab_system") or "solid").lower().strip()
+
+            if slab_system in ("ribbed", "waffle", "flat"):
+                from core.design.rc.eurocode2.special_slab import (
+                    calculate_special_slab_reinforcement,
+                )
+                try:
+                    if slab_system in ("ribbed", "waffle"):
+                        from models.ec2.slab import EC2RibbedSection
+
+                        orientation = "two-way" if slab_system == "waffle" else "one-way"
+                        section = EC2RibbedSection(
+                            h=h, cover=cover, fck=fck, lx=lx, ly=ly, fyk=fyk,
+                            slab_type=geometry_meta.get(
+                                "slab_type", "two-way" if slab_system == "waffle" else "one-way"
+                            ),
+                            panel_type=geometry_meta.get("panel_type") or "CCCC",
+                            support_condition=support_condition,
+                            bar_dia_x=float(geometry_meta.get("bar_dia_x") or bar_dia),
+                            bar_dia_y=float(geometry_meta.get("bar_dia_y") or bar_dia),
+                            delta=float(geometry_meta.get("delta", geometry_meta.get("beta_b", 1.0))),
+                            rib_width=float(geometry_meta.get("rib_width") or geometry_meta.get("rib_width_mm") or 120.0),
+                            rib_spacing=float(geometry_meta.get("rib_spacing") or geometry_meta.get("rib_spacing_mm") or 700.0),
+                            topping_thickness=float(geometry_meta.get("topping_thickness") or geometry_meta.get("topping_thickness_mm") or 80.0),
+                            slab_orientation=orientation,
+                        )
+                        trib = section.rib_spacing / 1000.0
+                        res = calculate_special_slab_reinforcement(
+                            section,
+                            n_udl=_slab_design_udl(geometry_meta, M_Nmm, lx, support_condition),
+                            M_rib=abs(M_Nmm) * trib,
+                            V_rib=abs(V_N) * trib,
+                            span=lx,
+                        )
+                    else:  # flat
+                        from models.ec2.slab import EC2FlatSlabSection
+
+                        section = EC2FlatSlabSection(
+                            h=h, cover=cover, fck=fck, lx=lx, ly=ly, fyk=fyk,
+                            slab_type=geometry_meta.get("slab_type", "two-way"),
+                            panel_type=geometry_meta.get("panel_type") or "CCCC",
+                            support_condition=support_condition,
+                            bar_dia_x=float(geometry_meta.get("bar_dia_x") or bar_dia),
+                            bar_dia_y=float(geometry_meta.get("bar_dia_y") or bar_dia),
+                            delta=float(geometry_meta.get("delta", geometry_meta.get("beta_b", 1.0))),
+                            column_c=float(geometry_meta.get("column_c") or geometry_meta.get("column_dia") or geometry_meta.get("column_c_mm") or 400.0),
+                            is_circular_col=bool(geometry_meta.get("is_circular_col", False)),
+                            is_drop_panel=bool(geometry_meta.get("is_drop_panel", False)),
+                            drop_thickness_extra=float(geometry_meta.get("drop_thickness_extra") or geometry_meta.get("drop_thickness") or 0.0),
+                            drop_lx=float(geometry_meta.get("drop_lx") or 0.0),
+                            drop_ly=float(geometry_meta.get("drop_ly") or 0.0),
+                            edge_condition=str(geometry_meta.get("edge_condition") or "interior"),
+                        )
+                        res = calculate_special_slab_reinforcement(
+                            section,
+                            n_udl=_slab_design_udl(geometry_meta, M_Nmm, lx, support_condition),
+                        )
+                except (ValueError, TypeError) as exc:
+                    res = {
+                        "status": "Section Invalid",
+                        "reason": str(exc),
+                        "reinforcement_description": "None",
+                        "notes": [f"{slab_system.capitalize()} slab geometry rejected: {exc}"],
+                        "warnings": [str(exc)],
+                    }
+                res["member_id"] = analysis_result.get("member_id", "unknown")
+                res["member_type"] = "slab"
+                res["slab_system"] = slab_system
+                res["design_code"] = "EC2"
+                return res
+
+            from models.ec2.slab import EC2SlabSection
+            from core.design.rc.eurocode2.slab import calculate_slab_reinforcement
+
             section = EC2SlabSection(
                 h=h, cover=cover, fck=fck, lx=lx, ly=ly, fyk=fyk,
                 slab_type=geometry_meta.get("slab_type", "one-way"),
@@ -326,6 +499,7 @@ def design_member(
             res = calculate_slab_reinforcement(section, n=n_load, V_Ed=V_N)
             res["member_id"] = analysis_result.get("member_id", "unknown")
             res["member_type"] = "slab"
+            res["slab_system"] = slab_system
             res["design_code"] = "EC2"
             return res
 

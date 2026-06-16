@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from models.slab import SlabSection
+from models.bs8110.slab import SlabSection
 
 
 # ===========================================================================

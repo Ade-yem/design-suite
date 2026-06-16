@@ -72,6 +72,66 @@ def test_ec2_wall_produces_vertical_and_horizontal_steel():
     assert result["horizontal_steel"] != ""
 
 
+@pytest.mark.parametrize("code", ["BS8110", "EC2"])
+@pytest.mark.parametrize("slab_system", ["solid", "ribbed", "waffle", "flat"])
+def test_slab_system_routes_to_special_slab_design(code, slab_system):
+    """
+    Every slab structural system must route to a real design routine (solid,
+    ribbed/waffle, or flat) for both codes — never the 'skipped' stub, and the
+    chosen system is echoed back on the result.
+    """
+    meta = {
+        "member_type": "slab",
+        "h_mm": 300,
+        "lx_mm": 6000,
+        "ly_mm": 6000,
+        "slab_system": slab_system,
+    }
+    result = design_member(_analysis("slab"), meta, design_code=code)
+
+    assert result["member_type"] == "slab"
+    assert result["design_code"] == code
+    assert result["slab_system"] == slab_system
+    assert result.get("status") != "skipped"
+    # A real section was built and designed — not rejected at construction.
+    assert result.get("status") != "Section Invalid", result.get("reason")
+
+
+@pytest.mark.parametrize("code", ["BS8110", "EC2"])
+def test_ribbed_slab_designs_per_rib_reinforcement(code):
+    """A ribbed slab with a realistic ULS load returns rib reinforcement, OK."""
+    meta = {
+        "member_type": "slab",
+        "slab_system": "ribbed",
+        "h_mm": 350,
+        "lx_mm": 5000,
+        "ly_mm": 5000,
+        "n_uls_kpa": 8.0,
+        "rib_width": 150,
+        "rib_spacing": 600,
+        "topping_thickness": 100,
+    }
+    result = design_member(
+        _analysis("slab", M_max_sagging_kNm=25.0, M_max_hogging_kNm=12.0, V_max_kN=30.0),
+        meta,
+        design_code=code,
+    )
+    assert result["slab_system"] == "ribbed"
+    assert result["status"] == "OK"
+    assert result["reinforcement_description"] != "None"
+
+
+def test_solid_slab_remains_default_when_system_unset():
+    """No slab_system key → solid slab path (back-compatible)."""
+    result = design_member(
+        _analysis("slab"),
+        {"member_type": "slab", "h_mm": 200, "lx_mm": 4000, "ly_mm": 5000},
+        design_code="BS8110",
+    )
+    assert result["slab_system"] == "solid"
+    assert result.get("status") != "skipped"
+
+
 def test_unknown_member_type_still_skipped():
     """A genuinely unsupported type should remain a graceful skip, not raise."""
     result = design_member(
