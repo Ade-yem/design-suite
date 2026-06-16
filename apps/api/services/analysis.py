@@ -129,6 +129,18 @@ class AnalysisService:
         except KeyError:
             parsed_members = {}
 
+        # Stamp the building storey height onto staircase members so the flight
+        # geometry (riser count, span) is derived from it rather than defaults.
+        try:
+            proj = await project_store.get(project_id, bypass_tenant_check=True)
+            storey_h = getattr(proj, "storey_height_m", None) if proj else None
+            if storey_h:
+                for m in parsed_members.values():
+                    if str(m.get("member_type", "")).lower() == "staircase":
+                        m.setdefault("meta", {})["storey_height_m"] = storey_h
+        except Exception as exc:  # pragma: no cover - best-effort
+            logger.warning("Could not stamp storey height on staircases: %s", exc)
+
         # Prepare member data list for the engine
         load_members: dict[str, dict] = {
             m["member_id"]: m for m in load_output.get("members", [])
