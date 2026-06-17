@@ -7,6 +7,6 @@ apps/api/uploads/*
 logs
 standalone-parser-viewer/backend/.env
 standalone-parser-viewer/backend/output0.png
-.agents/
-.vscode/
 .pytest_cache/
+.agents/rules
+.agents/skills
