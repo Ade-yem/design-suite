@@ -217,4 +217,5 @@ ERROR_CODES: dict[str, str] = {
     "ARTIFACT_NOT_FOUND": "Artifact ID does not exist.",
     "UNSUPPORTED_FILE":   "File type not supported — only DXF and PDF are accepted.",
     "FILE_TOO_LARGE":     f"File exceeds {50} MB limit.",
+    "INVALID_PATH":       "Invalid file path — identifier or filename is not permitted.",
 }

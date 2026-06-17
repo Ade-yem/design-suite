@@ -33,7 +33,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
+
+from middleware.rate_limit import limiter
 
 from dependencies import require_analysis_complete
 from middleware.error_handler import StructuralError
@@ -131,10 +133,12 @@ async def _enqueue_design(
 
 
 @router.post("/run/{project_id}", response_model=DesignJobStarted, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
 async def run_full_design(
+    request: Request,
     project_id: str,
     background_tasks: BackgroundTasks,
-    request: DesignRunRequest = DesignRunRequest(),
+    payload: DesignRunRequest = DesignRunRequest(),
     project: ProjectResponse = Depends(require_analysis_complete),
 ) -> DesignJobStarted:
     """
@@ -156,7 +160,7 @@ async def run_full_design(
     DesignJobStarted
     """
     logger.info("Full design queued for project %s.", project_id)
-    return await _enqueue_design(project_id, background_tasks, request)
+    return await _enqueue_design(project_id, background_tasks, payload)
 
 
 @router.post("/{project_id}/beam", response_model=DesignJobStarted, status_code=status.HTTP_202_ACCEPTED)

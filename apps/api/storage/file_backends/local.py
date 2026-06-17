@@ -13,6 +13,7 @@ for the Cloudinary backend in production.
 
 from __future__ import annotations
 
+import re
 import shutil
 import time
 from pathlib import Path
@@ -23,6 +24,41 @@ from fastapi import UploadFile
 from config import settings, ACCEPTED_EXTENSIONS
 from middleware.error_handler import StructuralError
 from storage.file_backends.base import FileStorageBackend
+
+# Project identifiers and stored filenames must be simple, separator-free tokens.
+# This blocks path-traversal (``..``, ``/``, ``\``, null bytes) before any path
+# is constructed from caller-supplied input.
+_SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_segment(segment: str, kind: str) -> str:
+    """
+    Reject a path segment that could escape the storage root.
+
+    Parameters
+    ----------
+    segment : str
+        Caller-supplied project id or filename.
+    kind : str
+        Human-readable label for error details ("project_id" / "filename").
+
+    Returns
+    -------
+    str
+        The validated segment.
+
+    Raises
+    ------
+    StructuralError
+        ``INVALID_PATH`` — segment is empty, "."/"..", or contains separators.
+    """
+    if not segment or segment in (".", "..") or not _SAFE_SEGMENT.match(segment):
+        raise StructuralError(
+            "INVALID_PATH",
+            details={"message": f"Invalid {kind}.", "received": segment},
+            status_code=400,
+        )
+    return segment
 
 
 class LocalFileBackend(FileStorageBackend):
@@ -44,7 +80,15 @@ class LocalFileBackend(FileStorageBackend):
 
     def _project_dir(self, project_id: str) -> Path:
         """Return (and create) the per-project upload subdirectory."""
+        _validate_segment(project_id, "project_id")
         d = self.base_dir / project_id
+        # Defence in depth: ensure the resolved path stays under the storage root.
+        if not d.resolve().is_relative_to(self.base_dir.resolve()):
+            raise StructuralError(
+                "INVALID_PATH",
+                details={"message": "Resolved path escapes the storage root."},
+                status_code=400,
+            )
         d.mkdir(parents=True, exist_ok=True)
         return d
 
@@ -134,6 +178,7 @@ class LocalFileBackend(FileStorageBackend):
         str | None
             Absolute path string, or None if not found.
         """
+        _validate_segment(filename, "filename")
         candidate = self._project_dir(project_id) / filename
         return str(candidate) if candidate.exists() else None
 
@@ -151,6 +196,7 @@ class LocalFileBackend(FileStorageBackend):
         list[str]
             Sorted list of file basenames.
         """
+        _validate_segment(project_id, "project_id")
         d = self.base_dir / project_id
         if not d.exists():
             return []
@@ -165,6 +211,7 @@ class LocalFileBackend(FileStorageBackend):
         project_id : str
             Owning project whose files should be purged.
         """
+        _validate_segment(project_id, "project_id")
         d = self.base_dir / project_id
         if d.exists():
             shutil.rmtree(d, ignore_errors=True)

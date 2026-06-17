@@ -46,6 +46,7 @@ GENERATOR_REGISTRY: dict[str, type] = {
     "slab_flat":      SlabDrawingGenerator,
     "column":         ColumnDrawingGenerator,
     "wall":           WallDrawingGenerator,
+    "footing":        FootingDrawingGenerator,
     "footing_pad":    FootingDrawingGenerator,
     "staircase":      StaircaseDrawingGenerator,
 }

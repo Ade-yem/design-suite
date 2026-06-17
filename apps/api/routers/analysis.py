@@ -31,7 +31,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
+
+from middleware.rate_limit import limiter
 
 from dependencies import require_loading_defined
 from middleware.error_handler import StructuralError
@@ -137,7 +139,9 @@ async def _enqueue_analysis(
 
 
 @router.post("/run/{project_id}", response_model=AnalysisJobStarted, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
 async def run_full_analysis(
+    request: Request,
     project_id: str,
     background_tasks: BackgroundTasks,
     options: AnalysisOptions = AnalysisOptions(),

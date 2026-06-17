@@ -1,4 +1,5 @@
 import os
+os.environ["APP_ENV"] = "test"
 os.environ["PROJECT_STORE_BACKEND"] = "memory"
 os.environ["GEMINI_API_KEY"] = "dummy-key-for-testing"
 os.environ["GOOGLE_API_KEY"] = "dummy-key-for-testing"
