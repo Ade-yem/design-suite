@@ -39,6 +39,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from middleware.error_handler import register_error_handlers
 from middleware.request_logger import RequestLoggerMiddleware
+from middleware.rate_limit import limiter
 
 # ── Router imports ─────────────────────────────────────────────────────────────
 from routers import (
@@ -166,6 +167,17 @@ app.add_middleware(
 )
 
 app.add_middleware(RequestLoggerMiddleware)
+
+# ── Rate limiting (slowapi) ─────────────────────────────────────────────────────
+# Per-client throttling on heavy endpoints (upload / analysis / design / resume).
+# Disabled under APP_ENV=test (see middleware.rate_limit).
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+from slowapi.middleware import SlowAPIMiddleware  # noqa: E402
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # ── Error handlers ─────────────────────────────────────────────────────────────
 register_error_handlers(app)

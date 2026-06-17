@@ -57,6 +57,15 @@ Every external dependency sits behind a swappable store with a memory backend, s
 | Async jobs | in-process | Redis (auto when `REDIS_URL` set) | `JOB_STORE_BACKEND` (`memory` \| `redis`) |
 | Files | local disk | Cloudinary | `FILE_STORAGE_BACKEND` (`local` \| `cloudinary`) |
 
+> **Local/dev defaults to memory; deploys run on Postgres.** When
+> `PROJECT_STORE_BACKEND=postgres` (set with `DATABASE_URL`), projects and gate
+> artifacts persist **and** the LangGraph pipeline checkpointer switches from
+> `MemorySaver` to `AsyncPostgresSaver` (wired in `main.py`'s lifespan), so
+> in-flight pipeline state survives restarts. In deployed environments the schema
+> is **migration-managed** — run `alembic upgrade head` (the Docker Compose `api`
+> service does this automatically before starting). The bundled `docker-compose.yml`
+> ships this durable configuration out of the box.
+
 ---
 
 ## Tech Stack

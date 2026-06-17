@@ -30,8 +30,10 @@ from pathlib import Path
 from uuid import UUID
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, UploadFile, File, status
 from fastapi.responses import FileResponse, RedirectResponse
+
+from middleware.rate_limit import limiter
 from pydantic import BaseModel, Field
 
 from auth.dependencies import current_active_user
@@ -296,7 +298,9 @@ async def _take_snapshot(
     response_model=UploadResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("10/minute")
 async def upload_file(
+    request: Request,
     project_id: str,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),

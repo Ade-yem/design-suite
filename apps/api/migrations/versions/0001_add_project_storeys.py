@@ -4,13 +4,13 @@ Building height is collected at upload and drives multi-storey extrapolation
 (before Gate-1) and downstream stair geometry. Previously these lived only in
 the in-memory LangGraph ``project_parameters`` and were never persisted.
 
-Note: this is the first Alembic revision in the repository; the ``projects``
-table is otherwise created from the SQLAlchemy models. The migration guards on
-column existence so it is safe to run against a schema that already has (or
-lacks) the table/columns.
+Note: the full schema is created by the baseline revision
+``0000_baseline_schema`` (from the ORM metadata, which already includes these
+columns). This migration guards on column existence so it is safe to run against
+a schema that already has (or lacks) the columns.
 
 Revision ID: 0001_add_project_storeys
-Revises:
+Revises: 0000_baseline_schema
 Create Date: 2026-06-16
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0001_add_project_storeys"
-down_revision = None
+down_revision = "0000_baseline_schema"
 branch_labels = None
 depends_on = None
 
