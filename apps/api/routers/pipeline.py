@@ -23,7 +23,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
+
+from middleware.rate_limit import limiter
 from pydantic import BaseModel, Field
 
 from dependencies import get_project
@@ -204,7 +206,9 @@ async def run_pipeline(
 
 
 @router.post("/{project_id}/resume", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("20/minute")
 async def resume_pipeline(
+    request: Request,
     project_id: str,
     background_tasks: BackgroundTasks,
     project: ProjectResponse = Depends(get_project),
